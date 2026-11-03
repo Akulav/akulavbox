@@ -180,7 +180,7 @@ export default {
       </Transition>
 
       <Transition name="pop">
-        <div v-if="selected.length" class="fixed z-[170] left-1/2 -translate-x-1/2 bottom-[150px] md:bottom-[104px] md:ml-[124px] panel flex items-center gap-1 p-1.5 pl-4">
+        <div v-if="selected.length" class="fixed z-[170] left-1/2 -translate-x-1/2 bottom-[150px] md:bottom-[104px] panel flex items-center gap-1 p-1.5 pl-4">
           <span class="text-[13.5px] font-medium mr-2 whitespace-nowrap">{{ selected.length }} selected</span>
           <button class="btn btn-ghost btn-sm" @click="selected = f.filtered.value.map(s => s.id)">All</button>
           <button class="btn btn-ghost btn-sm" @click="editors = songs.filter(s => selected.includes(s.id))"><Icon name="pencil" :size="15" />Edit details</button>

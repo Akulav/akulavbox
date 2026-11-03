@@ -225,14 +225,26 @@
     .seg > button { height: 28px; padding: 0 10px; border-radius: 7px; color: rgb(var(--muted)); font-size: 12.5px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }
     .seg > button.on { background: rgb(var(--surface)); color: rgb(var(--fg)); box-shadow: 0 1px 2px rgb(0 0 0 / .2); }
 
-    .nav-item { display: flex; align-items: center; gap: 12px; height: 38px; padding: 0 12px; border-radius: 10px; color: rgb(var(--muted)); font-weight: 500; position: relative; width: 100%; }
-    .nav-item:hover { color: rgb(var(--fg)); background: rgb(var(--elevated) / .6); }
-    .nav-item { transition: color .15s, background-color .15s; }
-    .nav-item .nav-icon { transition: transform .25s cubic-bezier(.2,.8,.2,1), color .15s; }
-    .nav-item:hover .nav-icon { transform: translateX(1px) scale(1.06); }
-    .nav-item.active { color: rgb(var(--fg)); background: linear-gradient(90deg, rgb(var(--accent) / .14), rgb(var(--elevated)) 70%); box-shadow: inset 0 0 0 1px rgb(var(--line) / .7); }
-    .nav-item.active .nav-icon { color: rgb(var(--accent)); }
-    .nav-item.active::before { content: ''; position: absolute; left: -12px; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0; background: rgb(var(--accent)); box-shadow: 0 0 12px rgb(var(--accent) / .9); }
+    /* top navigation: one segmented pill of sections */
+    .topnav { display: flex; gap: 2px; padding: 4px; border-radius: 14px; background: rgb(var(--elevated) / .55); border: 1px solid rgb(var(--line) / .7); }
+    .topnav-item { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border-radius: 10px; position: relative;
+      color: rgb(var(--muted)); font-weight: 500; font-size: 13.5px; white-space: nowrap; transition: color .15s, background-color .2s, box-shadow .2s; }
+    .topnav-item:hover { color: rgb(var(--fg)); background: rgb(var(--surface) / .6); }
+    .topnav-item.active { color: rgb(var(--fg)); background: rgb(var(--surface)); box-shadow: 0 1px 3px rgb(0 0 0 / .22), inset 0 0 0 1px rgb(var(--line)); }
+    .topnav-item .nav-icon { transition: transform .25s cubic-bezier(.2,.8,.2,1), color .15s; }
+    .topnav-item:hover .nav-icon { transform: translateY(-1px) scale(1.06); }
+    .topnav-item.active .nav-icon { color: rgb(var(--accent)); }
+    .topnav-item::after { content: ''; position: absolute; left: 50%; bottom: 3px; width: 0; height: 2px; border-radius: 2px; background: rgb(var(--accent));
+      transform: translateX(-50%); box-shadow: 0 0 8px rgb(var(--accent) / .8); transition: width .3s cubic-bezier(.2,.8,.2,1); }
+    .topnav-item.active::after { width: 16px; }
+
+    /* avatar with a ring showing how full the storage is */
+    .avatar-ring { position: relative; display: inline-flex; padding: 2.5px; border-radius: 999px; transition: box-shadow .2s, transform .2s;
+      background: conic-gradient(rgb(var(--accent)) calc(var(--p, 0) * 1%), rgb(var(--line)) 0); }
+    .avatar-ring.warn { background: conic-gradient(rgb(var(--danger)) calc(var(--p, 0) * 1%), rgb(var(--line)) 0); }
+    .avatar-ring > span:first-child { border-radius: 999px; box-shadow: 0 0 0 2px rgb(var(--surface)); }
+    .avatar-ring:hover, .avatar-ring.on { box-shadow: 0 0 0 3px rgb(var(--accent) / .25); }
+    .avatar-ring:active { transform: scale(.96); }
 
     .meter { height: 6px; border-radius: 99px; background: rgb(var(--elevated)); overflow: hidden; }
     .meter > span { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, rgb(var(--accent)), rgb(var(--accent-hi))); transition: width .6s cubic-bezier(.2,.8,.2,1); position: relative; overflow: hidden; }

@@ -65,7 +65,7 @@ Socket.IO shares the HTTP server. Each user joins the room `user:<id>`, so all o
 ## Frontend (`frontend/`)
 
 - No build step: `index.html` defines an import map (Vue and the socket.io client from CDNs), the Tailwind CDN config, the design tokens (CSS variables per theme), and `modulepreload` hints for every module.
-- `app.js` holds the shell: hash routing (`#/files/<folder>`, `#/albums/<col>/<album>`, …), sidebar, banners, and shortcuts.
+- `app.js` holds the shell: hash routing (`#/files/<folder>`, `#/albums/<col>/<album>`, …), the top navigation bar (bottom bar on phones), account menu, banners, and shortcuts.
 - `lib/` holds shared state and services: `api.js` (fetch wrapper, session, version check), `upload.js` (parallel chunked uploads, cancel and retry, folder drops), `trash.js` (move to trash + Undo), `player.js` (one global `<audio>`), `realtime.js` (socket, unread counts, calls), `library.js` (thumbnails, covers, filters), `ui.js` (toasts and dialogs).
 - `pages/` has one component per section. `components/` holds the shared UI: Shell (toasts, upload tray, player, call overlay), FileViewer, Library (thumbnails, editors), Brand, and Icon.
 - Motion lives in CSS (`.stagger`, `.rise`, `.lift`, `.page-*` transitions, `.app-bg`). It is turned off by `prefers-reduced-motion` or `html[data-motion="off"]` (the Profile setting).

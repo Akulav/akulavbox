@@ -227,7 +227,7 @@ export default {
 
       <!-- Selection bar -->
       <Transition name="pop">
-        <div v-if="selCount" class="fixed z-[170] left-1/2 -translate-x-1/2 bottom-[76px] md:bottom-6 md:ml-[124px] panel glass flex items-center gap-1 p-1.5 pl-4">
+        <div v-if="selCount" class="fixed z-[170] left-1/2 -translate-x-1/2 bottom-[76px] md:bottom-6 panel glass flex items-center gap-1 p-1.5 pl-4">
           <span class="text-[13.5px] font-medium mr-2 whitespace-nowrap">{{ selCount }} selected</span>
           <button class="btn btn-ghost btn-sm" @click="openMove(null)"><Icon name="folder-input" :size="15" /><span class="hidden sm:inline">Move</span></button>
           <button class="btn btn-ghost btn-sm" @click="downloadSelected" :title="selCount > 1 || selection.folders.length ? 'Download as one zip' : 'Download'"><Icon name="download" :size="15" /><span class="hidden sm:inline">{{ selCount > 1 || selection.folders.length ? 'Zip' : 'Download' }}</span></button>
@@ -238,7 +238,7 @@ export default {
 
       <!-- Drop overlay for files from the computer -->
       <Transition name="fade">
-        <div v-if="externalDrag" class="fixed inset-0 z-[190] pointer-events-none md:left-[248px] p-4">
+        <div v-if="externalDrag" class="fixed inset-0 z-[190] pointer-events-none p-4">
           <div class="w-full h-full rounded-2xl border-2 border-dashed border-accent bg-accent/[0.06] grid place-items-center">
             <div class="panel px-6 py-4 flex items-center gap-3">
               <Icon name="upload" :size="22" class="text-accent" />

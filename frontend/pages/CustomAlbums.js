@@ -154,7 +154,7 @@ export default {
 
       <!-- Photo selection -->
       <Transition name="pop">
-        <div v-if="selected.length" class="fixed z-[170] left-1/2 -translate-x-1/2 bottom-[76px] md:bottom-6 md:ml-[124px] panel flex items-center gap-1 p-1.5 pl-4 max-w-[calc(100vw-1rem)] overflow-x-auto no-scrollbar">
+        <div v-if="selected.length" class="fixed z-[170] left-1/2 -translate-x-1/2 bottom-[76px] md:bottom-6 panel flex items-center gap-1 p-1.5 pl-4 max-w-[calc(100vw-1rem)] overflow-x-auto no-scrollbar">
           <span class="text-[13.5px] font-medium mr-2 whitespace-nowrap">{{ selected.length }} selected</span>
           <button class="btn btn-ghost btn-sm" @click="selected = sortedImages.map(i => i.id)">All</button>
           <button class="btn btn-ghost btn-sm" @click="openAddTo($event)"><Icon name="plus" :size="15" /><span class="whitespace-nowrap">Add to album</span></button>
@@ -172,7 +172,7 @@ export default {
         </div>
       </div>
       <Transition name="fade">
-        <div v-if="dragOver" class="fixed inset-0 z-[190] pointer-events-none md:left-[248px] p-4">
+        <div v-if="dragOver" class="fixed inset-0 z-[190] pointer-events-none p-4">
           <div class="w-full h-full rounded-2xl border-2 border-dashed border-accent bg-accent/[0.06] grid place-items-center">
             <div class="panel px-6 py-4 flex items-center gap-3"><Icon name="upload" :size="22" class="text-accent" /><span class="font-medium">Drop photos to add them to {{ album ? album.title : 'an album' }}</span></div>
           </div>

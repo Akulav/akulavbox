@@ -12,7 +12,7 @@ const MAX_LEN = 2000;
 export default {
   components: { Icon, Avatar },
   template: /*html*/`
-    <div class="panel overflow-hidden flex h-[calc(100dvh-60px-56px-2.5rem)] md:h-[calc(100dvh-4rem)] min-h-[420px]" :class="{ '!h-[calc(100dvh-60px-56px-2.5rem-64px)] md:!h-[calc(100dvh-4rem-80px)]': hasPlayer }">
+    <div class="panel overflow-hidden flex h-[calc(100dvh-60px-56px-2.5rem)] md:h-[calc(100dvh-8rem)] min-h-[420px]" :class="{ '!h-[calc(100dvh-60px-56px-2.5rem-64px)] md:!h-[calc(100dvh-8rem-80px)]': hasPlayer }">
 
       <!-- Friends column -->
       <aside class="w-full md:w-[300px] lg:w-[320px] shrink-0 border-r border-line flex flex-col" :class="active ? 'hidden md:flex' : 'flex'">

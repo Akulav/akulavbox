@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the app sidebar, on the sign-in page, in Admin, and at `GET /api/health`.
+All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
 ## 2.0.0 (2026-11-04)
 
@@ -23,6 +23,7 @@ Drop-in. On first start the database is migrated (schema 0 → 6) after a snapsh
 - Installable as an app (web manifest), and `npm run check` for an end-to-end self-test.
 
 ### Look and feel
+- The left sidebar is replaced by a top navigation bar: brand, sections in one centred pill, then Trash, Admin, theme, and an account menu. A ring around the avatar shows how full your storage is. Content is centred on the page.
 - New brand mark and icons, a redesigned sign-in page, and "Made by Akulav" credits.
 - A soft animated background, page transitions, staggered list entrances, hover lift on cards, glass toolbars, and toasts with countdown bars. All of it respects "reduce motion" and the in-app toggle.
 

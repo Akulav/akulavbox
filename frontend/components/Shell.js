@@ -161,7 +161,7 @@ export const PlayerBar = {
   components: { Icon },
   template: /*html*/`
     <Transition name="pop">
-    <div v-if="player.current" class="fixed z-[150] left-0 right-0 bottom-[60px] md:bottom-0 md:left-[248px] border-t border-line glass">
+    <div v-if="player.current" class="fixed z-[150] left-0 right-0 bottom-[60px] md:bottom-0 border-t border-line glass">
       <!-- thin progress line on mobile -->
       <div class="md:hidden h-[2px] bg-line"><div class="h-full bg-accent" :style="{ width: pct + '%' }"></div></div>
       <div class="h-[64px] md:h-[80px] px-3 md:px-6 grid grid-cols-[1fr_auto] md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1fr)] items-center gap-3">

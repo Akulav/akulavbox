@@ -105,61 +105,72 @@ createApp({
 
     <!-- ============ APP ============ -->
     <template v-else>
-      <!-- Desktop sidebar -->
-      <aside class="hidden md:flex fixed inset-y-0 left-0 w-[248px] flex-col border-r border-line bg-surface/85 z-40">
-        <a href="#/files" class="h-16 flex items-center px-5 shrink-0" title="AkulavBox"><BrandLockup :size="32" :version="appInfo.version" :animated="true" /></a>
-        <nav class="px-3 mt-2 space-y-0.5 overflow-y-auto no-scrollbar" aria-label="Sections">
-          <template v-for="t in visibleTabs" :key="t.id">
-            <div v-if="t.secondary && t.id === 'trash'" class="h-px bg-line mx-2 my-3"></div>
-            <a :href="'#/' + t.id" class="nav-item" :class="{ active: route.tab === t.id }" :aria-current="route.tab === t.id ? 'page' : null">
-              <Icon :name="t.icon" :size="18" class="nav-icon" />
-              <span class="flex-1">{{ t.label }}</span>
-              <span v-if="t.id === 'chat' && unread" class="min-w-[20px] h-5 px-1.5 rounded-full bg-accent text-accent-fg text-[11px] font-semibold grid place-items-center">{{ unread }}</span>
-              <span v-if="t.id === 'trash' && account.trash_bytes" class="text-[11px] text-faint tabular-nums">{{ formatBytes(account.trash_bytes) }}</span>
-              <span v-if="t.id === 'music' && player.playing && route.tab !== 'music'" class="eq flex items-end gap-[2px] h-3" aria-label="Playing">
-                <span class="w-[3px] h-3 bg-accent rounded-sm"></span><span class="w-[3px] h-3 bg-accent rounded-sm"></span><span class="w-[3px] h-3 bg-accent rounded-sm"></span>
-              </span>
-            </a>
-          </template>
-        </nav>
+      <!-- Top bar: brand · sections · account (sections move to the bottom bar on phones) -->
+      <header class="sticky top-0 z-40 border-b border-line glass">
+        <div class="max-w-[1500px] mx-auto h-14 md:h-16 px-3 md:px-8 flex items-center gap-2 md:gap-4">
+          <a href="#/files" class="shrink-0 min-w-0 mr-auto md:mr-0" title="AkulavBox"><BrandLockup :size="30" :animated="true" /></a>
 
-        <div class="mt-auto p-4 space-y-4">
-          <a v-if="account.loaded" href="#/profile" class="block group">
-            <div class="flex items-center justify-between text-[12.5px] mb-2">
-              <span class="text-muted flex items-center gap-1.5 group-hover:text-fg transition-colors"><Icon name="hard-drive" :size="14" />Storage</span>
-              <span class="tabular-nums text-muted">{{ usedPct }}%</span>
+          <nav class="hidden md:flex flex-1 justify-center" aria-label="Sections">
+            <div class="topnav">
+              <a v-for="t in mainTabs" :key="t.id" :href="'#/' + t.id" class="topnav-item" :class="{ active: route.tab === t.id }"
+                 :aria-current="route.tab === t.id ? 'page' : null" :title="t.label">
+                <Icon :name="t.icon" :size="17" class="nav-icon" />
+                <span class="hidden lg:inline">{{ t.label }}</span>
+                <span v-if="t.id === 'chat' && unread" class="min-w-[18px] h-[18px] px-1 rounded-full bg-accent text-accent-fg text-[10.5px] font-semibold grid place-items-center">{{ unread }}</span>
+                <span v-if="t.id === 'music' && player.playing && route.tab !== 'music'" class="eq flex items-end gap-[2px] h-3" aria-label="Playing">
+                  <span class="w-[3px] h-3 bg-accent rounded-sm"></span><span class="w-[3px] h-3 bg-accent rounded-sm"></span><span class="w-[3px] h-3 bg-accent rounded-sm"></span>
+                </span>
+              </a>
             </div>
-            <div class="meter" :class="{ warn: usedPct >= 90 }"><span :style="{ width: usedPct + '%' }"></span></div>
-            <p class="text-faint text-xs mt-2 tabular-nums">{{ formatBytes(account.used_bytes) }} of {{ formatBytes(account.quota_bytes) }}</p>
-          </a>
-          <div class="flex items-center gap-2.5 pt-3 border-t border-line">
-            <a href="#/profile" class="relative" title="Profile">
-              <Avatar :name="session.username" :src="account.profile_image" :size="32" />
-              <span class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-surface" :class="rt.connected ? 'bg-ok glow-dot' : 'bg-faint'" :title="rt.connected ? 'Connected' : 'Reconnecting…'"></span>
+          </nav>
+
+          <div class="flex items-center gap-0.5 shrink-0">
+            <a href="#/trash" class="icon-btn relative" :class="{ active: route.tab === 'trash' }" :title="account.trash_bytes ? 'Trash (' + formatBytes(account.trash_bytes) + ')' : 'Trash'">
+              <Icon name="trash" :size="18" />
+              <span v-if="account.trash_bytes" class="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-accent"></span>
             </a>
-            <div class="flex-1 min-w-0">
-              <p class="text-[13.5px] font-medium truncate">{{ session.username }}</p>
-              <p class="text-faint text-xs capitalize">{{ session.role }}</p>
+            <a v-if="session.role === 'admin'" href="#/admin" class="icon-btn" :class="{ active: route.tab === 'admin' }" title="Admin"><Icon name="shield" :size="18" /></a>
+            <button class="icon-btn" @click="toggleTheme" :title="theme === 'dark' ? 'Light theme' : 'Dark theme'"><Icon :name="theme === 'dark' ? 'sun' : 'moon'" :size="18" /></button>
+
+            <!-- account menu -->
+            <div class="relative ml-1.5">
+              <button class="avatar-ring" :class="{ warn: usedPct >= 90, on: route.tab === 'profile' }" :style="{ '--p': usedPct }" @click="userMenu = !userMenu"
+                      :aria-expanded="userMenu" aria-haspopup="menu" :title="session.username + ' · ' + usedPct + '% of storage used'">
+                <Avatar :name="session.username" :src="account.profile_image" :size="30" />
+                <span class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-surface" :class="rt.connected ? 'bg-ok glow-dot' : 'bg-faint'"></span>
+              </button>
+              <div v-if="userMenu" class="fixed inset-0 z-[229]" @click="userMenu = false"></div>
+              <Transition name="pop">
+                <div v-if="userMenu" class="menu absolute right-0 top-12 z-[230] w-[270px] !p-0 overflow-hidden" role="menu" @click="userMenu = false">
+                  <div class="p-4 flex items-center gap-3 border-b border-line">
+                    <Avatar :name="session.username" :src="account.profile_image" :size="40" />
+                    <div class="min-w-0">
+                      <p class="font-semibold truncate">{{ session.username }}</p>
+                      <p class="text-xs text-muted"><span class="capitalize">{{ session.role }}</span> · {{ rt.connected ? 'online' : 'reconnecting…' }}</p>
+                    </div>
+                  </div>
+                  <a v-if="account.loaded" href="#/profile" class="block px-4 py-3 border-b border-line hover:bg-elevated/60">
+                    <div class="flex justify-between text-[12.5px] mb-1.5"><span class="text-muted flex items-center gap-1.5"><Icon name="hard-drive" :size="13" />Storage</span><span class="tabular-nums">{{ usedPct }}%</span></div>
+                    <div class="meter" :class="{ warn: usedPct >= 90 }"><span :style="{ width: usedPct + '%' }"></span></div>
+                    <p class="text-faint text-xs mt-1.5 tabular-nums">{{ formatBytes(account.used_bytes) }} of {{ formatBytes(account.quota_bytes) }}</p>
+                  </a>
+                  <div class="p-1">
+                    <a href="#/profile" class="menu-item"><Icon name="user" :size="16" />Profile & settings</a>
+                    <button class="menu-item" @click="showKeys = true"><Icon name="keyboard" :size="16" />Keyboard shortcuts<span class="kbd ml-auto">?</span></button>
+                    <div class="menu-sep"></div>
+                    <button class="menu-item" @click="logout"><Icon name="logout" :size="16" />Sign out</button>
+                  </div>
+                  <div class="px-4 py-2.5 border-t border-line bg-elevated/30"><MadeBy :version="appInfo.version" /></div>
+                </div>
+              </Transition>
             </div>
-            <button class="icon-btn" @click="toggleTheme" :title="theme === 'dark' ? 'Light theme' : 'Dark theme'"><Icon :name="theme === 'dark' ? 'sun' : 'moon'" :size="17" /></button>
-            <button class="icon-btn" @click="logout" title="Sign out"><Icon name="logout" :size="17" /></button>
           </div>
-          <MadeBy class="px-0.5" />
         </div>
-      </aside>
-
-      <!-- Mobile top bar -->
-      <header class="md:hidden sticky top-0 z-40 h-14 flex items-center gap-1 px-3 border-b border-line glass">
-        <a href="#/files" class="flex-1 min-w-0"><BrandLockup :size="28" /></a>
-        <a href="#/trash" class="icon-btn" :class="{ active: route.tab === 'trash' }" title="Trash"><Icon name="trash" :size="18" /></a>
-        <a v-if="session.role === 'admin'" href="#/admin" class="icon-btn" :class="{ active: route.tab === 'admin' }" title="Admin"><Icon name="shield" :size="18" /></a>
-        <button class="icon-btn" @click="toggleTheme" title="Theme"><Icon :name="theme === 'dark' ? 'sun' : 'moon'" :size="18" /></button>
-        <a href="#/profile" class="ml-1 rounded-full" :class="route.tab === 'profile' ? 'ring-2 ring-accent' : ''" title="Profile"><Avatar :name="session.username" :src="account.profile_image" :size="30" /></a>
       </header>
 
-      <main class="md:pl-[248px] min-h-full" :class="player.current ? 'pb-[140px] md:pb-[96px]' : 'pb-[76px] md:pb-0'">
+      <main class="min-h-[calc(100%-4rem)] flex flex-col" :class="player.current ? 'pb-[140px] md:pb-[96px]' : 'pb-[76px] md:pb-0'">
         <!-- banners -->
-        <div v-if="banners.length" class="max-w-[1500px] mx-auto px-4 md:px-8 pt-4 md:pt-6 space-y-2">
+        <div v-if="banners.length" class="w-full max-w-[1500px] mx-auto px-4 md:px-8 pt-4 md:pt-6 space-y-2">
           <TransitionGroup name="fade">
             <div v-for="b in banners" :key="b.id" class="panel !shadow-none px-4 py-2.5 flex items-center gap-3 text-[13.5px]" :class="b.cls">
               <Icon :name="b.icon" :size="17" class="shrink-0" />
@@ -168,7 +179,7 @@ createApp({
             </div>
           </TransitionGroup>
         </div>
-        <div class="max-w-[1500px] mx-auto px-4 md:px-8 py-5 md:py-8">
+        <div class="w-full max-w-[1500px] mx-auto px-4 md:px-8 py-5 md:py-8">
           <Transition name="page" mode="out-in">
             <FileManager v-if="route.tab === 'files'" key="files" :folder-id="route.arg" @navigate="goFolder" />
             <Trash v-else-if="route.tab === 'trash'" key="trash" />
@@ -181,6 +192,10 @@ createApp({
             <AdminPanel v-else-if="route.tab === 'admin' && session.role === 'admin'" key="admin" />
           </Transition>
         </div>
+        <footer v-if="route.tab !== 'chat'" class="hidden md:flex w-full max-w-[1500px] mx-auto mt-auto px-8 pb-6 pt-2 items-center justify-between">
+          <MadeBy :version="appInfo.version" />
+          <button class="text-[11.5px] text-faint hover:text-muted flex items-center gap-1.5" @click="showKeys = true"><Icon name="keyboard" :size="13" />Shortcuts <span class="kbd !h-[18px] !min-w-[18px] !text-[10.5px]">?</span></button>
+        </footer>
       </main>
 
       <!-- Mobile bottom nav -->
@@ -288,6 +303,10 @@ createApp({
 
     const visibleTabs = computed(() => TABS.filter(t => !t.admin || session.role === 'admin'));
     const mobileTabs = TABS.filter(t => !t.admin && !t.secondary);
+    const mainTabs = mobileTabs;
+    const userMenu = ref(false);
+    // close the account menu when the page changes
+    watch(() => route.tab, () => { userMenu.value = false; });
     const usedPct = computed(() => account.quota_bytes ? Math.min(100, Math.round((account.used_bytes / account.quota_bytes) * 100)) : 0);
     const unread = computed(() => totalUnread());
 
@@ -342,6 +361,6 @@ createApp({
     watch(unread, (n) => { document.title = n ? `(${n}) AkulavBox` : 'AkulavBox'; });
 
     return { session, route, form, login, loginError, loggingIn, showPw, capsLock, onPwKey, logout, theme, toggleTheme, visibleTabs, mobileTabs,
-      account, usedPct, formatBytes, player, unread, goFolder, showTop, toTop, rt, appInfo, banners, features, showKeys, shortcuts: SHORTCUTS };
+      account, usedPct, formatBytes, player, unread, goFolder, showTop, toTop, rt, appInfo, banners, features, showKeys, shortcuts: SHORTCUTS, mainTabs, userMenu };
   },
 }).mount('#app');

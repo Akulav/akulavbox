@@ -59,7 +59,7 @@ export default {
       </ul>
 
       <Transition name="pop">
-        <div v-if="selected.length" class="fixed z-[170] left-1/2 -translate-x-1/2 bottom-[76px] md:bottom-6 md:ml-[124px] panel glass flex items-center gap-1 p-1.5 pl-4">
+        <div v-if="selected.length" class="fixed z-[170] left-1/2 -translate-x-1/2 bottom-[76px] md:bottom-6 panel glass flex items-center gap-1 p-1.5 pl-4">
           <span class="text-[13.5px] font-medium mr-2 whitespace-nowrap">{{ selected.length }} selected</span>
           <button class="btn btn-ghost btn-sm" @click="restore(selectedItems)"><Icon name="undo" :size="15" />Restore</button>
           <button class="btn btn-ghost btn-sm !text-danger" @click="destroy(selectedItems)"><Icon name="trash" :size="15" />Delete forever</button>
