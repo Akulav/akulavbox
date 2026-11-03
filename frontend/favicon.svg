@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="100%" height="100%">
+  <!-- Background Tile -->
+  <rect width="256" height="256" rx="48" fill="#F8FAFC" />
+  
+  <!-- Group rotated 45 degrees to give the pickaxe its classic angled look -->
+  <g transform="rotate(45 128 128)">
+    
+    <!-- Wooden Handle -->
+    <rect x="116" y="55" width="24" height="155" rx="6" fill="#A16207" />
+    
+    <!-- Leather Grip -->
+    <rect x="112" y="145" width="32" height="50" rx="4" fill="#713F12" />
+    
+    <!-- Grip Wraps / Texture -->
+    <rect x="112" y="153" width="32" height="3" fill="#422006" opacity="0.4" />
+    <rect x="112" y="163" width="32" height="3" fill="#422006" opacity="0.4" />
+    <rect x="112" y="173" width="32" height="3" fill="#422006" opacity="0.4" />
+    <rect x="112" y="183" width="32" height="3" fill="#422006" opacity="0.4" />
+    
+    <!-- Iron Pickaxe Head -->
+    <!-- The Q commands create perfect quadratic bezier curves for the sharp blades -->
+    <path d="M 24,96 
+             Q 128,15 232,96 
+             L 228,104 
+             Q 128,65 28,104 
+             Z" 
+          fill="#64748B" />
+    
+    <!-- Head Shadow/Detail (Bottom half of the blade for a two-tone flat effect) -->
+    <path d="M 28,104
+             Q 128,65 228,104
+             L 226,106
+             Q 128,70 30,106
+             Z" 
+          fill="#475569" />
+          
+    <!-- Reinforcement Collar (Where the handle meets the head) -->
+    <rect x="108" y="82" width="40" height="14" rx="3" fill="#334155" />
+    
+    <!-- Top Metal Cap (Securing the head from the top) -->
+    <rect x="114" y="50" width="28" height="8" rx="3" fill="#94A3B8" />
+    
+  </g>
+</svg>

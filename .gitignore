@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Secrets — copy .env.example to .env instead
+.env
+.env.*
+!.env.example
+
+# Runtime data: SQLite database, encrypted user files, thumbnails, upload temp dirs
+storage/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+
+# Claude Code local settings
+.claude/settings.local.json
