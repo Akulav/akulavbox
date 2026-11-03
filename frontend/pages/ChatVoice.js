@@ -4,7 +4,7 @@ import { Avatar } from '../components/Shell.js';
 import { api, session, formatBytes, parseDbDate, refreshAccount, downloadUrl } from '../lib/api.js';
 import { toast, confirmDialog, attempt } from '../lib/ui.js';
 import { player } from '../lib/player.js';
-import { rt, onMessage, sendMessage, sendTyping, markRead, startCall, call } from '../lib/realtime.js';
+import { rt, onMessage, sendMessage, sendTyping, markRead, startCall, call, syncFromFriends } from '../lib/realtime.js';
 import { kindOf, iconFor, tintFor } from '../lib/filetypes.js';
 
 const MAX_LEN = 2000;
@@ -107,7 +107,8 @@ export default {
             </div>
             <template v-for="day in grouped" :key="day.key">
               <div class="flex justify-center my-4"><span class="chip">{{ day.label }}</span></div>
-              <div v-for="(m, i) in day.items" :key="m.id" class="flex" :class="[m.sender_id === me ? 'justify-end' : 'justify-start', sameSender(day.items, i) ? 'mt-0.5' : 'mt-3']">
+              <div v-for="(m, i) in day.items" :key="m.id" class="group/msg flex items-center gap-1" :class="[m.sender_id === me ? 'justify-end' : 'justify-start', sameSender(day.items, i) ? 'mt-0.5' : 'mt-3']">
+                <button v-if="m.sender_id === me" class="icon-btn icon-btn-sm opacity-0 group-hover/msg:opacity-100 focus:opacity-100 hover:!text-danger shrink-0" @click="deleteMessage(m)" title="Delete for both of you" aria-label="Delete message"><Icon name="trash" :size="14" /></button>
                 <div class="max-w-[85%] sm:max-w-[70%] rounded-2xl px-3.5 py-2 text-[14px] leading-snug"
                      :class="m.sender_id === me ? 'bg-accent/[0.16] rounded-br-md' : 'bg-elevated rounded-bl-md'">
                   <p v-if="m.type === 'text'" class="whitespace-pre-wrap break-words">{{ m.content }}</p>
@@ -216,9 +217,14 @@ export default {
     const isTyping = (id) => rt.typing[id] && now.value - rt.typing[id] < 4000;
 
     async function fetchFriends() {
-      try { all.value = await api('/api/chat/friends'); }
+      try { all.value = await api('/api/chat/friends'); syncFromFriends(all.value); }
       catch (e) { toast.error(e.message); }
       finally { loadingFriends.value = false; }
+    }
+
+    async function deleteMessage(m) {
+      if (!await confirmDialog({ title: 'Delete this message?', message: 'It disappears for both of you.', confirmText: 'Delete', danger: true })) return;
+      await attempt(async () => { await api(`/api/chat/messages/${m.id}`, { method: 'DELETE' }); messages.value = messages.value.filter(x => x.id !== m.id); });
     }
 
     async function select(f) {
@@ -317,6 +323,9 @@ export default {
       } else if (type === 'expired') {
         const m = messages.value.find(x => x.id === payload.message_id);
         if (m) { m.type = 'deleted_file'; m.content = 'File expired (10 min limit)'; }
+      } else if (type === 'deleted') {
+        messages.value = messages.value.filter(x => x.id !== payload.message_id);
+        fetchFriends();
       }
     });
     watch(() => rt.friendsVersion, fetchFriends);
@@ -356,7 +365,7 @@ export default {
       me, rt, call, headerMenu, friends, incoming, outgoing, loadingFriends, active, messages, loadingMessages, draft, msgSearch, showSearch, scroller, inputEl, fileInput,
       sendingFile, showJump, adding, userSearch, filteredUsers, grouped, hasPlayer, MAX_LEN,
       select, send, onInput, sendFile, onScroll, scrollToBottom, sameSender, clock, shortTime, expiresIn, chatUrl, tile, isTyping,
-      openAdd, addFriend, accept, removeFriend, startCall, kindOf, iconFor, formatBytes, downloadUrl,
+      openAdd, addFriend, accept, removeFriend, startCall, kindOf, iconFor, formatBytes, downloadUrl, deleteMessage,
     };
   },
 };

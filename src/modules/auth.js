@@ -1,25 +1,63 @@
 const db = require('../core/db');
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
+const bcrypt = require('../core/hash');
+const config = require('../core/config');
+const { signToken } = require('../core/auth');
 
-module.exports = async function (fastify, opts) {
+// A real hash to compare against when the username doesn't exist, so a wrong
+// username takes as long as a wrong password (no account discovery by timing).
+const DUMMY_HASH = bcrypt.hashSync('not-a-real-password', 10);
+
+// Brute-force protection: per IP and per username, 10 failures in 15 minutes
+// lock that key for the rest of the window.
+const WINDOW_MS = 15 * 60 * 1000;
+const MAX_FAILS = 10;
+const failures = new Map(); // key -> { count, first }
+function blocked(key) {
+  const f = failures.get(key);
+  if (!f) return 0;
+  if (Date.now() - f.first > WINDOW_MS) { failures.delete(key); return 0; }
+  return f.count >= MAX_FAILS ? Math.ceil((f.first + WINDOW_MS - Date.now()) / 60000) : 0;
+}
+function fail(key) {
+  const f = failures.get(key);
+  if (!f || Date.now() - f.first > WINDOW_MS) failures.set(key, { count: 1, first: Date.now() });
+  else f.count++;
+}
+setInterval(() => { for (const [k, f] of failures) if (Date.now() - f.first > WINDOW_MS) failures.delete(k); }, WINDOW_MS).unref();
+
+const WEAK = new Set(['admin', 'password', '1234', '12345', '123456', 'qwerty', 'letmein']);
+
+function findUser(username) {
+  // exact match first; otherwise a case-insensitive match if it is unambiguous
+  const exact = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+  if (exact) return exact;
+  const loose = db.prepare('SELECT * FROM users WHERE username = ? COLLATE NOCASE').all(username);
+  return loose.length === 1 ? loose[0] : null;
+}
+
+module.exports = async function (fastify) {
+  // Public: lets the sign-in page show the version and check the server is up
+  fastify.get('/api/health', async () => ({ ok: true, name: config.name, version: config.version, author: config.author }));
+
   fastify.post('/api/login', async (request, reply) => {
-    const { username, password } = request.body || {};
+    const username = String(request.body?.username || '').trim();
+    const password = String(request.body?.password || '');
     if (!username || !password) return reply.code(400).send({ error: 'Username and password are required' });
-    
-    const stmt = db.prepare('SELECT * FROM users WHERE username = ?');
-    const user = stmt.get(username);
 
-    if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+    const ipKey = `ip:${request.ip}`, userKey = `user:${username.toLowerCase()}`;
+    const wait = Math.max(blocked(ipKey), blocked(userKey));
+    if (wait) return reply.code(429).send({ error: `Too many failed sign-ins. Try again in ${wait} minute${wait === 1 ? '' : 's'}.` });
+
+    const user = findUser(username);
+    const ok = await bcrypt.compare(password, user ? user.password_hash : DUMMY_HASH);
+    if (!user || !ok) {
+      fail(ipKey); fail(userKey);
       return reply.code(401).send({ error: 'Invalid credentials' });
     }
+    failures.delete(userKey);
+    db.prepare("UPDATE users SET last_login_at = datetime('now') WHERE id = ?").run(user.id);
 
-    const token = jwt.sign(
-      { id: user.id, username: user.username, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' } 
-    );
-
-    return { token, role: user.role, id: user.id, username: user.username };
+    const weak = WEAK.has(password.toLowerCase()) || password.toLowerCase() === user.username.toLowerCase() || password.length < 6;
+    return { token: signToken(user), role: user.role, id: user.id, username: user.username, weak_password: weak };
   });
 };

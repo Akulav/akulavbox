@@ -82,7 +82,7 @@ module.exports = async function (fastify) {
     const items = db.prepare(`
       SELECT f.id, f.filename, f.size_bytes, f.mime_type, f.is_encrypted, f.public_hash, f.created_at, ${lib.META_COLS}
       FROM files f LEFT JOIN media_meta m ON m.file_id = f.id
-      WHERE f.folder_id = ? AND f.owner_id = ?
+      WHERE f.folder_id = ? AND f.owner_id = ? AND f.trashed_at IS NULL
     `).all(folderId, request.user.id).map(lib.withMeta);
     return { folderId, items };
   });
@@ -105,18 +105,22 @@ module.exports = async function (fastify) {
     const addP = cleanList(b.add_participants) || [], remP = (cleanList(b.remove_participants) || []).map(s => s.toLowerCase());
     const addT = cleanList(b.add_tags) || [], remT = (cleanList(b.remove_tags) || []).map(s => s.toLowerCase());
     const set = b.set && typeof b.set === 'object' ? b.set : {};
+    // validate the shared fields once, before touching anything
+    const probe = applyPatch(currentMeta('', request.user.id), set, request.user.id);
+    if (probe) return reply.code(400).send({ error: probe });
     let updated = 0;
-    for (const id of ids) {
-      const owned = db.prepare('SELECT 1 FROM files WHERE id = ? AND owner_id = ?').get(id, request.user.id);
-      if (!owned) continue;
-      const m = currentMeta(id, request.user.id);
-      const err = applyPatch(m, set, request.user.id);
-      if (err) return reply.code(400).send({ error: err });
-      m.participants = cleanList([...m.participants.filter(x => !remP.includes(x.toLowerCase())), ...addP]);
-      m.tags = cleanList([...m.tags.filter(x => !remT.includes(x.toLowerCase())), ...addT]);
-      saveMeta(m);
-      updated++;
-    }
+    const owned = db.prepare('SELECT 1 FROM files WHERE id = ? AND owner_id = ?');
+    db.tx(() => {
+      for (const id of ids) {
+        if (!owned.get(id, request.user.id)) continue;
+        const m = currentMeta(id, request.user.id);
+        applyPatch(m, set, request.user.id);
+        m.participants = cleanList([...m.participants.filter(x => !remP.includes(x.toLowerCase())), ...addP]);
+        m.tags = cleanList([...m.tags.filter(x => !remT.includes(x.toLowerCase())), ...addT]);
+        saveMeta(m);
+        updated++;
+      }
+    });
     return { success: true, updated };
   });
 };

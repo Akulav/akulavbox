@@ -4,29 +4,29 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>AkulavBox</title>
+  <meta name="description" content="AkulavBox: your private, encrypted personal cloud for files, photos, music, videos, books and chat. Made by Akulav.">
+  <meta name="author" content="Akulav">
+  <meta name="application-name" content="AkulavBox">
+  <meta name="apple-mobile-web-app-title" content="AkulavBox">
+  <meta name="referrer" content="same-origin">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="alternate icon" href="/favicon.ico">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
   <meta name="theme-color" content="#0D1518">
 
-  <!-- Apply saved theme before paint to avoid a flash -->
+  <!-- Apply saved theme and motion preference before paint to avoid a flash -->
   <script>
     (function () {
-      var t = null;
-      try { t = localStorage.getItem('akulavTheme'); } catch (e) {}
-      if (!t) t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      var t = null, m = null;
+      try { t = localStorage.getItem('akulavTheme'); m = localStorage.getItem('akulavMotion'); } catch (e) {}
+      if (!t || t === 'system') t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
       document.documentElement.dataset.theme = t;
+      document.documentElement.dataset.motion = m === 'off' ? 'off' : 'on';
     })();
   </script>
 
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,650;12..96,750&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
-
-  <!-- Cropper.js (avatar editor) -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" />
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
-
-  <!-- One shared copy of Vue for every module -->
+  <!-- One shared copy of Vue for every module (an import map must come before any module or preload) -->
   <script type="importmap">
     {
       "imports": {
@@ -35,6 +35,43 @@
       }
     }
   </script>
+
+  <!-- Fetch every app module in parallel instead of discovering them one import at a time -->
+  <link rel="modulepreload" href="https://unpkg.com/vue@3.5.13/dist/vue.esm-browser.prod.js" crossorigin>
+  <link rel="modulepreload" href="/app.js">
+  <link rel="modulepreload" href="/lib/api.js">
+  <link rel="modulepreload" href="/lib/ui.js">
+  <link rel="modulepreload" href="/lib/upload.js">
+  <link rel="modulepreload" href="/lib/library.js">
+  <link rel="modulepreload" href="/lib/player.js">
+  <link rel="modulepreload" href="/lib/realtime.js">
+  <link rel="modulepreload" href="/lib/filetypes.js">
+  <link rel="modulepreload" href="/lib/cdn.js">
+  <link rel="modulepreload" href="/lib/trash.js">
+  <link rel="modulepreload" href="/components/Icon.js">
+  <link rel="modulepreload" href="/components/Brand.js">
+  <link rel="modulepreload" href="/components/Shell.js">
+  <link rel="modulepreload" href="/components/Library.js">
+  <link rel="modulepreload" href="/components/FileViewer.js">
+  <link rel="modulepreload" href="/components/EpubReader.js">
+  <link rel="modulepreload" href="/pages/FileManager.js">
+  <link rel="modulepreload" href="/pages/Trash.js">
+  <link rel="modulepreload" href="/pages/CustomAlbums.js">
+  <link rel="modulepreload" href="/pages/MediaLibrary.js">
+  <link rel="modulepreload" href="/pages/MusicApp.js">
+  <link rel="modulepreload" href="/pages/ChatVoice.js">
+  <link rel="modulepreload" href="/pages/Profile.js">
+  <link rel="modulepreload" href="/pages/AdminPanel.js">
+
+  <link rel="preconnect" href="https://unpkg.com" crossorigin>
+  <link rel="preconnect" href="https://cdn.socket.io" crossorigin>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,650;12..96,750&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <!-- Cropper.js (avatar editor) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
 
   <script src="https://cdn.tailwindcss.com/3.4.16"></script>
   <script>
@@ -51,7 +88,7 @@
             bg: v('bg'), surface: v('surface'), elevated: v('elevated'), line: v('line'),
             fg: v('fg'), muted: v('muted'), faint: v('faint'),
             accent: v('accent'), 'accent-fg': v('accent-fg'), 'accent-soft': v('accent-soft'),
-            danger: v('danger'), ok: v('ok'), info: v('info'),
+            danger: v('danger'), ok: v('ok'), info: v('info'), 'accent-hi': v('accent-hi'), teal: v('teal'),
           },
           borderRadius: { xl: '12px', '2xl': '16px' },
         }
@@ -70,12 +107,15 @@
       --muted: 142 161 164;
       --faint: 92 111 116;
       --accent: 232 163 61;    /* brass #E8A33D */
+      --accent-hi: 247 199 102;
       --accent-fg: 28 19 5;
       --accent-soft: 232 163 61;
+      --teal: 95 179 161;
       --danger: 240 108 96;
       --ok: 96 199 152;
       --info: 110 168 230;
       --shadow: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 12px 32px -12px rgb(0 0 0 / 0.6);
+      --blob: .16;
       color-scheme: dark;
     }
     :root[data-theme="light"] {
@@ -87,12 +127,15 @@
       --muted: 88 106 108;
       --faint: 140 155 156;
       --accent: 168 104 14;    /* deeper brass for contrast on light */
+      --accent-hi: 199 132 34;
       --accent-fg: 255 255 255;
       --accent-soft: 214 150 52;
+      --teal: 38 140 120;
       --danger: 196 58 46;
       --ok: 26 135 90;
       --info: 40 110 190;
       --shadow: 0 1px 2px rgb(16 32 30 / 0.06), 0 12px 32px -16px rgb(16 32 30 / 0.25);
+      --blob: .22;
       color-scheme: light;
     }
 
@@ -119,7 +162,7 @@
     :focus-visible { outline: 2px solid rgb(var(--accent)); outline-offset: 2px; border-radius: 6px; }
 
     /* ---------- Components ---------- */
-    .panel { background: rgb(var(--surface)); border: 1px solid rgb(var(--line)); border-radius: 16px; box-shadow: var(--shadow); }
+    .panel { background: rgb(var(--surface) / .92); border: 1px solid rgb(var(--line)); border-radius: 16px; box-shadow: var(--shadow); }
     .title { font-family: 'Bricolage Grotesque', sans-serif; font-weight: 650; letter-spacing: -0.02em; }
 
     .btn {
@@ -132,8 +175,12 @@
     .btn:hover { background: rgb(var(--elevated)); }
     .btn:active { transform: translateY(1px); }
     .btn:disabled { opacity: .5; pointer-events: none; }
-    .btn-primary { background: rgb(var(--accent)); border-color: transparent; color: rgb(var(--accent-fg)); font-weight: 600; }
-    .btn-primary:hover { background: rgb(var(--accent) / .88); }
+    .btn-primary {
+      background: linear-gradient(180deg, rgb(var(--accent-hi)), rgb(var(--accent)));
+      border-color: transparent; color: rgb(var(--accent-fg)); font-weight: 600;
+      box-shadow: 0 1px 0 rgb(255 255 255 / .28) inset, 0 6px 16px -8px rgb(var(--accent) / .7);
+    }
+    .btn-primary:hover { background: linear-gradient(180deg, rgb(var(--accent-hi)), rgb(var(--accent-hi))); box-shadow: 0 1px 0 rgb(255 255 255 / .3) inset, 0 8px 22px -8px rgb(var(--accent) / .8); }
     .btn-danger { background: rgb(var(--danger)); border-color: transparent; color: #fff; }
     .btn-danger:hover { background: rgb(var(--danger) / .88); }
     .btn-ghost { background: transparent; border-color: transparent; color: rgb(var(--muted)); }
@@ -180,12 +227,20 @@
 
     .nav-item { display: flex; align-items: center; gap: 12px; height: 38px; padding: 0 12px; border-radius: 10px; color: rgb(var(--muted)); font-weight: 500; position: relative; width: 100%; }
     .nav-item:hover { color: rgb(var(--fg)); background: rgb(var(--elevated) / .6); }
-    .nav-item.active { color: rgb(var(--fg)); background: rgb(var(--elevated)); }
-    .nav-item.active::before { content: ''; position: absolute; left: -12px; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0; background: rgb(var(--accent)); }
+    .nav-item { transition: color .15s, background-color .15s; }
+    .nav-item .nav-icon { transition: transform .25s cubic-bezier(.2,.8,.2,1), color .15s; }
+    .nav-item:hover .nav-icon { transform: translateX(1px) scale(1.06); }
+    .nav-item.active { color: rgb(var(--fg)); background: linear-gradient(90deg, rgb(var(--accent) / .14), rgb(var(--elevated)) 70%); box-shadow: inset 0 0 0 1px rgb(var(--line) / .7); }
+    .nav-item.active .nav-icon { color: rgb(var(--accent)); }
+    .nav-item.active::before { content: ''; position: absolute; left: -12px; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0; background: rgb(var(--accent)); box-shadow: 0 0 12px rgb(var(--accent) / .9); }
 
     .meter { height: 6px; border-radius: 99px; background: rgb(var(--elevated)); overflow: hidden; }
-    .meter > span { display: block; height: 100%; border-radius: 99px; background: rgb(var(--accent)); transition: width .6s ease; }
+    .meter > span { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, rgb(var(--accent)), rgb(var(--accent-hi))); transition: width .6s cubic-bezier(.2,.8,.2,1); position: relative; overflow: hidden; }
+    .meter > span::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgb(255 255 255 / .35), transparent); transform: translateX(-100%); animation: sweep 3.2s ease-in-out infinite; }
     .meter.warn > span { background: rgb(var(--danger)); }
+    .meter.ok > span { background: linear-gradient(90deg, rgb(var(--ok)), rgb(var(--teal))); }
+    .meter.info > span { background: linear-gradient(90deg, rgb(var(--info)), rgb(var(--teal))); }
+    @keyframes sweep { 60%, 100% { transform: translateX(100%); } }
 
     .row-hover:hover { background: rgb(var(--elevated) / .55); }
 
@@ -196,16 +251,78 @@
     .skeleton { background: linear-gradient(90deg, rgb(var(--elevated)) 0%, rgb(var(--line) / .6) 50%, rgb(var(--elevated)) 100%); background-size: 200% 100%; animation: shimmer 1.4s infinite; }
     @keyframes shimmer { to { background-position: -200% 0; } }
 
-    /* Motion only on user actions (modals, menus, toasts) */
-    .pop-enter-active, .pop-leave-active { transition: opacity .16s ease, transform .16s ease; }
-    .pop-enter-from, .pop-leave-to { opacity: 0; transform: scale(.97) translateY(4px); }
-    .fade-enter-active, .fade-leave-active { transition: opacity .16s ease; }
+    /* ---------- Motion ---------- */
+    .pop-enter-active, .pop-leave-active { transition: opacity .18s ease, transform .22s cubic-bezier(.2,.8,.2,1); }
+    .pop-enter-from, .pop-leave-to { opacity: 0; transform: scale(.96) translateY(6px); }
+    .fade-enter-active, .fade-leave-active { transition: opacity .18s ease; }
     .fade-enter-from, .fade-leave-to { opacity: 0; }
-    .toast-enter-active, .toast-leave-active { transition: all .2s ease; }
-    .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(8px); }
+    .toast-enter-active { transition: opacity .25s ease, transform .35s cubic-bezier(.2,.9,.25,1.2); }
+    .toast-leave-active { transition: opacity .18s ease, transform .18s ease; }
+    .toast-enter-from { opacity: 0; transform: translateY(14px) scale(.96); }
+    .toast-leave-to { opacity: 0; transform: translateX(24px); }
+    .toast-move { transition: transform .25s ease; }
+    .toast-timer { transform-origin: left; animation: toast-timer linear forwards; }
+    @keyframes toast-timer { to { transform: scaleX(0); } }
+
+    /* page switches */
+    .page-enter-active { transition: opacity .26s ease, transform .32s cubic-bezier(.2,.8,.2,1); }
+    .page-leave-active { transition: opacity .1s ease; }
+    .page-enter-from { opacity: 0; transform: translateY(10px); }
+    .page-leave-to { opacity: 0; }
+
+    /* children rise in one after another */
+    .stagger > * { animation: rise .45s cubic-bezier(.2,.8,.2,1) both; }
+    .stagger > *:nth-child(2) { animation-delay: 30ms; } .stagger > *:nth-child(3) { animation-delay: 60ms; }
+    .stagger > *:nth-child(4) { animation-delay: 90ms; } .stagger > *:nth-child(5) { animation-delay: 120ms; }
+    .stagger > *:nth-child(6) { animation-delay: 150ms; } .stagger > *:nth-child(7) { animation-delay: 180ms; }
+    .stagger > *:nth-child(8) { animation-delay: 210ms; } .stagger > *:nth-child(9) { animation-delay: 240ms; }
+    .stagger > *:nth-child(10) { animation-delay: 270ms; } .stagger > *:nth-child(11) { animation-delay: 300ms; }
+    .stagger > *:nth-child(12) { animation-delay: 330ms; } .stagger > *:nth-child(n+13) { animation-delay: 360ms; }
+    .rise { animation: rise .5s cubic-bezier(.2,.8,.2,1) both; }
+    @keyframes rise { from { opacity: 0; transform: translateY(12px) scale(.985); } }
+
+    /* hover lift for cards and tiles */
+    .lift { transition: transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s, border-color .2s; }
+    .lift:hover { transform: translateY(-3px); box-shadow: 0 18px 36px -18px rgb(0 0 0 / .55), 0 0 0 1px rgb(var(--accent) / .18); }
+    .lift:active { transform: translateY(-1px) scale(.995); }
+    .zoom-media img { transition: transform .6s cubic-bezier(.2,.8,.2,1), opacity .2s; }
+    .group:hover .zoom-media img { transform: scale(1.045); }
+
+    /* brand */
+    .brand-text { background: linear-gradient(100deg, rgb(var(--fg)) 30%, rgb(var(--accent-hi)) 75%, rgb(var(--accent))); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .brand-mark { filter: drop-shadow(0 6px 14px rgb(var(--accent) / .35)); }
+    .brand-mark-animated .brand-lid { animation: lid 3.6s ease-in-out infinite; }
+    @keyframes lid { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1.8px); } }
+    .heart { color: rgb(var(--danger)); display: inline-block; animation: beat 1.8s ease-in-out infinite; }
+    @keyframes beat { 0%, 60%, 100% { transform: scale(1); } 15% { transform: scale(1.25); } 30% { transform: scale(.95); } 45% { transform: scale(1.12); } }
+    .glow-dot { box-shadow: 0 0 0 0 rgb(var(--ok) / .7); animation: ping-soft 2.4s ease-out infinite; }
+    @keyframes ping-soft { 70%, 100% { box-shadow: 0 0 0 6px rgb(var(--ok) / 0); } }
+    .eq > span { animation: eq 1s ease-in-out infinite; transform-origin: bottom; }
+    .eq > span:nth-child(2) { animation-delay: .25s; } .eq > span:nth-child(3) { animation-delay: .5s; }
+    @keyframes eq { 0%, 100% { transform: scaleY(.35); } 50% { transform: scaleY(1); } }
+
+    /* ---------- Ambient background (slow, soft, off with the Motion setting) ---------- */
+    .app-bg { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+    .app-bg .blob { position: absolute; border-radius: 50%; opacity: var(--blob); will-change: transform; }
+    .app-bg .b1 { width: 70vmax; height: 70vmax; top: -32vmax; left: -22vmax; background: radial-gradient(circle at center, rgb(var(--accent)) 0%, rgb(var(--accent) / 0) 62%); animation: drift1 46s ease-in-out infinite alternate; }
+    .app-bg .b2 { width: 64vmax; height: 64vmax; bottom: -34vmax; right: -24vmax; background: radial-gradient(circle at center, rgb(var(--teal)) 0%, rgb(var(--teal) / 0) 62%); animation: drift2 58s ease-in-out infinite alternate; }
+    .app-bg .b3 { width: 48vmax; height: 48vmax; top: 28%; left: 46%; background: radial-gradient(circle at center, rgb(var(--info)) 0%, rgb(var(--info) / 0) 62%); opacity: calc(var(--blob) * .7); animation: drift3 72s ease-in-out infinite alternate; }
+    .app-bg::after { content: ''; position: absolute; inset: 0; background-image: radial-gradient(rgb(var(--fg) / .05) 1px, transparent 1px); background-size: 28px 28px;
+      -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 0%, transparent 80%); mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 0%, transparent 80%); }
+    @keyframes drift1 { to { transform: translate(22vmax, 14vmax) scale(1.18); } }
+    @keyframes drift2 { to { transform: translate(-18vmax, -16vmax) scale(1.12); } }
+    @keyframes drift3 { to { transform: translate(-26vmax, 10vmax) scale(.85); } }
+    :root[data-motion="off"] .app-bg .blob, :root[data-motion="off"] .meter > span::after, :root[data-motion="off"] .brand-lid,
+    :root[data-motion="off"] .heart, :root[data-motion="off"] .glow-dot { animation: none !important; }
+    :root[data-motion="off"] .stagger > *, :root[data-motion="off"] .rise { animation: none !important; }
+
     @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; }
+      *, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; animation-iteration-count: 1 !important; }
     }
+
+    .kbd { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 6px; font-family: 'Geist Mono', monospace; font-size: 11.5px;
+      background: rgb(var(--elevated)); border: 1px solid rgb(var(--line)); border-bottom-width: 2px; color: rgb(var(--fg)); }
+    .glass { background: rgb(var(--surface) / .78); -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2); }
 
     /* ---------- Viewer: code, markdown, documents ---------- */
     .code-view { font-family: 'Geist Mono', ui-monospace, monospace; font-size: 13px; line-height: 1.6; tab-size: 4; }
@@ -260,7 +377,9 @@
   </style>
 </head>
 <body>
+  <div class="app-bg" aria-hidden="true"><span class="blob b1"></span><span class="blob b2"></span><span class="blob b3"></span></div>
   <div id="app" v-cloak></div>
+  <noscript><p style="padding:2rem;font-family:sans-serif">AkulavBox needs JavaScript turned on.</p></noscript>
   <script type="module" src="/app.js"></script>
 </body>
 </html>

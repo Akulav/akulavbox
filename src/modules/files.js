@@ -4,51 +4,44 @@ const path = require('path');
 const crypto = require('crypto');
 const { pipeline } = require('stream/promises');
 const { Transform } = require('stream');
-const bcrypt = require('bcrypt');
+const bcrypt = require('../core/hash');
 const { ZipArchive } = require('archiver');
-const { verifyUser } = require('../core/auth');
+const config = require('../core/config');
+const { verifyUser, signToken } = require('../core/auth');
 const { guessMime, isActiveContent } = require('../core/mime');
 const lib = require('../core/library');
 const thumbs = require('../core/thumbs');
+const store = require('../core/storage');
+const trash = require('../core/trash');
 
-// --- MIGRATIONS ---
-try { db.exec('ALTER TABLE files ADD COLUMN created_at TEXT'); } catch (e) { /* already exists */ }
+const { MASTER_KEY, userDirOf, diskPathOf } = store;
+const UPLOAD_ID_RE = /^[A-Za-z0-9-]{8,64}$/;
+const NAME_MAX = 255;
+const cleanName = (s) => String(s ?? '').trim().replace(/[\\/]/g, '_').replace(/[\u0000-\u001f]/g, '').slice(0, NAME_MAX);
 
-// Helper Stream: Drops excess bytes if the stream request doesn't align perfectly with a 16-byte block
-class DropBytes extends Transform {
-  constructor(dropCount) { super(); this.dropCount = dropCount; }
+/** Counts bytes flowing through (to enforce quota while a chunk streams in) */
+class Meter extends Transform {
+  constructor(limit) { super(); this.bytes = 0; this.limit = limit; }
   _transform(chunk, enc, cb) {
-    if (this.dropCount > 0) {
-      if (chunk.length <= this.dropCount) {
-        this.dropCount -= chunk.length;
-        return cb();
-      }
-      const toKeep = chunk.subarray(this.dropCount);
-      this.dropCount = 0;
-      this.push(toKeep);
-    } else { this.push(chunk); }
-    cb();
+    this.bytes += chunk.length;
+    if (this.bytes > this.limit) return cb(Object.assign(new Error('Storage quota exceeded'), { code: 'QUOTA' }));
+    cb(null, chunk);
   }
 }
 
-const UPLOAD_ID_RE = /^[A-Za-z0-9-]{8,64}$/;
-
-module.exports = async function (fastify, opts) {
+module.exports = async function (fastify) {
 
   fastify.register(require('@fastify/multipart'), {
-    limits: { fileSize: 50 * 1024 * 1024 * 1024 } // 50 GB limit
+    limits: { fileSize: 50 * 1024 * 1024 * 1024 } // 50 GB per file
   });
 
-  const MASTER_KEY = Buffer.from(process.env.MASTER_KEY, 'utf-8');
+  // Plain HTML form posts (used by "download selection as zip", which must be a real navigation)
+  fastify.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string', bodyLimit: 4 * 1024 * 1024 },
+    (req, body, done) => done(null, Object.fromEntries(new URLSearchParams(body))));
 
-  const userDirOf = (userId) => path.join(process.cwd(), 'storage', 'users', userId);
-  const diskPathOf = (file) => path.join(userDirOf(file.owner_id), file.is_encrypted ? `${file.id}.enc` : `${file.id}.plain`);
+  const tempDir = config.tempDir;
 
-  // Ensure a temporary directory exists for the chunked uploads
-  const tempDir = path.join(process.cwd(), 'storage', 'temp');
-  if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
-
-  // Clean abandoned chunked uploads (older than 24h) every hour
+  // Abandoned chunked uploads (older than 24h) are cleaned every hour
   const cleanTemp = () => {
     try {
       const cutoff = Date.now() - 24 * 60 * 60 * 1000;
@@ -59,11 +52,15 @@ module.exports = async function (fastify, opts) {
     } catch (e) { fastify.log.warn(e, 'temp cleanup failed'); }
   };
   cleanTemp();
-  const tempTimer = setInterval(cleanTemp, 60 * 60 * 1000);
-  tempTimer.unref();
+  setInterval(cleanTemp, 60 * 60 * 1000).unref();
+
+  // Trash older than TRASH_DAYS is removed for good
+  const sweepTrash = () => { try { const n = trash.purgeExpired(); if (n) fastify.log.info(`trash: removed ${n} expired item(s)`); } catch (e) { fastify.log.warn(e, 'trash sweep failed'); } };
+  setTimeout(sweepTrash, 30 * 1000).unref();
+  setInterval(sweepTrash, 60 * 60 * 1000).unref();
 
   const ownsFolder = (folderId, userId) =>
-    !!db.prepare('SELECT 1 FROM folders WHERE id = ? AND owner_id = ?').get(folderId, userId);
+    !!db.prepare('SELECT 1 FROM folders WHERE id = ? AND owner_id = ? AND trashed_at IS NULL').get(folderId, userId);
 
   // Returns true if `candidateId` is `folderId` itself or one of its descendants
   const isSelfOrDescendant = (folderId, candidateId) => {
@@ -78,96 +75,134 @@ module.exports = async function (fastify, opts) {
     return false;
   };
 
+  const quotaLeft = (userId) => {
+    const u = db.prepare('SELECT quota_bytes, used_bytes FROM users WHERE id = ?').get(userId);
+    return u ? u.quota_bytes - u.used_bytes : 0;
+  };
+
   // --- FOLDERS ---
+  function createFolder(userId, name, parentId) {
+    const id = crypto.randomUUID();
+    db.prepare('INSERT INTO folders (id, owner_id, parent_id, name) VALUES (?, ?, ?, ?)').run(id, userId, parentId, name);
+    return id;
+  }
+
   fastify.post('/api/folders', { preHandler: verifyUser }, async (request, reply) => {
-    const name = (request.body?.name || '').trim();
+    const name = cleanName(request.body?.name);
     const parentId = request.body?.parent_id || null;
     if (!name) return reply.code(400).send({ error: 'Folder name is required' });
     if (parentId && !ownsFolder(parentId, request.user.id)) return reply.code(404).send({ error: 'Parent folder not found' });
     if (parentId && lib.systemKeyOf(parentId)) return reply.code(400).send({ error: 'Locked library folders can’t contain sub-folders.' });
-    const id = crypto.randomUUID();
-    db.prepare('INSERT INTO folders (id, owner_id, parent_id, name) VALUES (?, ?, ?, ?)').run(id, request.user.id, parentId, name);
-    return { success: true, id };
+    return { success: true, id: createFolder(request.user.id, name, parentId) };
   });
 
-  fastify.get('/api/folders/all', { preHandler: verifyUser }, async (request, reply) => {
-    return db.prepare('SELECT id, name, parent_id, system_key FROM folders WHERE owner_id = ? ORDER BY name COLLATE NOCASE').all(request.user.id);
+  // Find or create a nested path ("Trip/Day 1") under a parent — used by folder uploads
+  fastify.post('/api/folders/path', { preHandler: verifyUser }, async (request, reply) => {
+    const parentId = request.body?.parent_id || null;
+    const parts = String(request.body?.path || '').split('/').map(cleanName).filter(Boolean).slice(0, 32);
+    if (parentId && !ownsFolder(parentId, request.user.id)) return reply.code(404).send({ error: 'Parent folder not found' });
+    if (parentId && lib.systemKeyOf(parentId) && parts.length) return reply.code(400).send({ error: 'Locked library folders can’t contain sub-folders.' });
+    const find = db.prepare('SELECT id FROM folders WHERE owner_id = ? AND parent_id IS ? AND name = ? AND trashed_at IS NULL AND system_key IS NULL LIMIT 1');
+    let cur = parentId;
+    for (const name of parts) {
+      const hit = find.get(request.user.id, cur, name);
+      cur = hit ? hit.id : createFolder(request.user.id, name, cur);
+    }
+    return { id: cur };
+  });
+
+  fastify.get('/api/folders/all', { preHandler: verifyUser }, async (request) => {
+    return db.prepare('SELECT id, name, parent_id, system_key FROM folders WHERE owner_id = ? AND trashed_at IS NULL ORDER BY name COLLATE NOCASE').all(request.user.id);
   });
 
   fastify.patch('/api/folders/:id/name', { preHandler: verifyUser }, async (request, reply) => {
-    const name = (request.body?.name || '').trim();
+    const name = cleanName(request.body?.name);
     if (!name) return reply.code(400).send({ error: 'Folder name is required' });
-    const folder = db.prepare('SELECT name, system_key FROM folders WHERE id = ? AND owner_id = ?').get(request.params.id, request.user.id);
+    const folder = db.prepare('SELECT name, system_key FROM folders WHERE id = ? AND owner_id = ? AND trashed_at IS NULL').get(request.params.id, request.user.id);
     if (!folder) return reply.code(404).send({ error: 'Folder not found' });
     if (folder.system_key) return reply.code(400).send({ error: 'Locked library folders can’t be renamed.' });
     db.prepare('UPDATE folders SET name = ? WHERE id = ? AND owner_id = ?').run(name, request.params.id, request.user.id);
     return { success: true };
   });
 
-  fastify.patch('/api/folders/:id/move', { preHandler: verifyUser }, async (request, reply) => {
-    const targetFolderId = request.body?.folder_id || null;
-    if (!ownsFolder(request.params.id, request.user.id)) return reply.code(404).send({ error: 'Folder not found' });
-    if (lib.systemKeyOf(request.params.id)) return reply.code(400).send({ error: 'Locked library folders can’t be moved.' });
+  /** Shared by single and bulk moves. Returns an error string or null. */
+  function moveFolder(userId, id, targetFolderId) {
+    if (!ownsFolder(id, userId)) return 'Folder not found';
+    if (lib.systemKeyOf(id)) return 'Locked library folders can’t be moved.';
     if (targetFolderId) {
-      if (!ownsFolder(targetFolderId, request.user.id)) return reply.code(404).send({ error: 'Destination not found' });
-      if (lib.systemKeyOf(targetFolderId)) return reply.code(400).send({ error: 'Locked library folders can’t contain sub-folders.' });
+      if (!ownsFolder(targetFolderId, userId)) return 'Destination not found';
+      if (lib.systemKeyOf(targetFolderId)) return 'Locked library folders can’t contain sub-folders.';
       // Moving a folder into itself or into one of its own sub-folders would create a cycle
-      if (isSelfOrDescendant(request.params.id, targetFolderId)) {
-        return reply.code(400).send({ error: 'Cannot move a folder into itself or one of its sub-folders' });
-      }
+      if (isSelfOrDescendant(id, targetFolderId)) return 'Cannot move a folder into itself or one of its sub-folders';
     }
-    db.prepare('UPDATE folders SET parent_id = ? WHERE id = ? AND owner_id = ?').run(targetFolderId, request.params.id, request.user.id);
-    return { success: true };
+    db.prepare('UPDATE folders SET parent_id = ? WHERE id = ? AND owner_id = ?').run(targetFolderId, id, userId);
+    return null;
+  }
+  function moveFile(userId, id, folderId) {
+    if (folderId && !ownsFolder(folderId, userId)) return 'Destination not found';
+    const file = db.prepare('SELECT filename, mime_type FROM files WHERE id = ? AND owner_id = ? AND trashed_at IS NULL').get(id, userId);
+    if (!file) return 'File not found';
+    // Files can be moved into a library folder (that adds them to Photos/Music/Videos/Books) if the type fits
+    const sysKey = lib.systemKeyOf(folderId);
+    if (sysKey && !lib.accepts(sysKey, file.filename, file.mime_type)) return lib.rejectMessage(sysKey);
+    db.prepare('UPDATE files SET folder_id = ? WHERE id = ? AND owner_id = ?').run(folderId, id, userId);
+    return null;
+  }
+  const errCode = (msg) => (/not found/i.test(msg) ? 404 : 400);
+
+  fastify.patch('/api/folders/:id/move', { preHandler: verifyUser }, async (request, reply) => {
+    const err = moveFolder(request.user.id, request.params.id, request.body?.folder_id || null);
+    return err ? reply.code(errCode(err)).send({ error: err }) : { success: true };
   });
 
+  // Deleting a folder moves it (and everything in it) to the trash
   fastify.delete('/api/folders/:id', { preHandler: verifyUser }, async (request, reply) => {
-    const targetFolder = db.prepare('SELECT name, system_key FROM folders WHERE id = ? AND owner_id = ?').get(request.params.id, request.user.id);
-    if (!targetFolder) return reply.code(404).send({ error: 'Folder not found' });
-
-    if (targetFolder.system_key) {
-      return reply.code(400).send({ error: 'Locked library folders can’t be deleted.' });
-    }
-
-    const childFiles = db.prepare('SELECT count(*) as count FROM files WHERE folder_id = ?').get(request.params.id);
-    const childFolders = db.prepare('SELECT count(*) as count FROM folders WHERE parent_id = ?').get(request.params.id);
-    if (childFiles.count > 0 || childFolders.count > 0) return reply.code(400).send({ error: 'Folder must be empty to delete it.' });
-
-    db.prepare('DELETE FROM folders WHERE id = ? AND owner_id = ?').run(request.params.id, request.user.id);
-    return { success: true };
+    const folder = db.prepare('SELECT system_key FROM folders WHERE id = ? AND owner_id = ? AND trashed_at IS NULL').get(request.params.id, request.user.id);
+    if (!folder) return reply.code(404).send({ error: 'Folder not found' });
+    if (folder.system_key) return reply.code(400).send({ error: 'Locked library folders can’t be deleted.' });
+    trash.trashFolder(request.params.id, request.user.id);
+    return { success: true, trashed: true };
   });
+
+  // Folder sizes and item counts for the whole tree in one pass (1.x ran a recursive query per folder)
+  function folderStats(userId) {
+    const folders = db.prepare('SELECT id, parent_id FROM folders WHERE owner_id = ? AND trashed_at IS NULL').all(userId);
+    const sums = db.prepare('SELECT folder_id, SUM(size_bytes) AS bytes, COUNT(*) AS n FROM files WHERE owner_id = ? AND trashed_at IS NULL GROUP BY folder_id').all(userId);
+    const own = new Map(sums.map(s => [s.folder_id, s]));
+    const children = new Map();
+    for (const f of folders) { if (!children.has(f.parent_id)) children.set(f.parent_id, []); children.get(f.parent_id).push(f.id); }
+    const memo = new Map();
+    const sizeOf = (id, seen = new Set()) => {
+      if (memo.has(id)) return memo.get(id);
+      if (seen.has(id)) return 0; // cycle guard for damaged data
+      seen.add(id);
+      let total = own.get(id)?.bytes || 0;
+      for (const c of children.get(id) || []) total += sizeOf(c, seen);
+      memo.set(id, total);
+      return total;
+    };
+    const countOf = (id) => (own.get(id)?.n || 0) + (children.get(id)?.length || 0);
+    return { sizeOf, countOf };
+  }
+
+  const sysInfo = (key) => key ? { section: lib.SYSTEM[key]?.section, accepts: lib.SYSTEM[key]?.accepts, role: lib.SYSTEM[key]?.role || null } : {};
 
   fastify.get('/api/directory/:folderId?', { preHandler: verifyUser }, async (request, reply) => {
+    const uid = request.user.id;
     const folderId = request.params.folderId || null;
-    if (folderId && !ownsFolder(folderId, request.user.id)) return reply.code(404).send({ error: 'Folder not found' });
+    if (folderId && !ownsFolder(folderId, uid)) return reply.code(404).send({ error: 'Folder not found' });
 
-    const folders = folderId
-      ? db.prepare('SELECT * FROM folders WHERE owner_id = ? AND parent_id = ?').all(request.user.id, folderId)
-      : db.prepare('SELECT * FROM folders WHERE owner_id = ? AND parent_id IS NULL').all(request.user.id);
+    const folders = db.prepare('SELECT id, name, parent_id, system_key FROM folders WHERE owner_id = ? AND parent_id IS ? AND trashed_at IS NULL').all(uid, folderId);
+    const files = db.prepare(`SELECT id, filename, size_bytes, mime_type, is_encrypted, public_hash, created_at FROM files
+      WHERE owner_id = ? AND folder_id IS ? AND trashed_at IS NULL`).all(uid, folderId);
 
-    const fileCols = 'id, filename, size_bytes, mime_type, is_encrypted, public_hash, created_at';
-    const files = folderId
-      ? db.prepare(`SELECT ${fileCols} FROM files WHERE owner_id = ? AND folder_id = ?`).all(request.user.id, folderId)
-      : db.prepare(`SELECT ${fileCols} FROM files WHERE owner_id = ? AND folder_id IS NULL`).all(request.user.id);
-
-    // Nested folder sizes + item counts
-    const sizeStmt = db.prepare(`
-      WITH RECURSIVE folder_tree(id) AS (
-        SELECT ? AS id
-        UNION
-        SELECT f.id FROM folders f INNER JOIN folder_tree t ON f.parent_id = t.id
-      )
-      SELECT SUM(size_bytes) as total FROM files WHERE folder_id IN folder_tree
-    `);
-    const countStmt = db.prepare(`
-      SELECT (SELECT count(*) FROM files WHERE folder_id = ?) + (SELECT count(*) FROM folders WHERE parent_id = ?) AS n
-    `);
-
-    folders.forEach(f => {
-      f.size_bytes = sizeStmt.get(f.id).total || 0;
-      f.item_count = countStmt.get(f.id, f.id).n || 0;
+    const stats = folderStats(uid);
+    for (const f of folders) {
+      f.size_bytes = stats.sizeOf(f.id);
+      f.item_count = stats.countOf(f.id);
       f.is_system = f.system_key ? 1 : 0;
-      if (f.system_key) { f.section = lib.SYSTEM[f.system_key]?.section; f.accepts = lib.SYSTEM[f.system_key]?.accepts; f.role = lib.SYSTEM[f.system_key]?.role || null; }
-    });
+      if (f.system_key) Object.assign(f, sysInfo(f.system_key));
+    }
     // Locked folders always come first, in a fixed order
     const order = Object.keys(lib.SYSTEM);
     folders.sort((a, b) => (a.system_key ? order.indexOf(a.system_key) : 99) - (b.system_key ? order.indexOf(b.system_key) : 99));
@@ -179,37 +214,41 @@ module.exports = async function (fastify, opts) {
       const seen = new Set();
       while (scan && !seen.has(scan)) {
         seen.add(scan);
-        const doc = db.prepare('SELECT id, name, parent_id, system_key FROM folders WHERE id = ? AND owner_id = ?').get(scan, request.user.id);
+        const doc = db.prepare('SELECT id, name, parent_id, system_key FROM folders WHERE id = ? AND owner_id = ?').get(scan, uid);
         if (!doc) break;
-        currentPath.unshift({ id: doc.id, name: doc.name, system_key: doc.system_key || null,
-          section: doc.system_key ? lib.SYSTEM[doc.system_key]?.section : undefined, accepts: doc.system_key ? lib.SYSTEM[doc.system_key]?.accepts : undefined, role: doc.system_key ? (lib.SYSTEM[doc.system_key]?.role || null) : undefined });
+        currentPath.unshift({ id: doc.id, name: doc.name, system_key: doc.system_key || null, ...(doc.system_key ? sysInfo(doc.system_key) : {}) });
         scan = doc.parent_id;
       }
     }
-
     return { folders, files, currentPath };
   });
 
   // Search across every folder the user owns
-  fastify.get('/api/search', { preHandler: verifyUser }, async (request, reply) => {
+  fastify.get('/api/search', { preHandler: verifyUser }, async (request) => {
     const q = String(request.query.q || '').trim();
     if (q.length < 2) return { files: [], folders: [] };
     const like = `%${q.replace(/[%_\\]/g, m => '\\' + m)}%`;
     const files = db.prepare(`
       SELECT f.id, f.filename, f.size_bytes, f.mime_type, f.is_encrypted, f.public_hash, f.created_at, f.folder_id, d.name AS folder_name
       FROM files f LEFT JOIN folders d ON d.id = f.folder_id
-      WHERE f.owner_id = ? AND f.filename LIKE ? ESCAPE '\\' ORDER BY f.filename COLLATE NOCASE LIMIT 200
+      WHERE f.owner_id = ? AND f.trashed_at IS NULL AND f.filename LIKE ? ESCAPE '\\' ORDER BY f.filename COLLATE NOCASE LIMIT 200
     `).all(request.user.id, like);
     const folders = db.prepare(`
-      SELECT id, name, parent_id, system_key, (system_key IS NOT NULL) AS is_system FROM folders WHERE owner_id = ? AND name LIKE ? ESCAPE '\\' ORDER BY name COLLATE NOCASE LIMIT 50
+      SELECT id, name, parent_id, system_key, (system_key IS NOT NULL) AS is_system FROM folders
+      WHERE owner_id = ? AND trashed_at IS NULL AND name LIKE ? ESCAPE '\\' ORDER BY name COLLATE NOCASE LIMIT 50
     `).all(request.user.id, like);
     return { files, folders };
   });
 
-  // --- FILES (UPLOAD, MOVE, RENAME, DELETE) ---
-
+  // --- UPLOADS ---
+  // Chunks are encrypted as they arrive and written at their byte offset into
+  // one .part file (AES-CTR can start at any offset), so the last chunk only
+  // has to rename it into place. 1.x wrote plain chunks and then re-read and
+  // encrypted the whole file, doubling the disk work for big uploads.
   fastify.post('/api/files/upload', { preHandler: verifyUser }, async (request, reply) => {
-    let tempPath = null;
+    let partPath = null, metaPath = null;
+    const uid = request.user.id;
+    const drop = (data, code, error) => { data.file.resume(); return reply.code(code).send({ error }); };
     try {
       const data = await request.file();
       if (!data) return reply.code(400).send({ error: 'No file uploaded' });
@@ -218,106 +257,109 @@ module.exports = async function (fastify, opts) {
       const uploadId = fields.upload_id?.value;
       const chunkIndex = parseInt(fields.chunk_index?.value || '0', 10);
       const totalChunks = parseInt(fields.total_chunks?.value || '1', 10);
+      const totalSize = fields.total_size?.value !== undefined ? parseInt(fields.total_size.value, 10) : null;
       const folderIdRaw = fields.folder_id?.value;
       const folderId = folderIdRaw && folderIdRaw !== 'null' ? folderIdRaw : null;
 
       // upload_id is used to build a path on disk, so it must be strictly validated
-      if (!uploadId || !UPLOAD_ID_RE.test(uploadId)) {
-        data.file.resume();
-        return reply.code(400).send({ error: 'Missing or invalid upload id' });
-      }
-      if (folderId && !ownsFolder(folderId, request.user.id)) {
-        data.file.resume();
-        return reply.code(404).send({ error: 'Destination folder not found' });
-      }
+      if (!uploadId || !UPLOAD_ID_RE.test(uploadId)) return drop(data, 400, 'Missing or invalid upload id');
+      if (folderId && !ownsFolder(folderId, uid)) return drop(data, 404, 'Destination folder not found');
 
-      const filename = (data.filename || 'untitled').replace(/[\\/]/g, '_');
+      const filename = cleanName(data.filename) || 'untitled';
       const sysKey = lib.systemKeyOf(folderId);
-      if (sysKey && !lib.accepts(sysKey, filename, data.mimetype)) {
-        data.file.resume();
-        return reply.code(400).send({ error: lib.rejectMessage(sysKey) });
-      }
-      tempPath = path.join(tempDir, `${request.user.id}-${uploadId}.tmp`);
+      if (sysKey && !lib.accepts(sysKey, filename, data.mimetype)) return drop(data, 400, lib.rejectMessage(sysKey));
 
-      // Chunks are written at an explicit byte offset so a retried chunk overwrites
-      // its own bytes instead of being appended twice. The first chunk starts a fresh file.
+      partPath = path.join(tempDir, `${uid}-${uploadId}.part`);
+      metaPath = `${partPath}.json`;
+      const current = fs.existsSync(partPath) ? fs.statSync(partPath).size : 0;
       const offsetRaw = fields.offset?.value;
-      if (offsetRaw !== undefined) {
-        const offset = parseInt(offsetRaw, 10);
-        const current = fs.existsSync(tempPath) ? fs.statSync(tempPath).size : 0;
-        if (!(offset >= 0) || (offset > 0 && offset > current)) {
-          data.file.resume();
-          return reply.code(409).send({ error: 'Upload chunk out of order, restart the upload' });
-        }
-        if (offset === 0) {
-          await pipeline(data.file, fs.createWriteStream(tempPath, { flags: 'w' }));
-        } else {
-          fs.truncateSync(tempPath, offset);
-          await pipeline(data.file, fs.createWriteStream(tempPath, { flags: 'r+', start: offset }));
-        }
+      // Older clients don't send offsets: they append
+      const offset = offsetRaw !== undefined ? parseInt(offsetRaw, 10) : (chunkIndex === 0 ? 0 : current);
+      if (!(offset >= 0) || offset > current) return drop(data, 409, 'Upload chunk out of order, restart the upload');
+
+      // Refuse early instead of filling the disk with a file that can't be kept
+      const left = quotaLeft(uid);
+      if (offset === 0 && totalSize !== null && totalSize > left) return drop(data, 400, 'Storage quota exceeded');
+      const incoming = parseInt(request.headers['content-length'] || '0', 10) || 0;
+      if (!store.hasRoomFor(incoming)) return drop(data, 507, 'The server’s disk is full. Ask the admin to free up space.');
+
+      let meta;
+      if (offset === 0) {
+        meta = { iv: crypto.randomBytes(16).toString('hex') };
+        fs.writeFileSync(metaPath, JSON.stringify(meta));
       } else {
-        // Older clients without offsets
-        await pipeline(data.file, fs.createWriteStream(tempPath, { flags: chunkIndex === 0 ? 'w' : 'a' }));
+        try { meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8')); } catch (e) { return drop(data, 409, 'Upload expired, restart the upload'); }
       }
 
-      if (chunkIndex < totalChunks - 1) {
-        return { success: true, chunk: chunkIndex };
-      }
+      // A retried chunk overwrites its own bytes instead of being appended twice
+      if (offset > 0 && offset < current) fs.truncateSync(partPath, offset);
+      const meter = new Meter(Math.max(0, left - offset));
+      await pipeline(data.file, meter, store.ctrAt(meta.iv, offset),
+        fs.createWriteStream(partPath, offset === 0 ? { flags: 'w' } : { flags: 'r+', start: offset }));
+      if (data.file.truncated) throw new Error('File is larger than the 50 GB limit');
 
-      // --- Final chunk: assemble ---
-      const finalSize = fs.statSync(tempPath).size;
-      const user = db.prepare('SELECT quota_bytes, used_bytes FROM users WHERE id = ?').get(request.user.id);
+      if (chunkIndex < totalChunks - 1) return { success: true, chunk: chunkIndex };
 
-      if (user.used_bytes + finalSize > user.quota_bytes) {
-        fs.unlinkSync(tempPath);
-        return reply.code(400).send({ error: 'Storage quota exceeded' });
-      }
+      // --- Last chunk: move into place ---
+      const finalSize = fs.statSync(partPath).size;
+      if (totalSize !== null && totalSize !== finalSize) throw new Error(`Upload incomplete (${finalSize} of ${totalSize} bytes arrived), try again`);
+      if (finalSize > quotaLeft(uid)) throw Object.assign(new Error('Storage quota exceeded'), { code: 'QUOTA' });
 
       const finalMime = guessMime(filename, data.mimetype);
       const fileId = crypto.randomUUID();
-      const iv = crypto.randomBytes(16);
-      const cipher = crypto.createCipheriv('aes-256-ctr', MASTER_KEY, iv);
+      const userDir = userDirOf(uid);
+      fs.mkdirSync(userDir, { recursive: true });
+      const encPath = path.join(userDir, `${fileId}.enc`);
+      try { fs.renameSync(partPath, encPath); }
+      catch (e) { if (e.code !== 'EXDEV') throw e; fs.copyFileSync(partPath, encPath); fs.unlinkSync(partPath); }
+      try { fs.unlinkSync(metaPath); } catch (e) { /* ignore */ }
 
-      const userDir = userDirOf(request.user.id);
-      if (!fs.existsSync(userDir)) fs.mkdirSync(userDir, { recursive: true });
-
-      await pipeline(fs.createReadStream(tempPath), cipher, fs.createWriteStream(path.join(userDir, `${fileId}.enc`)));
-      fs.unlinkSync(tempPath);
-
-      db.prepare(`
-        INSERT INTO files (id, owner_id, folder_id, filename, size_bytes, mime_type, is_encrypted, iv_hex, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, 1, ?, datetime('now'))
-      `).run(fileId, request.user.id, folderId, filename, finalSize, finalMime, iv.toString('hex'));
-
-      db.prepare('UPDATE users SET used_bytes = used_bytes + ? WHERE id = ?').run(finalSize, request.user.id);
+      db.tx(() => {
+        db.prepare(`INSERT INTO files (id, owner_id, folder_id, filename, size_bytes, mime_type, is_encrypted, iv_hex, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, 1, ?, datetime('now'))`).run(fileId, uid, folderId, filename, finalSize, finalMime, meta.iv);
+        db.prepare('UPDATE users SET used_bytes = used_bytes + ? WHERE id = ?').run(finalSize, uid);
+      });
 
       if (lib.categoryOf(filename, finalMime) === 'image') {
-        const saved = db.prepare('SELECT * FROM files WHERE id = ?').get(fileId);
-        thumbs.warm(saved, path.join(userDir, `${fileId}.enc`), MASTER_KEY);
+        thumbs.warm(db.prepare('SELECT * FROM files WHERE id = ?').get(fileId), encPath, MASTER_KEY);
       }
-
       return { success: true, fileId };
     } catch (err) {
-      fastify.log.error(err);
-      if (tempPath && fs.existsSync(tempPath)) { try { fs.unlinkSync(tempPath); } catch (e) { /* ignore */ } }
-      return reply.code(500).send({ error: 'Upload failed', detail: err.message });
+      const quota = err.code === 'QUOTA';
+      if (!quota) fastify.log.error(err);
+      for (const p of [partPath, metaPath]) { if (p) { try { fs.unlinkSync(p); } catch (e) { /* ignore */ } } }
+      return reply.code(quota ? 400 : 500).send({ error: quota ? 'Storage quota exceeded' : (err.message || 'Upload failed') });
     }
   });
 
+  // --- FILES (MOVE, RENAME, TRASH, SHARE) ---
   fastify.patch('/api/files/:id/move', { preHandler: verifyUser }, async (request, reply) => {
-    const folderId = request.body?.folder_id || null;
-    if (folderId && !ownsFolder(folderId, request.user.id)) return reply.code(404).send({ error: 'Destination not found' });
-    const file = db.prepare('SELECT filename, mime_type FROM files WHERE id = ? AND owner_id = ?').get(request.params.id, request.user.id);
-    if (!file) return reply.code(404).send({ error: 'File not found' });
-    // Files can be moved into a library folder (that adds them to Photos/Music/Videos/Books) if the type fits
-    const sysKey = lib.systemKeyOf(folderId);
-    if (sysKey && !lib.accepts(sysKey, file.filename, file.mime_type)) return reply.code(400).send({ error: lib.rejectMessage(sysKey) });
-    db.prepare('UPDATE files SET folder_id = ? WHERE id = ? AND owner_id = ?').run(folderId, request.params.id, request.user.id);
-    return { success: true };
+    const err = moveFile(request.user.id, request.params.id, request.body?.folder_id || null);
+    return err ? reply.code(errCode(err)).send({ error: err }) : { success: true };
+  });
+
+  // Move many files and folders in one request: { files: [], folders: [], folder_id }
+  fastify.post('/api/items/move', { preHandler: verifyUser }, async (request) => {
+    const target = request.body?.folder_id || null;
+    const errors = [];
+    let moved = 0;
+    for (const id of [].concat(request.body?.files || []).slice(0, 5000)) { const e = moveFile(request.user.id, id, target); if (e) errors.push(e); else moved++; }
+    for (const id of [].concat(request.body?.folders || []).slice(0, 5000)) { const e = moveFolder(request.user.id, id, target); if (e) errors.push(e); else moved++; }
+    return { success: !errors.length, moved, errors: [...new Set(errors)] };
+  });
+
+  // Move many files and folders to the trash in one request: { files: [], folders: [] }
+  fastify.post('/api/items/trash', { preHandler: verifyUser }, async (request) => {
+    let n = 0;
+    db.tx(() => {
+      for (const id of [].concat(request.body?.files || []).slice(0, 5000)) if (trash.trashFile(id, request.user.id)) n++;
+    });
+    for (const id of [].concat(request.body?.folders || []).slice(0, 5000)) if (trash.trashFolder(id, request.user.id)) n++;
+    return { success: true, trashed: n };
   });
 
   fastify.patch('/api/files/:id/name', { preHandler: verifyUser }, async (request, reply) => {
-    const name = (request.body?.name || '').trim().replace(/[\\/]/g, '_');
+    const name = cleanName(request.body?.name);
     if (!name) return reply.code(400).send({ error: 'File name is required' });
     const file = db.prepare('SELECT mime_type, folder_id FROM files WHERE id = ? AND owner_id = ?').get(request.params.id, request.user.id);
     if (!file) return reply.code(404).send({ error: 'File not found' });
@@ -327,67 +369,57 @@ module.exports = async function (fastify, opts) {
     return { success: true };
   });
 
+  // Deleting a file moves it to the trash; ?permanent=1 removes it right away
   fastify.delete('/api/files/:id', { preHandler: verifyUser }, async (request, reply) => {
     const file = db.prepare('SELECT * FROM files WHERE id = ? AND owner_id = ?').get(request.params.id, request.user.id);
     if (!file) return reply.code(404).send({ error: 'File not found' });
-    const filePath = diskPathOf(file);
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-    db.prepare('DELETE FROM files WHERE id = ?').run(file.id);
-    // Foreign keys aren't enforced, so clean up references manually
-    db.prepare('DELETE FROM album_images WHERE file_id = ?').run(file.id);
-    db.prepare('DELETE FROM playlist_songs WHERE file_id = ?').run(file.id);
-    db.prepare('DELETE FROM song_covers WHERE file_id = ? OR cover_file_id = ?').run(file.id, file.id);
-    db.prepare('UPDATE albums SET cover_file_id = NULL WHERE cover_file_id = ?').run(file.id);
-    db.prepare('UPDATE collections SET cover_file_id = NULL WHERE cover_file_id = ?').run(file.id);
-    db.prepare('UPDATE playlists SET cover_file_id = NULL WHERE cover_file_id = ?').run(file.id);
-    lib.deleteMetaFor(file.id);
-    thumbs.purge(file.owner_id, file.id);
-    db.prepare('UPDATE users SET used_bytes = MAX(0, used_bytes - ?) WHERE id = ?').run(file.size_bytes, request.user.id);
-    return { success: true };
+    if (request.query.permanent === '1' || file.trashed_at) { store.purgeFile(file); return { success: true, trashed: false }; }
+    trash.trashFile(file.id, request.user.id);
+    return { success: true, trashed: true };
   });
 
   fastify.patch('/api/files/:id/share', { preHandler: verifyUser }, async (request, reply) => {
     const { is_shared } = request.body || {};
-    const file = db.prepare('SELECT * FROM files WHERE id = ? AND owner_id = ?').get(request.params.id, request.user.id);
+    const file = db.prepare('SELECT * FROM files WHERE id = ? AND owner_id = ? AND trashed_at IS NULL').get(request.params.id, request.user.id);
     if (!file) return reply.code(404).send({ error: 'File not found' });
 
     const userDir = userDirOf(request.user.id);
     const encPath = path.join(userDir, `${file.id}.enc`);
     const plainPath = path.join(userDir, `${file.id}.plain`);
+    const tmp = path.join(userDir, `${file.id}.${crypto.randomBytes(4).toString('hex')}.swap`);
 
-    if (is_shared && file.is_encrypted) {
-      const publicHash = crypto.randomBytes(12).toString('hex');
-      const decipher = crypto.createDecipheriv('aes-256-ctr', MASTER_KEY, Buffer.from(file.iv_hex, 'hex'));
-      await pipeline(fs.createReadStream(encPath), decipher, fs.createWriteStream(plainPath));
-      fs.unlinkSync(encPath);
-      db.prepare('UPDATE files SET is_encrypted = 0, public_hash = ? WHERE id = ?').run(publicHash, file.id);
-      return { success: true, public_hash: publicHash };
-    } else if (!is_shared && !file.is_encrypted) {
-      const iv = crypto.randomBytes(16);
-      const cipher = crypto.createCipheriv('aes-256-ctr', MASTER_KEY, iv);
-      await pipeline(fs.createReadStream(plainPath), cipher, fs.createWriteStream(encPath));
-      fs.unlinkSync(plainPath);
-      db.prepare('UPDATE files SET is_encrypted = 1, public_hash = NULL, iv_hex = ? WHERE id = ?').run(iv.toString('hex'), file.id);
-      return { success: true };
+    // Write the new copy first, switch the database, then remove the old copy,
+    // so a viewer streaming the file at that moment never hits a missing file.
+    try {
+      if (is_shared && file.is_encrypted) {
+        const publicHash = crypto.randomBytes(12).toString('hex');
+        await pipeline(fs.createReadStream(encPath), store.ctrAt(file.iv_hex, 0), fs.createWriteStream(tmp));
+        fs.renameSync(tmp, plainPath);
+        db.prepare('UPDATE files SET is_encrypted = 0, public_hash = ? WHERE id = ?').run(publicHash, file.id);
+        try { fs.unlinkSync(encPath); } catch (e) { /* ignore */ }
+        return { success: true, public_hash: publicHash };
+      } else if (!is_shared && !file.is_encrypted) {
+        const iv = crypto.randomBytes(16).toString('hex');
+        await pipeline(fs.createReadStream(plainPath), store.ctrAt(iv, 0), fs.createWriteStream(tmp));
+        fs.renameSync(tmp, encPath);
+        db.prepare('UPDATE files SET is_encrypted = 1, public_hash = NULL, iv_hex = ? WHERE id = ?').run(iv, file.id);
+        try { fs.unlinkSync(plainPath); } catch (e) { /* ignore */ }
+        return { success: true };
+      }
+    } catch (err) {
+      try { fs.unlinkSync(tmp); } catch (e) { /* ignore */ }
+      fastify.log.error(err);
+      return reply.code(500).send({ error: err.code === 'ENOENT' ? 'The file is missing on the server.' : 'Could not change sharing' });
     }
     return { success: true, public_hash: file.public_hash };
   });
 
-  // --- VIEWER, DOWNLOADS & PUBLIC LINKS (WITH OFFSET MATH FOR ENCRYPTED SCRUBBING) ---
-
-  const decryptStreamFrom = (filePath, file, start, end) => {
-    const blockIndex = Math.floor(start / 16);
-    const blockOffset = start % 16;
-    const ivBigInt = BigInt('0x' + file.iv_hex);
-    const offsetIvHex = (ivBigInt + BigInt(blockIndex)).toString(16).padStart(32, '0').slice(-32);
-    const decipher = crypto.createDecipheriv('aes-256-ctr', MASTER_KEY, Buffer.from(offsetIvHex, 'hex'));
-    const fileStream = fs.createReadStream(filePath, { start: start - blockOffset, end });
-    return fileStream.pipe(decipher).pipe(new DropBytes(blockOffset));
-  };
-
-  const serveStream = (request, reply, filePath, file) => {
+  // --- VIEWER, DOWNLOADS & PUBLIC LINKS ---
+  const serveStream = (request, reply, file) => {
+    const filePath = diskPathOf(file);
     const mime = guessMime(file.filename, file.mime_type);
-    const totalSize = fs.statSync(filePath).size;
+    const stat = fs.statSync(filePath);
+    const totalSize = stat.size;
     const download = request.query.download === '1' || request.query.download === 'true';
 
     let start = 0;
@@ -420,7 +452,6 @@ module.exports = async function (fastify, opts) {
     reply.header('Content-Type', mime);
     reply.header('X-Content-Type-Options', 'nosniff');
     // Revalidate every time: files can be edited in place, so a long max-age would show stale content
-    const stat = fs.statSync(filePath);
     const etag = `"${stat.size.toString(16)}-${Math.floor(stat.mtimeMs).toString(16)}"`;
     reply.header('ETag', etag);
     reply.header('Cache-Control', 'private, no-cache');
@@ -432,14 +463,14 @@ module.exports = async function (fastify, opts) {
     reply.header('Content-Disposition', `${download ? 'attachment' : 'inline'}; filename*=UTF-8''${safeName}`);
 
     if (totalSize === 0) return reply.send('');
-
-    if (file.is_encrypted) return reply.send(decryptStreamFrom(filePath, file, start, end));
-    return reply.send(fs.createReadStream(filePath, { start, end }));
+    return reply.send(store.readRange(file, start, end));
   };
 
   // --- USER PROFILE & SETTINGS ---
-  fastify.get('/api/user/profile', { preHandler: verifyUser }, async (request, reply) => {
-    return db.prepare('SELECT id, username, role, quota_bytes, used_bytes, profile_image FROM users WHERE id = ?').get(request.user.id);
+  fastify.get('/api/user/profile', { preHandler: verifyUser }, async (request) => {
+    const p = db.prepare('SELECT id, username, role, quota_bytes, used_bytes, profile_image, created_at FROM users WHERE id = ?').get(request.user.id);
+    const t = db.prepare('SELECT COALESCE(SUM(size_bytes), 0) AS bytes FROM files WHERE owner_id = ? AND trashed_at IS NOT NULL').get(request.user.id);
+    return { ...p, trash_bytes: t.bytes };
   });
 
   fastify.patch('/api/user/profile', { preHandler: verifyUser }, async (request, reply) => {
@@ -451,16 +482,18 @@ module.exports = async function (fastify, opts) {
     return { success: true };
   });
 
+  // Changing the password signs out every other session; this one gets a fresh token
   fastify.patch('/api/user/password', { preHandler: verifyUser }, async (request, reply) => {
     const { currentPassword, newPassword } = request.body || {};
-    if (!newPassword || newPassword.length < 4) return reply.code(400).send({ error: 'New password must be at least 4 characters' });
+    if (!newPassword || String(newPassword).length < 4) return reply.code(400).send({ error: 'New password must be at least 4 characters' });
     const user = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(request.user.id);
-    if (!user || !(await bcrypt.compare(currentPassword || '', user.password_hash))) {
+    if (!user || !(await bcrypt.compare(String(currentPassword || ''), user.password_hash))) {
       return reply.code(400).send({ error: 'Current password is incorrect' });
     }
-    const hash = await bcrypt.hash(newPassword, 10);
-    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, request.user.id);
-    return { success: true };
+    const hash = await bcrypt.hash(String(newPassword), 10);
+    db.prepare('UPDATE users SET password_hash = ?, token_version = COALESCE(token_version, 0) + 1 WHERE id = ?').run(hash, request.user.id);
+    const fresh = db.prepare('SELECT id, username, role, token_version FROM users WHERE id = ?').get(request.user.id);
+    return { success: true, token: signToken(fresh) };
   });
 
   // Replace the contents of a text file in place. The file keeps its id, name, folder,
@@ -472,7 +505,7 @@ module.exports = async function (fastify, opts) {
     const buf = Buffer.from(content, 'utf-8');
     if (buf.length > EDITABLE_MAX) return reply.code(413).send({ error: 'Files larger than 5 MB can’t be edited here.' });
 
-    const file = db.prepare('SELECT * FROM files WHERE id = ? AND owner_id = ?').get(request.params.id, request.user.id);
+    const file = db.prepare('SELECT * FROM files WHERE id = ? AND owner_id = ? AND trashed_at IS NULL').get(request.params.id, request.user.id);
     if (!file) return reply.code(404).send({ error: 'File not found' });
 
     // Optional conflict check: the client sends the size it loaded; refuse if it changed meanwhile
@@ -482,18 +515,16 @@ module.exports = async function (fastify, opts) {
     }
 
     const delta = buf.length - file.size_bytes;
-    const user = db.prepare('SELECT quota_bytes, used_bytes FROM users WHERE id = ?').get(request.user.id);
-    if (delta > 0 && user.used_bytes + delta > user.quota_bytes) return reply.code(400).send({ error: 'Storage quota exceeded' });
+    if (delta > 0 && delta > quotaLeft(request.user.id)) return reply.code(400).send({ error: 'Storage quota exceeded' });
 
     const finalPath = diskPathOf(file);
     const tmpPath = `${finalPath}.${crypto.randomBytes(6).toString('hex')}.tmp`;
     let ivHex = file.iv_hex;
     try {
       if (file.is_encrypted) {
-        const iv = crypto.randomBytes(16);   // never reuse a CTR IV with new content
-        const cipher = crypto.createCipheriv('aes-256-ctr', MASTER_KEY, iv);
+        ivHex = crypto.randomBytes(16).toString('hex');   // never reuse a CTR IV with new content
+        const cipher = store.ctrAt(ivHex, 0);
         fs.writeFileSync(tmpPath, Buffer.concat([cipher.update(buf), cipher.final()]));
-        ivHex = iv.toString('hex');
       } else {
         fs.writeFileSync(tmpPath, buf);      // shared file: stays plain so /shared/<hash> keeps working
       }
@@ -506,6 +537,7 @@ module.exports = async function (fastify, opts) {
 
     db.prepare('UPDATE files SET size_bytes = ?, iv_hex = ? WHERE id = ?').run(buf.length, ivHex, file.id);
     db.prepare('UPDATE users SET used_bytes = MAX(0, used_bytes + ?) WHERE id = ?').run(delta, request.user.id);
+    thumbs.purge(file.owner_id, file.id);
     return { success: true, size_bytes: buf.length, public_hash: file.public_hash };
   });
 
@@ -534,11 +566,12 @@ module.exports = async function (fastify, opts) {
     const onlyCached = request.query.cached === '1';
     const hit = onlyCached ? await thumbs.cached(file, width, MASTER_KEY) : await thumbs.get(file, filePath, width, MASTER_KEY);
     if (!hit) {
-      if (onlyCached || !thumbs.available()) {
+      if (onlyCached) {
         reply.header('Cache-Control', 'no-store');
         return reply.code(404).send({ error: 'Not generated yet', source: file.id, width });
       }
-      return serveStream(request, reply, filePath, file); // sharp couldn't decode it (e.g. HEIC): send the original
+      // no sharp, or it couldn't decode the image (e.g. HEIC): send the original so plain <img> tags still work
+      return serveStream(request, reply, file);
     }
     reply.header('Content-Type', hit.type);
     reply.header('Content-Length', hit.buf.length);
@@ -576,54 +609,66 @@ module.exports = async function (fastify, opts) {
   fastify.get('/api/files/:id/view', { preHandler: verifyUser }, async (request, reply) => {
     const file = db.prepare('SELECT * FROM files WHERE id = ? AND owner_id = ?').get(request.params.id, request.user.id);
     if (!file) return reply.code(404).send({ error: 'File not found' });
-    const filePath = diskPathOf(file);
-    if (!fs.existsSync(filePath)) return reply.code(404).send({ error: 'Missing on disk' });
-    return serveStream(request, reply, filePath, file);
+    if (!fs.existsSync(diskPathOf(file))) return reply.code(404).send({ error: 'Missing on disk' });
+    return serveStream(request, reply, file);
   });
 
-  // Download a whole folder (recursively) as a zip
-  fastify.get('/api/folders/:id/download', { preHandler: verifyUser }, async (request, reply) => {
-    const root = db.prepare('SELECT id, name FROM folders WHERE id = ? AND owner_id = ?').get(request.params.id, request.user.id);
-    if (!root) return reply.code(404).send({ error: 'Folder not found' });
+  // --- ZIP DOWNLOADS ---
+  function folderEntries(userId, rootId, prefix, out, seen = new Set()) {
+    if (seen.has(rootId)) return;
+    seen.add(rootId);
+    for (const f of db.prepare('SELECT * FROM files WHERE folder_id = ? AND owner_id = ? AND trashed_at IS NULL').all(rootId, userId)) {
+      out.push({ file: f, name: prefix + f.filename });
+    }
+    for (const sub of db.prepare('SELECT id, name FROM folders WHERE parent_id = ? AND owner_id = ? AND trashed_at IS NULL').all(rootId, userId)) {
+      folderEntries(userId, sub.id, `${prefix}${sub.name}/`, out, seen);
+    }
+  }
 
-    const entries = [];
-    const walk = (folderId, prefix, seen) => {
-      if (seen.has(folderId)) return;
-      seen.add(folderId);
-      for (const f of db.prepare('SELECT * FROM files WHERE folder_id = ? AND owner_id = ?').all(folderId, request.user.id)) {
-        entries.push({ file: f, name: prefix + f.filename });
-      }
-      for (const sub of db.prepare('SELECT id, name FROM folders WHERE parent_id = ? AND owner_id = ?').all(folderId, request.user.id)) {
-        walk(sub.id, `${prefix}${sub.name}/`, seen);
-      }
-    };
-    walk(root.id, '', new Set());
-
+  function sendZip(reply, name, entries) {
     reply.header('Content-Type', 'application/zip');
-    reply.header('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(root.name)}.zip`);
-
+    reply.header('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(name)}.zip`);
     const archive = new ZipArchive({ zlib: { level: 1 } });
     archive.on('error', (err) => fastify.log.error(err));
     reply.send(archive);
-
-    for (const { file, name } of entries) {
-      const p = diskPathOf(file);
-      if (!fs.existsSync(p)) continue;
-      const size = fs.statSync(p).size;
-      const stream = file.is_encrypted && size > 0 ? decryptStreamFrom(p, file, 0, size - 1) : fs.createReadStream(p);
-      archive.append(stream, { name });
-    }
-    await archive.finalize();
+    store.appendToZip(archive, entries);
+    archive.finalize();
     return reply;
+  }
+
+  // Download a whole folder (recursively) as a zip
+  fastify.get('/api/folders/:id/download', { preHandler: verifyUser }, async (request, reply) => {
+    const root = db.prepare('SELECT id, name FROM folders WHERE id = ? AND owner_id = ? AND trashed_at IS NULL').get(request.params.id, request.user.id);
+    if (!root) return reply.code(404).send({ error: 'Folder not found' });
+    const entries = [];
+    folderEntries(request.user.id, root.id, '', entries);
+    return sendZip(reply, root.name, entries);
+  });
+
+  // Download a selection (files and folders) as one zip. A form POST, so the
+  // browser streams it straight to disk: fields token, files, folders (comma separated), name.
+  const formAuth = async (request, reply) => {
+    if (!request.headers.authorization && request.body?.token) request.headers.authorization = `Bearer ${request.body.token}`;
+    return verifyUser(request, reply);
+  };
+  fastify.post('/api/zip', { preHandler: formAuth }, async (request, reply) => {
+    const ids = (v) => String(v || '').split(',').map(s => s.trim()).filter(Boolean).slice(0, 10000);
+    const uid = request.user.id;
+    const entries = [];
+    const fileStmt = db.prepare('SELECT * FROM files WHERE id = ? AND owner_id = ? AND trashed_at IS NULL');
+    for (const id of ids(request.body?.files)) { const f = fileStmt.get(id, uid); if (f) entries.push({ file: f, name: f.filename }); }
+    for (const id of ids(request.body?.folders)) {
+      const d = db.prepare('SELECT id, name FROM folders WHERE id = ? AND owner_id = ? AND trashed_at IS NULL').get(id, uid);
+      if (d) folderEntries(uid, d.id, `${d.name}/`, entries);
+    }
+    if (!entries.length) return reply.code(404).send({ error: 'Nothing to download' });
+    return sendZip(reply, cleanName(request.body?.name) || 'AkulavBox download', entries);
   });
 
   fastify.get('/shared/:hash', async (request, reply) => {
     const file = db.prepare('SELECT * FROM files WHERE public_hash = ?').get(request.params.hash);
-    if (!file || file.is_encrypted) return reply.code(404).send('File not found or is private.');
-
-    const filePath = path.join(userDirOf(file.owner_id), `${file.id}.plain`);
-    if (!fs.existsSync(filePath)) return reply.code(404).send('Missing on disk');
-
-    return serveStream(request, reply, filePath, file);
+    if (!file || file.is_encrypted || file.trashed_at) return reply.code(404).type('text/plain').send('File not found or is private.');
+    if (!fs.existsSync(diskPathOf(file))) return reply.code(404).type('text/plain').send('Missing on disk');
+    return serveStream(request, reply, file);
   });
 };

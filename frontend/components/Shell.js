@@ -1,8 +1,9 @@
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue';
 import Icon from './Icon.js';
 import { toasts, dismissToast, dialog, closeDialog } from '../lib/ui.js';
-import { uploads, clearFinishedUploads } from '../lib/upload.js';
-import { formatBytes, fileUrl } from '../lib/api.js';
+import { uploads, clearFinishedUploads, cancelUpload, cancelAllUploads, retryUpload } from '../lib/upload.js';
+import { formatBytes } from '../lib/api.js';
+import { thumbUrl } from '../lib/library.js';
 import { player, songTitle, toggle, next, prev, seek, setVolume, toggleMute, toggleShuffle, cycleRepeat, stop, formatTime } from '../lib/player.js';
 import { call, acceptCall, declineCall, endCall, toggleMuteCall, enableSound } from '../lib/realtime.js';
 
@@ -31,11 +32,16 @@ export const UiHost = {
     <div class="fixed z-[300] bottom-4 left-1/2 -translate-x-1/2 sm:left-auto sm:right-4 sm:translate-x-0 flex flex-col gap-2 items-center sm:items-end pointer-events-none w-[calc(100%-2rem)] sm:w-auto">
       <TransitionGroup name="toast">
         <div v-for="t in toasts" :key="t.id" role="status"
-             class="pointer-events-auto flex items-start gap-3 max-w-sm w-full sm:w-auto pl-3 pr-2 py-2.5 rounded-xl border shadow-2xl text-[13.5px] bg-surface border-line">
-          <Icon :name="t.type === 'error' ? 'alert' : t.type === 'success' ? 'check' : 'info'" :size="17"
-                :class="t.type === 'error' ? 'text-danger' : t.type === 'success' ? 'text-ok' : 'text-accent'" class="mt-px" />
+             class="relative overflow-hidden pointer-events-auto flex items-center gap-3 max-w-sm w-full sm:w-auto sm:min-w-[260px] pl-3 pr-2 py-2.5 rounded-xl border shadow-2xl text-[13.5px] glass border-line">
+          <span class="w-7 h-7 rounded-lg grid place-items-center shrink-0"
+                :class="t.type === 'error' ? 'bg-danger/15 text-danger' : t.type === 'success' ? 'bg-ok/15 text-ok' : 'bg-accent/15 text-accent'">
+            <Icon :name="t.type === 'error' ? 'alert' : t.type === 'success' ? 'check' : 'info'" :size="15" :stroke="2.2" />
+          </span>
           <span class="flex-1 leading-snug">{{ t.message }}</span>
-          <button class="icon-btn icon-btn-sm -my-1" @click="dismissToast(t.id)" aria-label="Dismiss"><Icon name="x" :size="14" /></button>
+          <button v-if="t.action" class="btn btn-sm !h-7 font-semibold text-accent" @click="runAction(t)">{{ t.action.label }}</button>
+          <button class="icon-btn icon-btn-sm" @click="dismissToast(t.id)" aria-label="Dismiss"><Icon name="x" :size="14" /></button>
+          <span v-if="t.timeout" class="toast-timer absolute left-0 bottom-0 h-[2px] w-full"
+                :class="t.type === 'error' ? 'bg-danger/60' : t.type === 'success' ? 'bg-ok/60' : 'bg-accent/60'" :style="{ animationDuration: t.timeout + 'ms' }"></span>
         </div>
       </TransitionGroup>
     </div>
@@ -75,45 +81,60 @@ export const UiHost = {
     const onKey = (e) => { if (dialog.open && e.key === 'Escape') cancel(); };
     onMounted(() => window.addEventListener('keydown', onKey));
     onUnmounted(() => window.removeEventListener('keydown', onKey));
-    return { toasts, dismissToast, dialog, ok, cancel, inputEl };
+    const runAction = (t) => { dismissToast(t.id); t.action.run(); };
+    return { toasts, dismissToast, dialog, ok, cancel, inputEl, runAction };
   },
 };
 
 export const UploadTray = {
   components: { Icon },
   template: /*html*/`
-    <div v-if="uploads.length" class="fixed z-[200] right-4 panel w-[min(360px,calc(100vw-2rem))] overflow-hidden"
-         :class="playerVisible ? 'bottom-[92px] md:bottom-[96px]' : 'bottom-20 md:bottom-4'">
-      <div class="flex items-center justify-between px-4 h-11 border-b border-line">
-        <span class="font-medium text-[13.5px]">{{ headline }}<span v-if="eta" class="text-muted font-normal">, {{ eta }}</span></span>
-        <div class="flex items-center">
+    <Transition name="pop">
+    <div v-if="uploads.length" class="fixed z-[200] right-4 panel glass w-[min(380px,calc(100vw-2rem))] overflow-hidden"
+         :class="playerVisible ? 'bottom-[136px] md:bottom-[96px]' : 'bottom-20 md:bottom-4'">
+      <div class="relative flex items-center justify-between pl-4 pr-2 h-12 border-b border-line">
+        <span class="font-medium text-[13.5px] flex items-center gap-2 min-w-0">
+          <Icon :name="active ? 'loader' : failed ? 'alert' : 'check'" :size="15" :class="active ? 'text-accent' : failed ? 'text-danger' : 'text-ok'" />
+          <span class="truncate">{{ headline }}<span v-if="eta" class="text-muted font-normal">, {{ eta }}</span></span>
+        </span>
+        <div class="flex items-center shrink-0">
+          <button v-if="active" class="btn btn-ghost btn-sm !h-7" @click="cancelAllUploads" title="Cancel all uploads">Cancel all</button>
           <button class="icon-btn icon-btn-sm" @click="collapsed = !collapsed" :aria-label="collapsed ? 'Expand' : 'Collapse'">
             <Icon name="chevron-down" :size="16" :class="collapsed ? 'rotate-180' : ''" class="transition-transform" />
           </button>
           <button v-if="!active" class="icon-btn icon-btn-sm" @click="clearFinishedUploads" aria-label="Close"><Icon name="x" :size="15" /></button>
         </div>
+        <div v-if="active" class="absolute left-0 right-0 bottom-0 h-[2px] bg-line/50"><div class="h-full bg-accent transition-[width] duration-300" :style="{ width: overall + '%' }"></div></div>
       </div>
-      <ul v-show="!collapsed" class="max-h-64 overflow-y-auto divide-y divide-line">
-        <li v-for="u in uploads" :key="u.id" class="px-4 py-2.5">
+      <ul v-show="!collapsed" class="max-h-72 overflow-y-auto divide-y divide-line">
+        <li v-for="u in uploads" :key="u.id" class="group px-4 py-2.5">
           <div class="flex items-center gap-2 text-[13px]">
-            <Icon :name="u.status === 'done' ? 'check' : u.status === 'error' ? 'alert' : 'upload'" :size="15"
+            <Icon :name="u.status === 'done' ? 'check' : u.status === 'error' ? 'alert' : u.status === 'cancelled' ? 'x' : 'upload'" :size="15"
                   :class="u.status === 'done' ? 'text-ok' : u.status === 'error' ? 'text-danger' : 'text-muted'" />
-            <span class="truncate flex-1">{{ u.name }}</span>
-            <span class="text-faint text-xs tabular-nums">{{ u.status === 'error' ? 'Failed' : Math.round(u.progress * 100) + '%' }}</span>
+            <span class="truncate flex-1" :class="u.status === 'cancelled' ? 'text-faint line-through' : ''" :title="u.name">{{ u.name }}</span>
+            <span class="text-faint text-xs tabular-nums">{{ u.status === 'error' ? 'Failed' : u.status === 'cancelled' ? 'Cancelled' : u.status === 'queued' ? 'Waiting' : Math.round(u.progress * 100) + '%' }}</span>
+            <button v-if="u.status === 'uploading' || u.status === 'queued'" class="icon-btn icon-btn-sm !w-6 !h-6" @click="cancelUpload(u)" :aria-label="'Cancel ' + u.name" title="Cancel"><Icon name="x" :size="13" /></button>
+            <button v-else-if="u.status === 'error' || u.status === 'cancelled'" class="icon-btn icon-btn-sm !w-6 !h-6" @click="retryUpload(u)" :aria-label="'Retry ' + u.name" title="Try again"><Icon name="rotate" :size="13" /></button>
           </div>
           <p v-if="u.error" class="text-danger text-xs mt-1 pl-6">{{ u.error }}</p>
-          <div v-else class="meter mt-2 ml-6" style="height:3px"><span :style="{ width: (u.progress * 100) + '%' }"></span></div>
+          <div v-else-if="u.status !== 'cancelled'" class="meter mt-2 ml-6" :class="{ ok: u.status === 'done' }" style="height:3px"><span :style="{ width: (u.progress * 100) + '%' }"></span></div>
         </li>
       </ul>
-    </div>`,
+    </div>
+    </Transition>`,
   setup() {
     const collapsed = ref(false);
     const active = computed(() => uploads.some(u => u.status === 'uploading' || u.status === 'queued'));
+    const failed = computed(() => uploads.filter(u => u.status === 'error').length);
+    const overall = computed(() => {
+      const live = uploads.filter(u => u.status !== 'cancelled' && u.status !== 'error');
+      const total = live.reduce((s, u) => s + (u.size || 1), 0);
+      return total ? Math.round(live.reduce((s, u) => s + (u.size || 1) * u.progress, 0) / total * 100) : 0;
+    });
     const headline = computed(() => {
       const left = uploads.filter(u => u.status === 'uploading' || u.status === 'queued').length;
-      const failed = uploads.filter(u => u.status === 'error').length;
       if (left) return `Uploading ${left} file${left > 1 ? 's' : ''}`;
-      if (failed) return `${failed} upload${failed > 1 ? 's' : ''} failed`;
+      if (failed.value) return `${failed.value} upload${failed.value > 1 ? 's' : ''} failed`;
       return 'Uploads complete';
     });
     const playerVisible = computed(() => !!player.current);
@@ -122,24 +143,25 @@ export const UploadTray = {
     const tick = setInterval(() => { now.value = Date.now(); }, 1000);
     onUnmounted(() => clearInterval(tick));
     const eta = computed(() => {
-      const cur = uploads.find(u => u.status === 'uploading' && u.startedAt);
-      if (!cur) return '';
-      const secs = (now.value - cur.startedAt) / 1000;
-      const speed = secs > 1.5 ? (cur.size * cur.progress) / secs : 0;
+      // combined speed of everything uploading right now (several files go in parallel)
+      const running = uploads.filter(u => u.status === 'uploading' && u.startedAt);
+      if (!running.length) return '';
+      const speed = running.reduce((s, u) => { const secs = (now.value - u.startedAt) / 1000; return s + (secs > 1.5 ? (u.size * u.progress) / secs : 0); }, 0);
       if (!speed) return '';
       const left = uploads.filter(u => u.status === 'uploading' || u.status === 'queued').reduce((a, u) => a + u.size * (1 - u.progress), 0) / speed;
       const mbps = speed / (1024 * 1024);
       const t = left < 60 ? `${Math.max(1, Math.round(left))} s left` : left < 3600 ? `${Math.round(left / 60)} min left` : `${(left / 3600).toFixed(1)} h left`;
       return `${mbps >= 1 ? mbps.toFixed(1) + ' MB/s' : Math.round(speed / 1024) + ' KB/s'}, ${t}`;
     });
-    return { uploads, collapsed, active, headline, eta, clearFinishedUploads, formatBytes, playerVisible };
+    return { uploads, collapsed, active, failed, overall, headline, eta, clearFinishedUploads, cancelUpload, cancelAllUploads, retryUpload, formatBytes, playerVisible };
   },
 };
 
 export const PlayerBar = {
   components: { Icon },
   template: /*html*/`
-    <div v-if="player.current" class="fixed z-[150] left-0 right-0 bottom-[60px] md:bottom-0 md:left-[248px] border-t border-line bg-surface/95 backdrop-blur-md">
+    <Transition name="pop">
+    <div v-if="player.current" class="fixed z-[150] left-0 right-0 bottom-[60px] md:bottom-0 md:left-[248px] border-t border-line glass">
       <!-- thin progress line on mobile -->
       <div class="md:hidden h-[2px] bg-line"><div class="h-full bg-accent" :style="{ width: pct + '%' }"></div></div>
       <div class="h-[64px] md:h-[80px] px-3 md:px-6 grid grid-cols-[1fr_auto] md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1fr)] items-center gap-3">
@@ -180,10 +202,11 @@ export const PlayerBar = {
           <button class="icon-btn" @click="stop" title="Close player"><Icon name="x" :size="16" /></button>
         </div>
       </div>
-    </div>`,
+    </div>
+    </Transition>`,
   setup() {
     const pct = computed(() => (player.duration ? (player.time / player.duration) * 100 : 0));
-    const cover = computed(() => player.current?.cover_file_id ? fileUrl(player.current.cover_file_id) : null);
+    const cover = computed(() => player.current?.cover_file_id ? thumbUrl(player.current.cover_file_id, 240) : null);
     const title = computed(() => songTitle(player.current));
     return { player, pct, cover, title, toggle, next, prev, seek, setVolume, toggleMute, toggleShuffle, cycleRepeat, stop, formatTime };
   },

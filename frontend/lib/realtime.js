@@ -31,13 +31,28 @@ export const totalUnread = () => Object.values(rt.unread).reduce((a, b) => a + b
 
 export function onMessage(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 
+/** Seed unread badges and presence from the friends list (counts come from the server, so they survive reloads) */
+export function syncFromFriends(list) {
+  for (const f of list || []) {
+    if (f.status !== 'accepted') continue;
+    if (f.online) rt.online.add(f.id);
+    if (f.id === rt.activeChatId && !document.hidden) continue;
+    if (f.unread) rt.unread[f.id] = f.unread; else delete rt.unread[f.id];
+  }
+}
+
 export function connectRealtime() {
   if (socket || !session.token) return;
-  socket = io({ auth: { token: session.token } });
+  // a function, so reconnects use the latest (refreshed) token
+  socket = io({ auth: (cb) => cb({ token: session.token }) });
 
-  socket.on('connect', () => { rt.connected = true; });
+  socket.on('connect', () => {
+    rt.connected = true;
+    api('/api/chat/friends').then(syncFromFriends).catch(() => {});
+  });
   socket.on('disconnect', () => { rt.connected = false; });
   socket.on('online_list', (ids) => { rt.online = new Set(ids); });
+  socket.on('message_deleted', (d) => listeners.forEach(fn => fn('deleted', d)));
   socket.on('user_online', (id) => { rt.online.add(id); });
   socket.on('user_offline', (id) => { rt.online.delete(id); });
   socket.on('friends_changed', () => { rt.friendsVersion++; });
@@ -98,8 +113,11 @@ export function disconnectRealtime() {
 }
 
 export function sendMessage(receiverId, content) {
-  if (!socket) return false;
-  socket.emit('send_message', { receiver_id: receiverId, content });
+  if (!socket || !socket.connected) return false;
+  socket.timeout(8000).emit('send_message', { receiver_id: receiverId, content }, (err, res) => {
+    if (err) toast.error('Message not delivered. Check your connection.');
+    else if (res && !res.ok) toast.error(res.error || 'Message not delivered.');
+  });
   return true;
 }
 
@@ -110,7 +128,13 @@ export function sendTyping(targetId) {
   socket.emit('typing', { target_id: targetId });
 }
 
-export function markRead(friendId) { delete rt.unread[friendId]; }
+const readTimers = {};
+export function markRead(friendId) {
+  delete rt.unread[friendId];
+  // tell the server (debounced) so the badge stays cleared after a reload
+  clearTimeout(readTimers[friendId]);
+  readTimers[friendId] = setTimeout(() => api(`/api/chat/read/${friendId}`, { method: 'POST' }).catch(() => {}), 600);
+}
 
 // ---- WebRTC ----
 // Hardened browsers (Brave, Helium, LibreWolf, Mullvad…) hide local addresses and

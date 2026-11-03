@@ -7,6 +7,7 @@ import { toast, confirmDialog, attempt } from '../lib/ui.js';
 import { uploadMany } from '../lib/upload.js';
 import { useLibraryFilter, displayTitle, formatDuration, autoCover, backfillCovers, captureVideoFrame, setCover, thumbUrl, preload } from '../lib/library.js';
 import { kindOf } from '../lib/filetypes.js';
+import { moveToTrash } from '../lib/trash.js';
 
 const CONFIG = {
   videos: {
@@ -71,9 +72,9 @@ export default {
         <button class="btn mt-3" @click="f.reset()">Clear filters</button>
       </div>
 
-      <div v-else class="grid gap-x-4 gap-y-6" :class="C.grid">
+      <div v-else class="grid gap-x-4 gap-y-6 stagger" :class="C.grid">
         <div v-for="(it, i) in f.filtered.value" :key="it.id" class="group relative cursor-pointer" @click="onCardClick(i, it)" @contextmenu.prevent="openMenu($event, it)">
-          <div class="relative rounded-xl overflow-hidden ring-2 transition-shadow" :class="[C.aspect, isSel(it.id) ? 'ring-accent' : 'ring-transparent']">
+          <div class="relative rounded-xl overflow-hidden ring-2 lift zoom-media" :class="[C.aspect, isSel(it.id) ? 'ring-accent' : 'ring-transparent']">
             <Thumb :file-id="it.id" :w="kind === 'books' ? 480 : 480" :version="it.thumb_file_id || 'none'" :icon="C.icon" />
             <span v-if="kind === 'videos' && it.duration" class="absolute bottom-2 right-2 px-1.5 h-5 rounded bg-black/75 text-white text-[11px] font-medium tabular-nums grid place-items-center">{{ formatDuration(it.duration) }}</span>
             <span v-if="kind === 'videos'" class="absolute inset-0 grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
@@ -104,7 +105,7 @@ export default {
 
       <!-- Selection bar -->
       <Transition name="pop">
-        <div v-if="selected.length" class="fixed z-[170] left-1/2 -translate-x-1/2 bottom-[76px] md:bottom-6 md:ml-[124px] panel flex items-center gap-1 p-1.5 pl-4">
+        <div v-if="selected.length" class="fixed z-[170] left-1/2 -translate-x-1/2 bottom-[76px] md:bottom-6 md:ml-[124px] panel glass flex items-center gap-1 p-1.5 pl-4">
           <span class="text-[13.5px] font-medium mr-2 whitespace-nowrap">{{ selected.length }} selected</span>
           <button class="btn btn-ghost btn-sm" @click="selectAll">All</button>
           <button class="btn btn-ghost btn-sm" @click="editSelected"><Icon name="pencil" :size="15" />Edit details</button>
@@ -121,7 +122,7 @@ export default {
           <button class="menu-item" @click="run(it => downloadUrl(fileUrl(it.id, { download: true })))"><Icon name="download" :size="16" />Download</button>
           <a class="menu-item" :href="'#/files/' + folderId" @click="menu = null"><Icon name="folder" :size="16" />Show in Files</a>
           <div class="menu-sep"></div>
-          <button class="menu-item danger" @click="run(remove)"><Icon name="trash" :size="16" />Delete</button>
+          <button class="menu-item danger" @click="run(remove)"><Icon name="trash" :size="16" />Move to trash</button>
         </div>
       </div>
 
@@ -248,18 +249,11 @@ export default {
     }
     const run = (fn) => { const it = menu.value.item; menu.value = null; fn(it); };
 
-    async function remove(it) {
-      if (!await confirmDialog({ title: `Delete “${displayTitle(it)}”?`, message: 'The file and its details are deleted permanently.', confirmText: 'Delete', danger: true })) return;
-      await attempt(async () => { await api(`/api/files/${it.id}`, { method: 'DELETE' }); items.value = items.value.filter(x => x.id !== it.id); refreshAccount(); }, 'Deleted');
-    }
+    const remove = (it) => moveToTrash({ files: [it.id] }, `“${displayTitle(it)}”`, load);
     async function deleteSelected() {
-      const n = selected.value.length;
-      if (!await confirmDialog({ title: `Delete ${n} item${n > 1 ? 's' : ''}?`, message: 'The files and their details are deleted permanently.', confirmText: 'Delete', danger: true })) return;
-      let failed = 0;
-      for (const id of selected.value) { try { await api(`/api/files/${id}`, { method: 'DELETE' }); } catch (e) { failed++; } }
+      const ids = [...selected.value];
       selected.value = []; selecting.value = false;
-      await load(); refreshAccount();
-      if (failed) toast.error(`${failed} couldn’t be deleted`); else toast.success('Deleted');
+      await moveToTrash({ files: ids }, `${ids.length} item${ids.length > 1 ? 's' : ''}`, load);
     }
     function onSaved() {
       // single edits are applied in place by the editor; bulk edits need a reload

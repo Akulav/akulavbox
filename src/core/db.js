@@ -1,101 +1,37 @@
 const { DatabaseSync } = require('node:sqlite');
-const fs = require('fs');
-const path = require('path');
-const bcrypt = require('bcrypt');
+const bcrypt = require('./hash');
+const config = require('./config');
+const { migrate } = require('./migrations');
 
-const storageDir = path.join(process.cwd(), 'storage');
-if (!fs.existsSync(storageDir)) fs.mkdirSync(storageDir, { recursive: true });
+const db = new DatabaseSync(config.dbPath);
 
-const db = new DatabaseSync(path.join(storageDir, 'akulavbox.db'));
+// Bring older databases up to date before any module prepares statements
+const result = migrate(db, { backupsDir: config.backupsDir, version: config.version });
+db.schema = result;
 
+// WAL lets readers (thumbnails, listings) run while an upload is being written.
+// Set SQLITE_WAL=0 if the storage folder is on a network drive.
+if (process.env.SQLITE_WAL !== '0') db.exec('PRAGMA journal_mode = WAL');
 db.exec(`
-
-  CREATE TABLE IF NOT EXISTS folders (
-    id TEXT PRIMARY KEY,
-    owner_id TEXT NOT NULL,
-    parent_id TEXT,
-    name TEXT NOT NULL,
-    FOREIGN KEY(owner_id) REFERENCES users(id)
-  );
-
-  CREATE TABLE IF NOT EXISTS files (
-    id TEXT PRIMARY KEY,
-    owner_id TEXT NOT NULL,
-    folder_id TEXT,
-    filename TEXT NOT NULL,
-    size_bytes INTEGER NOT NULL,
-    mime_type TEXT,
-    is_encrypted INTEGER DEFAULT 1,
-    iv_hex TEXT,
-    public_hash TEXT UNIQUE,
-    FOREIGN KEY(owner_id) REFERENCES users(id),
-    FOREIGN KEY(folder_id) REFERENCES folders(id)
-  );
-
-  CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
-    username TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    role TEXT DEFAULT 'user',
-    quota_bytes INTEGER DEFAULT 5368709120,
-    used_bytes INTEGER DEFAULT 0,
-    profile_image TEXT
-  );
-
-  CREATE TABLE IF NOT EXISTS collections (
-    id TEXT PRIMARY KEY,
-    owner_id TEXT NOT NULL,
-    title TEXT NOT NULL,
-    cover_file_id TEXT,
-    FOREIGN KEY(owner_id) REFERENCES users(id)
-  );
-
-  CREATE TABLE IF NOT EXISTS albums (
-    id TEXT PRIMARY KEY,
-    owner_id TEXT NOT NULL,
-    collection_id TEXT NOT NULL,
-    title TEXT NOT NULL,
-    cover_file_id TEXT,
-    FOREIGN KEY(owner_id) REFERENCES users(id),
-    FOREIGN KEY(collection_id) REFERENCES collections(id) ON DELETE CASCADE
-  );
-
-  CREATE TABLE IF NOT EXISTS album_images (
-    album_id TEXT NOT NULL,
-    file_id TEXT NOT NULL,
-    PRIMARY KEY (album_id, file_id),
-    FOREIGN KEY(album_id) REFERENCES albums(id) ON DELETE CASCADE,
-    FOREIGN KEY(file_id) REFERENCES files(id) ON DELETE CASCADE
-  );
-
-  CREATE TABLE IF NOT EXISTS playlists (
-  id TEXT PRIMARY KEY,
-  owner_id TEXT NOT NULL,
-  title TEXT NOT NULL,
-  cover_file_id TEXT,
-  is_favorite INTEGER DEFAULT 0,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS playlist_songs (
-  playlist_id TEXT NOT NULL,
-  file_id TEXT NOT NULL,
-  added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (playlist_id, file_id)
-);
-
-CREATE TABLE IF NOT EXISTS song_covers (
-  file_id TEXT PRIMARY KEY,
-  cover_file_id TEXT NOT NULL
-);
+  PRAGMA synchronous = NORMAL;
+  PRAGMA busy_timeout = 5000;
+  PRAGMA temp_store = MEMORY;
+  PRAGMA cache_size = -16000;
 `);
 
-// Admin creation logic remains the same...
-const stmt = db.prepare('SELECT count(*) as count FROM users');
-if (stmt.get().count === 0) {
+// First start: create the default admin (username admin, password admin)
+if (db.prepare('SELECT count(*) AS count FROM users').get().count === 0) {
   const hash = bcrypt.hashSync('admin', 10);
-  db.prepare('INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)').run('admin-uuid-0000', 'admin', hash, 'admin');
-  console.log('Default admin created.');
+  db.prepare("INSERT INTO users (id, username, password_hash, role, created_at) VALUES (?, ?, ?, 'admin', datetime('now'))")
+    .run('admin-uuid-0000', 'admin', hash);
+  console.log('[db] Default admin created (username "admin", password "admin"). Change the password after signing in.');
 }
+
+/** Run fn inside a transaction (synchronous; DatabaseSync has no async work in between) */
+db.tx = (fn) => {
+  db.exec('BEGIN');
+  try { const r = fn(); db.exec('COMMIT'); return r; }
+  catch (e) { db.exec('ROLLBACK'); throw e; }
+};
 
 module.exports = db;

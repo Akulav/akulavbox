@@ -2,9 +2,10 @@ import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue';
 import Icon from '../components/Icon.js';
 import FileViewer from '../components/FileViewer.js';
 import { Thumb } from '../components/Library.js';
-import { api, fileUrl, sharedUrl, formatBytes, formatDate, copyText, downloadUrl, refreshAccount, storage, session } from '../lib/api.js';
+import { api, fileUrl, sharedUrl, formatBytes, formatDate, copyText, downloadUrl, downloadZip, refreshAccount, storage, session, account } from '../lib/api.js';
 import { toast, confirmDialog, promptDialog, attempt } from '../lib/ui.js';
-import { uploadMany } from '../lib/upload.js';
+import { uploadMany, uploadFile, uploadTick, filesFromDrop, filesFromPicker } from '../lib/upload.js';
+import { moveToTrash, countLabel } from '../lib/trash.js';
 import { kindOf, iconFor, tintFor, isImageKind } from '../lib/filetypes.js';
 import { thumbUrl, SECTION_OF, ROUTE_OF, ACCEPTS_LABEL } from '../lib/library.js';
 
@@ -65,8 +66,23 @@ export default {
             <button :class="{ on: layout === 'grid' }" @click="layout = 'grid'" title="Grid"><Icon name="grid" :size="16" /></button>
           </div>
           <div class="flex gap-2 ml-auto">
-            <button class="btn" @click="createFolder" :disabled="searching || !!lockedHere" :title="lockedHere ? 'Library folders can’t contain sub-folders' : ''"><Icon name="folder-plus" :size="16" /><span class="hidden sm:inline">New folder</span></button>
+            <a href="#/trash" class="btn btn-ghost hidden lg:inline-flex" title="Deleted items"><Icon name="trash" :size="16" />Trash<span v-if="account.trash_bytes" class="text-faint text-xs tabular-nums">{{ formatBytes(account.trash_bytes) }}</span></a>
+            <div class="relative">
+              <button class="btn" @click="newMenu = !newMenu" :disabled="searching" aria-haspopup="menu" :aria-expanded="newMenu"><Icon name="plus" :size="16" /><span class="hidden sm:inline">New</span><Icon name="chevron-down" :size="14" class="text-faint" /></button>
+              <div v-if="newMenu" class="fixed inset-0 z-[229]" @click="newMenu = false"></div>
+              <Transition name="pop">
+                <div v-if="newMenu" class="menu absolute right-0 top-11 z-[230]" role="menu" @click="newMenu = false">
+                  <button class="menu-item" :disabled="!!lockedHere" :class="lockedHere ? 'opacity-40' : ''" @click="createFolder"><Icon name="folder-plus" :size="16" />Folder</button>
+                  <button class="menu-item" :disabled="!!lockedHere" :class="lockedHere ? 'opacity-40' : ''" @click="createTextFile('txt')"><Icon name="file-plus" :size="16" />Text file</button>
+                  <button class="menu-item" :disabled="!!lockedHere" :class="lockedHere ? 'opacity-40' : ''" @click="createTextFile('md')"><Icon name="note" :size="16" />Markdown note</button>
+                  <div class="menu-sep"></div>
+                  <button class="menu-item" @click="fileInput.click()"><Icon name="upload" :size="16" />Upload files</button>
+                  <button class="menu-item" @click="folderInput.click()"><Icon name="folder-up" :size="16" />Upload a folder</button>
+                </div>
+              </Transition>
+            </div>
             <input type="file" ref="fileInput" multiple class="hidden" @change="onPick">
+            <input type="file" ref="folderInput" webkitdirectory multiple class="hidden" @change="onPickFolder">
             <button class="btn btn-primary" @click="fileInput.click()" :disabled="searching"><Icon name="upload" :size="16" />Upload</button>
           </div>
         </div>
@@ -93,16 +109,19 @@ export default {
         <div v-for="i in 6" :key="i" class="h-12 rounded-lg skeleton"></div>
       </div>
 
-      <div v-else-if="!visibleFolders.length && !visibleFiles.length" class="panel py-16 px-6 text-center">
-        <span class="w-14 h-14 rounded-2xl bg-elevated grid place-items-center mx-auto mb-4 text-muted"><Icon :name="searching ? 'search' : 'upload'" :size="24" /></span>
+      <div v-else-if="!visibleFolders.length && !visibleFiles.length" class="panel py-16 px-6 text-center rise">
+        <span class="w-14 h-14 rounded-2xl bg-accent/10 text-accent grid place-items-center mx-auto mb-4"><Icon :name="searching ? 'search' : 'upload'" :size="24" /></span>
         <template v-if="searching">
           <p class="title text-lg mb-1">Nothing matches “{{ query }}”</p>
           <p class="text-muted text-[13.5px]">Search looks at file and folder names in every folder.</p>
         </template>
         <template v-else>
           <p class="title text-lg mb-1">This folder is empty</p>
-          <p class="text-muted text-[13.5px] mb-5">Drop files anywhere on this page, or choose them from your device.</p>
-          <button class="btn btn-primary" @click="fileInput.click()"><Icon name="upload" :size="16" />Upload files</button>
+          <p class="text-muted text-[13.5px] mb-5">Drop files or whole folders anywhere on this page, or choose them from your device.</p>
+          <div class="flex justify-center gap-2 flex-wrap">
+            <button class="btn btn-primary" @click="fileInput.click()"><Icon name="upload" :size="16" />Upload files</button>
+            <button class="btn" @click="folderInput.click()"><Icon name="folder-up" :size="16" />Upload a folder</button>
+          </div>
         </template>
       </div>
 
@@ -112,7 +131,7 @@ export default {
           <input type="checkbox" class="checkbox" :checked="allSelected" :indeterminate.prop="someSelected && !allSelected" @change="toggleAll" aria-label="Select all">
           <span>Name</span><span>Size</span><span>{{ searching ? 'Location' : 'Added' }}</span><span></span>
         </div>
-        <ul role="list">
+        <ul role="list" class="stagger">
           <template v-for="(f, fi) in visibleFolders" :key="'d' + f.id">
           <li v-if="!searching && fi === 0 && f.system_key && !currentPath.length" class="px-4 py-2 text-xs text-muted bg-elevated/40 border-b border-line flex items-center gap-2"><Icon name="lock" :size="12" />Library folders, managed by Photos, Music, Videos and Books</li>
           <li v-if="!searching && fi > 0 && !f.system_key && visibleFolders[fi - 1].system_key" class="px-4 py-2 text-xs text-muted bg-elevated/40 border-b border-line">Your folders</li>
@@ -173,9 +192,9 @@ export default {
       </div>
 
       <!-- GRID -->
-      <div v-else class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 2xl:grid-cols-7 gap-3">
+      <div v-else class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 2xl:grid-cols-7 gap-3 stagger">
         <div v-for="f in visibleFolders" :key="'d' + f.id"
-             class="group relative panel !shadow-none p-3 cursor-pointer hover:border-faint transition-colors"
+             class="group relative panel !shadow-none p-3 cursor-pointer hover:border-faint lift"
              :class="[isSel('folder', f.id) ? '!border-accent' : '', dropTarget === f.id ? '!border-accent bg-accent/10' : '']"
              :draggable="!f.is_system" @dragstart="onDragStart($event, 'folder', f)" @dragend="dragging = null"
              @dragover.prevent.stop="onDragOverFolder($event, f.id)" @dragleave="dropTarget = null" @drop.stop.prevent="onDropOnFolder($event, f.id)"
@@ -187,11 +206,11 @@ export default {
           <button class="icon-btn icon-btn-sm absolute top-2 right-2 bg-surface/80 opacity-0 group-hover:opacity-100" @click.stop="openMenu($event, 'folder', f)"><Icon name="more" :size="16" /></button>
         </div>
         <div v-for="(file, i) in visibleFiles" :key="file.id"
-             class="group relative panel !shadow-none p-3 cursor-pointer hover:border-faint transition-colors"
+             class="group relative panel !shadow-none p-3 cursor-pointer hover:border-faint lift"
              :class="isSel('file', file.id) ? '!border-accent' : ''"
              draggable="true" @dragstart="onDragStart($event, 'file', file)" @dragend="dragging = null"
              @click="onRowClick($event, 'file', file, i)" @contextmenu.prevent="openMenu($event, 'file', file)">
-          <div class="aspect-[4/3] rounded-lg overflow-hidden mb-2.5 grid place-items-center" :style="isImageKind(kindOf(file)) ? '' : tileStyle(file)">
+          <div class="aspect-[4/3] rounded-lg overflow-hidden mb-2.5 grid place-items-center zoom-media" :style="isImageKind(kindOf(file)) ? '' : tileStyle(file)">
             <Thumb v-if="isImageKind(kindOf(file))" :file-id="file.id" :w="480" />
             <Icon v-else :name="iconFor(kindOf(file))" :size="34" :stroke="1.4" />
           </div>
@@ -208,10 +227,10 @@ export default {
 
       <!-- Selection bar -->
       <Transition name="pop">
-        <div v-if="selCount" class="fixed z-[170] left-1/2 -translate-x-1/2 bottom-[76px] md:bottom-6 md:ml-[124px] panel flex items-center gap-1 p-1.5 pl-4">
+        <div v-if="selCount" class="fixed z-[170] left-1/2 -translate-x-1/2 bottom-[76px] md:bottom-6 md:ml-[124px] panel glass flex items-center gap-1 p-1.5 pl-4">
           <span class="text-[13.5px] font-medium mr-2 whitespace-nowrap">{{ selCount }} selected</span>
           <button class="btn btn-ghost btn-sm" @click="openMove(null)"><Icon name="folder-input" :size="15" /><span class="hidden sm:inline">Move</span></button>
-          <button v-if="selection.files.length && !selection.folders.length" class="btn btn-ghost btn-sm" @click="downloadSelected"><Icon name="download" :size="15" /><span class="hidden sm:inline">Download</span></button>
+          <button class="btn btn-ghost btn-sm" @click="downloadSelected" :title="selCount > 1 || selection.folders.length ? 'Download as one zip' : 'Download'"><Icon name="download" :size="15" /><span class="hidden sm:inline">{{ selCount > 1 || selection.folders.length ? 'Zip' : 'Download' }}</span></button>
           <button class="btn btn-ghost btn-sm !text-danger" @click="deleteSelected"><Icon name="trash" :size="15" /><span class="hidden sm:inline">Delete</span></button>
           <button class="icon-btn icon-btn-sm" @click="clearSelection" title="Clear selection (Esc)"><Icon name="x" :size="15" /></button>
         </div>
@@ -247,7 +266,7 @@ export default {
               <button class="menu-item" @click="act(i => unshare(i))"><Icon name="link-off" :size="16" />Stop sharing</button>
             </template>
             <div class="menu-sep"></div>
-            <button class="menu-item danger" @click="act(i => deleteFile(i))"><Icon name="trash" :size="16" />Delete</button>
+            <button class="menu-item danger" @click="act(i => deleteFile(i))"><Icon name="trash" :size="16" />Move to trash</button>
           </template>
           <template v-else>
             <button class="menu-item" @click="act(i => navigate(i.id))"><Icon name="folder" :size="16" />Open</button>
@@ -257,7 +276,7 @@ export default {
               <button class="menu-item" @click="act(i => renameFolder(i))"><Icon name="pencil" :size="16" />Rename</button>
               <button class="menu-item" @click="act(i => openMove(i, 'folder'))"><Icon name="folder-input" :size="16" />Move to…</button>
               <div class="menu-sep"></div>
-              <button class="menu-item danger" @click="act(i => deleteFolder(i))"><Icon name="trash" :size="16" />Delete</button>
+              <button class="menu-item danger" @click="act(i => deleteFolder(i))"><Icon name="trash" :size="16" />Move to trash</button>
             </template>
           </template>
         </div>
@@ -302,6 +321,8 @@ export default {
     const loading = ref(false);
     const loaded = ref(false);
     const fileInput = ref(null);
+    const folderInput = ref(null);
+    const newMenu = ref(false);
 
     const query = ref('');
     const results = ref(null);
@@ -443,47 +464,37 @@ export default {
       await attempt(async () => { await api(`/api/files/${f.id}/name`, { method: 'PATCH', body: { name } }); await reloadView(); });
     }
 
-    async function deleteFolder(f) {
-      if (f.item_count) {
-        const ok = await confirmDialog({ title: `Delete “${f.name}” and everything in it?`, message: `${f.item_count} item(s), ${formatBytes(f.size_bytes)} in total. This can’t be undone.`, confirmText: 'Delete all', danger: true });
-        if (!ok) return;
-        await attempt(async () => { await deleteFolderRecursive(f.id); await reloadView(); refreshAccount(); }, 'Folder deleted');
-      } else {
-        if (!await confirmDialog({ title: `Delete “${f.name}”?`, confirmText: 'Delete', danger: true })) return;
-        await attempt(async () => { await api(`/api/folders/${f.id}`, { method: 'DELETE' }); await reloadView(); }, 'Folder deleted');
-      }
-    }
-
-    // The API only deletes empty folders, so empty it first (deepest first)
-    async function deleteFolderRecursive(id) {
-      const data = await api(`/api/directory/${id}`);
-      for (const sub of data.folders) await deleteFolderRecursive(sub.id);
-      for (const file of data.files) await api(`/api/files/${file.id}`, { method: 'DELETE' });
-      await api(`/api/folders/${id}`, { method: 'DELETE' });
-    }
-
-    async function deleteFile(f) {
-      if (!await confirmDialog({ title: `Delete “${f.filename}”?`, message: 'It will also be removed from any albums or playlists. This can’t be undone.', confirmText: 'Delete', danger: true })) return;
-      await attempt(async () => { await api(`/api/files/${f.id}`, { method: 'DELETE' }); await reloadView(); refreshAccount(); }, 'File deleted');
-    }
+    // Deleting goes to the trash (with Undo), so no confirmation is needed
+    const deleteFolder = (f) => moveToTrash({ folders: [f.id] }, `“${f.name}”`, reloadView);
+    const deleteFile = (f) => moveToTrash({ files: [f.id] }, `“${f.filename}”`, reloadView);
 
     async function deleteSelected() {
-      const nF = selection.files.length, nD = selection.folders.length;
-      const parts = [nF && `${nF} file${nF > 1 ? 's' : ''}`, nD && `${nD} folder${nD > 1 ? 's' : ''}`].filter(Boolean).join(' and ');
-      if (!await confirmDialog({ title: `Delete ${parts}?`, message: nD ? 'Folders are deleted together with everything inside them. This can’t be undone.' : 'This can’t be undone.', confirmText: 'Delete', danger: true })) return;
-      let failed = 0;
-      for (const id of selection.files) { try { await api(`/api/files/${id}`, { method: 'DELETE' }); } catch (e) { failed++; } }
-      for (const id of selection.folders) { try { await deleteFolderRecursive(id); } catch (e) { failed++; toast.error(e.message); } }
+      const files = [...selection.files], folders = [...selection.folders];
+      if (folders.some(id => visibleFolders.value.find(f => f.id === id)?.is_system)) return toast.error('Locked library folders can’t be deleted.');
       clearSelection();
-      await reloadView(); refreshAccount();
-      if (failed) toast.error(`${failed} item(s) couldn’t be deleted`); else toast.success('Deleted');
+      await moveToTrash({ files, folders }, countLabel(files.length, folders.length), reloadView);
+    }
+
+    async function createTextFile(ext) {
+      const name = await promptDialog({ title: ext === 'md' ? 'New note' : 'New text file', value: ext === 'md' ? 'Note.md' : 'Untitled.txt', confirmText: 'Create' });
+      if (!name) return;
+      const filename = /\.[^.]+$/.test(name) ? name : `${name}.${ext}`;
+      const body = ext === 'md' ? `# ${filename.replace(/\.[^.]+$/, '')}\n\n` : '';
+      await attempt(async () => {
+        const id = await uploadFile(new File([body], filename, { type: ext === 'md' ? 'text/markdown' : 'text/plain' }), props.folderId || null);
+        await load();
+        const f = files.value.find(x => x.id === id);
+        if (f) openViewer(f, true);
+      });
     }
 
     const downloadFile = (f) => downloadUrl(fileUrl(f.id, { download: true }));
     const downloadFolder = (f) => downloadUrl(`/api/folders/${f.id}/download?token=${encodeURIComponent(session.token)}`);
     function downloadSelected() {
-      // Browsers allow multiple downloads when they're spaced out a little
-      selection.files.forEach((id, i) => setTimeout(() => downloadUrl(fileUrl(id, { download: true })), i * 400));
+      if (selection.files.length === 1 && !selection.folders.length) return downloadFile({ id: selection.files[0] });
+      // one zip for everything, folders included
+      const here = currentPath.value.length ? currentPath.value[currentPath.value.length - 1].name : 'Files';
+      downloadZip({ files: selection.files, folders: selection.folders, name: here });
     }
 
     async function share(f) {
@@ -538,18 +549,24 @@ export default {
       return out;
     });
 
+    /** Move many items in one request; reports problems once */
+    async function moveItems(items, target) {
+      try {
+        const r = await api('/api/items/move', { method: 'POST', body: {
+          files: items.filter(i => i.type === 'file').map(i => i.id), folders: items.filter(i => i.type === 'folder').map(i => i.id), folder_id: target } });
+        for (const e of r.errors || []) toast.error(e);
+        return r.moved;
+      } catch (e) { toast.error(e.message); return 0; }
+    }
+
     async function confirmMove() {
       if (move.target === undefined) return;
       move.busy = true;
-      let failed = 0;
-      for (const it of move.items) {
-        try { await api(it.type === 'file' ? `/api/files/${it.id}/move` : `/api/folders/${it.id}/move`, { method: 'PATCH', body: { folder_id: move.target } }); }
-        catch (e) { failed++; toast.error(e.message); }
-      }
+      const n = await moveItems(move.items, move.target);
       move.busy = false; move.open = false;
       clearSelection();
       await reloadView();
-      if (!failed) toast.success('Moved');
+      if (n) toast.success(`Moved ${n} item${n === 1 ? '' : 's'}`);
     }
 
     // ---------- drag & drop ----------
@@ -571,51 +588,67 @@ export default {
     }
     async function onDropOnFolder(e, folderId) {
       dropTarget.value = null; externalDrag.value = false; dragDepth = 0;
-      if (isExternal(e)) { await uploadTo(e.dataTransfer.files, folderId); return; }
+      if (isExternal(e)) { await uploadEntries(await filesFromDrop(e.dataTransfer), folderId); return; }
       let items = [];
       try { items = JSON.parse(e.dataTransfer.getData('application/x-akulav') || '[]'); } catch (err) { return; }
       items = items.filter(i => !(i.type === 'folder' && i.id === folderId));
       if (!items.length) return;
-      let failed = 0;
-      for (const it of items) {
-        try { await api(it.type === 'file' ? `/api/files/${it.id}/move` : `/api/folders/${it.id}/move`, { method: 'PATCH', body: { folder_id: folderId } }); }
-        catch (err) { failed++; toast.error(err.message); }
-      }
+      const n = await moveItems(items, folderId);
       dragging.value = null;
       clearSelection();
       await load();
-      if (!failed) toast.success(`Moved ${items.length} item${items.length > 1 ? 's' : ''}`);
+      if (n) toast.success(`Moved ${n} item${n > 1 ? 's' : ''}`);
     }
     function onDragEnter(e) { if (isExternal(e)) { dragDepth++; externalDrag.value = true; } }
     function onDragLeave(e) { if (isExternal(e)) { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) externalDrag.value = false; } }
     function onDragOverPage(e) { if (isExternal(e)) e.dataTransfer.dropEffect = 'copy'; }
     async function onDropPage(e) {
       externalDrag.value = false; dragDepth = 0;
-      if (isExternal(e) && e.dataTransfer.files.length) await uploadTo(e.dataTransfer.files, props.folderId || null);
+      if (isExternal(e)) await uploadEntries(await filesFromDrop(e.dataTransfer), props.folderId || null);
     }
 
     // ---------- upload ----------
-    async function uploadTo(fileList, folderId) {
-      let list = Array.from(fileList).filter(f => f.size > 0 || f.type); // skip dropped directories
-      if (!list.length) { toast('Folders can’t be dropped yet. Select the files inside instead.'); return; }
+    let ownUploads = 0;
+    /** Upload [{ file, path }] into folderId, recreating sub-folders from `path` */
+    async function uploadEntries(entries, folderId) {
+      let list = entries.filter(e => e.file);
+      if (!list.length) return;
       const key = lockedKeyOf(folderId);
       if (key) {
-        const ok = list.filter(f => fits(key, kindOf({ filename: f.name, mime_type: f.type }), f.name));
+        // library folders hold files only: flatten and keep what fits
+        const ok = list.filter(e => fits(key, kindOf({ filename: e.file.name, mime_type: e.file.type }), e.file.name));
         if (ok.length < list.length) toast(`${list.length - ok.length} file(s) skipped: this library folder only holds ${ACCEPTS_LABEL[ACCEPTS[key]]}.`);
-        list = ok;
+        list = ok.map(e => ({ ...e, path: '' }));
         if (!list.length) return;
       }
-      const res = await uploadMany(list, folderId);
+      const ids = { '': folderId };
+      try {
+        for (const dir of [...new Set(list.map(e => e.path).filter(Boolean))].sort()) {
+          ids[dir] = (await api('/api/folders/path', { method: 'POST', body: { parent_id: folderId, path: dir } })).id;
+        }
+      } catch (e) { toast.error(e.message); return; }
+      if (Object.keys(ids).length > 1) await load(); // show the new folders right away
+      ownUploads++;
+      const res = await uploadMany(list.map(e => ({ file: e.file, folderId: ids[e.path] })));
+      ownUploads--;
       if (res.length) { await load(); refreshAccount(); }
       const failed = list.length - res.length;
-      if (failed) toast.error(`${failed} file${failed > 1 ? 's' : ''} failed to upload`);
+      if (failed) toast.error(`${failed} file${failed > 1 ? 's' : ''} weren’t uploaded`);
       else toast.success(`Uploaded ${res.length} file${res.length > 1 ? 's' : ''}`);
     }
     async function onPick(e) {
       const list = Array.from(e.target.files || []);
       e.target.value = '';
-      if (list.length) await uploadTo(list, props.folderId || null);
+      if (list.length) await uploadEntries(list.map(file => ({ file, path: '' })), props.folderId || null);
     }
+    async function onPickFolder(e) {
+      const list = filesFromPicker(e.target.files || []);
+      e.target.value = '';
+      if (list.length) await uploadEntries(list, props.folderId || null);
+    }
+    // a retry from the upload tray finished: show the file
+    let tickTimer = null;
+    watch(uploadTick, () => { if (!ownUploads) { clearTimeout(tickTimer); tickTimer = setTimeout(load, 400); } });
 
     // ---------- locked library folders ----------
     const BOOK_EXT = /\.(pdf|epub|mobi|azw3?|djvu|fb2|cbz|cbr|txt)$/i;
@@ -641,14 +674,23 @@ export default {
     const tileStyle = (file) => { const t = tintFor(kindOf(file)); return { background: t + '1f', color: t }; };
 
     const onKey = (e) => {
-      if (viewer.value || move.open) return;
-      if (e.key === 'Escape') { if (menu.value) menu.value = null; else clearSelection(); }
+      if (viewer.value || move.open || document.querySelector('[role=dialog]')) return;
+      if (e.key === 'Escape') { if (menu.value) menu.value = null; else if (newMenu.value) newMenu.value = false; else clearSelection(); return; }
+      if (e.target.closest && e.target.closest('input:not([type=checkbox]), textarea, select, [contenteditable]')) return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') { e.preventDefault(); selection.files = visibleFiles.value.map(f => f.id); selection.folders = visibleFolders.value.filter(f => !f.is_system).map(f => f.id); }
+      else if ((e.key === 'Delete' || (e.key === 'Backspace' && e.metaKey)) && selCount.value) { e.preventDefault(); deleteSelected(); }
+      else if (e.key === 'F2' && selCount.value === 1) {
+        e.preventDefault();
+        if (selection.files.length) { const f = visibleFiles.value.find(x => x.id === selection.files[0]); if (f) renameFile(f); }
+        else { const f = visibleFolders.value.find(x => x.id === selection.folders[0]); if (f && !f.is_system) renameFolder(f); }
+      }
     };
     const closeMenu = () => { menu.value = null; };
     onMounted(() => { load(); window.addEventListener('keydown', onKey); window.addEventListener('resize', closeMenu); window.addEventListener('scroll', closeMenu, true); });
     onUnmounted(() => { window.removeEventListener('keydown', onKey); window.removeEventListener('resize', closeMenu); window.removeEventListener('scroll', closeMenu, true); });
 
     return {
+      folderInput, newMenu, onPickFolder, createTextFile, account,
       folders, files, currentPath, loading, loaded, fileInput, query, searching, layout, sortKey, visibleFolders, visibleFiles, totalSize,
       selection, isSel, toggleSel, selCount, allSelected, someSelected, toggleAll, clearSelection, onRowClick,
       menu, openMenu, act, viewer, openViewer, isEditable, onFileChanged, navigate, goUp,

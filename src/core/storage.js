@@ -1,0 +1,123 @@
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const db = require('./db');
+const config = require('./config');
+const thumbs = require('./thumbs');
+
+// ---------------------------------------------------------------------------
+// On-disk layout and encryption (unchanged since 1.0, so old files keep working):
+//   storage/users/<owner>/<fileId>.enc     AES-256-CTR, IV in files.iv_hex
+//   storage/users/<owner>/<fileId>.plain   while the file has a public link
+// ---------------------------------------------------------------------------
+
+const MASTER_KEY = Buffer.from(process.env.MASTER_KEY || '', 'utf-8');
+
+const userDirOf = (userId) => path.join(config.usersDir, userId);
+const diskPathOf = (file) => path.join(userDirOf(file.owner_id), file.is_encrypted ? `${file.id}.enc` : `${file.id}.plain`);
+
+/**
+ * AES-256-CTR positioned at any byte offset: the counter jumps to the offset's
+ * block and the keystream is advanced past the bytes before it. Lets chunked
+ * uploads encrypt each chunk in place and lets range requests decrypt from anywhere.
+ */
+function ctrAt(ivHex, offset = 0) {
+  const block = BigInt(Math.floor(offset / 16));
+  const counter = ((BigInt('0x' + ivHex) + block) % (1n << 128n)).toString(16).padStart(32, '0');
+  const c = crypto.createCipheriv('aes-256-ctr', MASTER_KEY, Buffer.from(counter, 'hex'));
+  const skip = offset % 16;
+  if (skip) c.update(Buffer.alloc(skip));
+  return c;
+}
+
+/** Readable stream of the plain bytes start..end (inclusive) of a stored file */
+function readRange(file, start, end) {
+  const filePath = diskPathOf(file);
+  const raw = fs.createReadStream(filePath, { start, end });
+  if (!file.is_encrypted) return raw;
+  const d = ctrAt(file.iv_hex, start);
+  raw.on('error', (e) => d.destroy(e));
+  return raw.pipe(d);
+}
+
+/** Readable stream of a whole stored file (decrypted) */
+function readAll(file) {
+  const p = diskPathOf(file);
+  const size = fs.existsSync(p) ? fs.statSync(p).size : 0;
+  if (!size) return null;
+  return readRange(file, 0, size - 1);
+}
+
+// ---------------------------------------------------------------------------
+// Disk space
+// ---------------------------------------------------------------------------
+function diskSpace() {
+  try {
+    const s = fs.statfsSync(config.storageDir);
+    const total = s.blocks * s.bsize, free = s.bavail * s.bsize;
+    return { total, free, used: total - s.bfree * s.bsize };
+  } catch (e) { return null; }
+}
+
+/** Is there room for `bytes` more, keeping the configured reserve free? */
+function hasRoomFor(bytes) {
+  const d = diskSpace();
+  return !d || d.free - bytes >= config.diskReserveBytes;
+}
+
+async function dirSize(dir) {
+  let bytes = 0, files = 0;
+  let entries;
+  try { entries = await fs.promises.readdir(dir, { withFileTypes: true }); } catch (e) { return { bytes, files }; }
+  for (const e of entries) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) { const s = await dirSize(p); bytes += s.bytes; files += s.files; }
+    else { try { bytes += (await fs.promises.stat(p)).size; files++; } catch (err) { /* vanished */ } }
+  }
+  return { bytes, files };
+}
+
+// ---------------------------------------------------------------------------
+// Permanent deletion (the trash calls this when it is emptied)
+// ---------------------------------------------------------------------------
+function purgeFile(file) {
+  try { fs.unlinkSync(diskPathOf(file)); } catch (e) { /* already gone */ }
+  db.prepare('DELETE FROM files WHERE id = ?').run(file.id);
+  // Foreign keys aren't enforced, so clean up references manually
+  db.prepare('DELETE FROM album_images WHERE file_id = ?').run(file.id);
+  db.prepare('DELETE FROM playlist_songs WHERE file_id = ?').run(file.id);
+  db.prepare('DELETE FROM song_covers WHERE file_id = ? OR cover_file_id = ?').run(file.id, file.id);
+  db.prepare('UPDATE albums SET cover_file_id = NULL WHERE cover_file_id = ?').run(file.id);
+  db.prepare('UPDATE collections SET cover_file_id = NULL WHERE cover_file_id = ?').run(file.id);
+  db.prepare('UPDATE playlists SET cover_file_id = NULL WHERE cover_file_id = ?').run(file.id);
+  db.prepare('DELETE FROM media_meta WHERE file_id = ?').run(file.id);
+  db.prepare('UPDATE media_meta SET thumb_file_id = NULL WHERE thumb_file_id = ?').run(file.id);
+  thumbs.purge(file.owner_id, file.id);
+  db.prepare('UPDATE users SET used_bytes = MAX(0, used_bytes - ?) WHERE id = ?').run(file.size_bytes, file.owner_id);
+}
+
+// ---------------------------------------------------------------------------
+// Zip downloads
+// ---------------------------------------------------------------------------
+const STORED_EXT = /\.(jpe?g|png|gif|webp|avif|heic|heif|mp4|m4v|mov|webm|mkv|avi|mp3|m4a|aac|ogg|opus|flac|zip|7z|rar|gz|xz|bz2|epub|docx|xlsx|pptx|pdf)$/i;
+
+/** Append files to an archive, de-duplicating names ("a.jpg", "a (2).jpg") */
+function appendToZip(archive, entries) {
+  const used = new Set();
+  for (const { file, name } of entries) {
+    const stream = readAll(file);
+    let n = name, i = 2;
+    while (used.has(n.toLowerCase())) {
+      const dot = name.lastIndexOf('.'), slash = name.lastIndexOf('/');
+      n = dot > slash + 1 ? `${name.slice(0, dot)} (${i})${name.slice(dot)}` : `${name} (${i})`;
+      i++;
+    }
+    used.add(n.toLowerCase());
+    // already-compressed media is stored as-is: same size, far less CPU
+    const opts = { name: n, store: STORED_EXT.test(n) };
+    if (stream) archive.append(stream, opts);
+    else if (fs.existsSync(diskPathOf(file))) archive.append(Buffer.alloc(0), opts);
+  }
+}
+
+module.exports = { MASTER_KEY, userDirOf, diskPathOf, ctrAt, readRange, readAll, diskSpace, hasRoomFor, dirSize, purgeFile, appendToZip };

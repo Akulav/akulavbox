@@ -5,8 +5,8 @@ import { toast, confirmDialog, promptDialog, attempt } from '../lib/ui.js';
 import { uploadMany, uploadFile } from '../lib/upload.js';
 import { player, playQueue, toggle, songTitle, forget } from '../lib/player.js';
 import { MetaEditor, LibraryFilters, Stars } from '../components/Library.js';
-import { useLibraryFilter, systemFolder, formatDuration } from '../lib/library.js';
-import { storage } from '../lib/api.js';
+import { useLibraryFilter, systemFolder, formatDuration, thumbUrl } from '../lib/library.js';
+import { moveToTrash } from '../lib/trash.js';
 
 export default {
   components: { Icon, MetaEditor, LibraryFilters, Stars },
@@ -20,6 +20,7 @@ export default {
             <button v-if="view !== 'home'" class="icon-btn -ml-2" @click="goHome" title="Back"><Icon name="arrow-left" :size="19" /></button>
             <h1 class="title text-[28px] md:text-[32px] leading-tight truncate">{{ view === 'home' ? 'Music' : view === 'all' ? 'All songs' : playlist?.title }}</h1>
           </div>
+          <p v-if="view !== 'home' && songs.length" class="text-muted text-[13.5px] mt-1">{{ songs.length }} song{{ songs.length === 1 ? '' : 's' }}<template v-if="listDuration">, {{ listDuration }}</template><template v-if="canReorder"> · drag songs to reorder</template></p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <div v-if="view === 'home'" class="relative flex-1 min-w-[180px] max-w-sm">
@@ -43,17 +44,18 @@ export default {
 
       <!-- HOME: playlists -->
       <template v-if="view === 'home'">
-        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-x-4 gap-y-6">
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-x-4 gap-y-6 stagger">
           <button class="group text-left" @click="openAll">
-            <div class="aspect-square rounded-xl bg-accent text-accent-fg grid place-items-center relative overflow-hidden">
-              <Icon name="list-music" :size="44" :stroke="1.5" />
+            <div class="aspect-square rounded-xl text-accent-fg grid place-items-center relative overflow-hidden lift" style="background: linear-gradient(135deg, rgb(var(--accent-hi)), rgb(var(--accent)) 55%, #b9621a)">
+              <Icon name="list-music" :size="44" :stroke="1.5" class="transition-transform duration-500 group-hover:scale-110 group-hover:-rotate-6" />
+              <span class="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,.35),transparent_55%)]"></span>
             </div>
             <p class="mt-2.5 font-medium text-[14px]">All songs</p>
             <p class="text-xs text-muted">{{ allSongs.length }} song{{ allSongs.length === 1 ? '' : 's' }}</p>
           </button>
           <div v-for="p in filteredPlaylists" :key="p.id" class="group cursor-pointer" @click="openPlaylist(p)">
-            <div class="relative aspect-square rounded-xl overflow-hidden bg-elevated">
-              <img v-if="p.cover_file_id" :src="fileUrl(p.cover_file_id)" loading="lazy" alt="" class="w-full h-full object-cover">
+            <div class="relative aspect-square rounded-xl overflow-hidden bg-elevated lift zoom-media">
+              <img v-if="p.cover_file_id" :src="thumbUrl(p.cover_file_id, 480)" loading="lazy" alt="" class="w-full h-full object-cover">
               <div v-else class="w-full h-full grid place-items-center text-faint"><Icon name="disc" :size="44" :stroke="1.25" /></div>
               <button class="absolute bottom-2 right-2 w-10 h-10 rounded-full bg-accent text-accent-fg grid place-items-center shadow-lg opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 transition"
                       @click.stop="playPlaylist(p)" :title="'Play ' + p.title"><Icon name="play" :size="16" class="translate-x-[1px]" /></button>
@@ -62,7 +64,7 @@ export default {
               <span v-if="p.is_favorite" class="absolute top-2 left-2 w-8 h-8 rounded-full grid place-items-center bg-black/45 text-accent"><Icon name="star-fill" :size="15" /></span>
             </div>
             <p class="mt-2.5 font-medium text-[14px] truncate">{{ p.title }}</p>
-            <p class="text-xs text-muted">{{ p.song_count }} song{{ p.song_count === 1 ? '' : 's' }}</p>
+            <p class="text-xs text-muted">{{ p.song_count }} song{{ p.song_count === 1 ? '' : 's' }}<template v-if="p.total_duration"> · {{ formatDuration(p.total_duration) }}</template></p>
           </div>
         </div>
         <p v-if="!playlists.length && !loading" class="text-muted text-[13.5px] mt-6">Playlists you create appear here. Upload music first, then group songs into playlists.</p>
@@ -78,10 +80,13 @@ export default {
           <button v-if="f.active.value" class="btn" @click="f.reset()">Clear filters</button>
           <button v-else class="btn btn-primary" @click="view === 'all' ? musicInput.click() : openAddSongs()"><Icon :name="view === 'all' ? 'upload' : 'plus'" :size="16" />{{ view === 'all' ? 'Upload music' : 'Add songs' }}</button>
         </div>
-        <ol v-else class="panel overflow-hidden">
+        <ol v-else class="panel overflow-hidden stagger">
           <li v-for="(s, i) in filteredSongs" :key="s.id"
               class="group grid grid-cols-[32px_minmax(0,1fr)_auto] md:grid-cols-[32px_minmax(0,1fr)_150px_auto] items-center gap-3 px-3 md:px-4 h-[60px] border-b border-line last:border-0 row-hover cursor-pointer"
-              :class="isCurrent(s) || isSel(s.id) ? 'bg-accent/[0.07]' : ''" @dblclick="!selecting && play(i)" @click="selecting ? toggleSel(s.id) : onRowClick(i)">
+              :class="[isCurrent(s) || isSel(s.id) ? 'bg-accent/[0.07]' : '', dragOverIndex === i ? 'shadow-[inset_0_2px_0_rgb(var(--accent))]' : '', dragIndex === i ? 'opacity-40' : '']"
+              :draggable="canReorder" @dragstart="onSongDragStart($event, i)" @dragover.prevent="canReorder && (dragOverIndex = i)" @dragleave="dragOverIndex = null"
+              @drop.prevent="onSongDrop(i)" @dragend="dragIndex = dragOverIndex = null"
+              @dblclick="!selecting && play(i)" @click="selecting ? toggleSel(s.id) : onRowClick(i)">
             <input v-if="selecting" type="checkbox" class="checkbox mx-2" :checked="isSel(s.id)" @click.stop="toggleSel(s.id)" :aria-label="'Select ' + songTitle(s)">
             <button v-else class="w-8 h-8 grid place-items-center rounded-full text-muted" @click.stop="isCurrent(s) ? toggle() : play(i)" :aria-label="'Play ' + songTitle(s)">
               <template v-if="isCurrent(s)">
@@ -93,7 +98,7 @@ export default {
               </template>
             </button>
             <div class="flex items-center gap-3 min-w-0">
-              <img v-if="s.cover_file_id" :src="fileUrl(s.cover_file_id)" loading="lazy" alt="" class="w-10 h-10 rounded-md object-cover shrink-0">
+              <img v-if="s.cover_file_id" :src="thumbUrl(s.cover_file_id, 240)" loading="lazy" alt="" class="w-10 h-10 rounded-md object-cover shrink-0">
               <span v-else class="w-10 h-10 rounded-md bg-elevated grid place-items-center text-faint shrink-0"><Icon name="music" :size="17" /></span>
               <div class="min-w-0">
                 <p class="truncate text-[14px]" :class="isCurrent(s) ? 'text-accent font-medium' : ''">{{ songTitle(s) }}</p>
@@ -126,7 +131,7 @@ export default {
             <button class="menu-item" @click="menu = { ...menu, type: 'add' }"><Icon name="list-music" :size="16" />Add to playlist<Icon name="chevron-right" :size="15" class="ml-auto text-faint" /></button>
             <div class="menu-sep"></div>
             <button v-if="view === 'playlist'" class="menu-item" @click="run(removeFromPlaylist)"><Icon name="x" :size="16" />Remove from playlist</button>
-            <button v-else class="menu-item danger" @click="run(deleteSong)"><Icon name="trash" :size="16" />Delete song</button>
+            <button v-else class="menu-item danger" @click="run(deleteSong)"><Icon name="trash" :size="16" />Move to trash</button>
           </template>
           <template v-else-if="menu.type === 'add-many'">
             <p class="px-2.5 py-1.5 text-xs text-muted">Add {{ selected.length }} songs to</p>
@@ -157,7 +162,7 @@ export default {
               <li v-for="s in addable" :key="s.id">
                 <label class="flex items-center gap-3 px-3 h-12 rounded-lg hover:bg-elevated cursor-pointer">
                   <input type="checkbox" class="checkbox" :value="s.id" v-model="adder.selected">
-                  <img v-if="s.cover_file_id" :src="fileUrl(s.cover_file_id)" alt="" class="w-8 h-8 rounded object-cover">
+                  <img v-if="s.cover_file_id" :src="thumbUrl(s.cover_file_id, 240)" alt="" class="w-8 h-8 rounded object-cover">
                   <span v-else class="w-8 h-8 rounded bg-elevated grid place-items-center text-faint"><Icon name="music" :size="15" /></span>
                   <span class="truncate text-[13.5px]">{{ songTitle(s) }}</span>
                 </label>
@@ -297,13 +302,32 @@ export default {
       await attempt(async () => { await api(`/api/music/playlists/${playlist.value.id}/songs/${s.id}`, { method: 'DELETE' }); songs.value = songs.value.filter(x => x.id !== s.id); });
     }
     async function deleteSong(s) {
-      if (!await confirmDialog({ title: `Delete “${songTitle(s)}”?`, message: 'It is removed from your library and every playlist. This can’t be undone.', confirmText: 'Delete', danger: true })) return;
-      await attempt(async () => {
-        await api(`/api/files/${s.id}`, { method: 'DELETE' });
-        forget(s.id);
-        await fetchAll(); refreshAccount();
-      }, 'Song deleted');
+      forget(s.id);
+      await moveToTrash({ files: [s.id] }, `“${songTitle(s)}”`, fetchAll);
     }
+
+    // ---------- playlist order (drag & drop) ----------
+    const canReorder = computed(() => view.value === 'playlist' && f.sort.value === 'order' && !f.active.value && !selecting.value);
+    const dragIndex = ref(null);
+    const dragOverIndex = ref(null);
+    function onSongDragStart(e, i) {
+      if (!canReorder.value) return;
+      dragIndex.value = i;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(i));
+    }
+    async function onSongDrop(to) {
+      const from = dragIndex.value;
+      dragIndex.value = dragOverIndex.value = null;
+      if (!canReorder.value || from === null || from === to) return;
+      const list = [...songs.value];
+      const [moved] = list.splice(from, 1);
+      list.splice(to, 0, moved);
+      songs.value = list;
+      try { await api(`/api/music/playlists/${playlist.value.id}/order`, { method: 'PUT', body: { file_ids: list.map(s => s.id) } }); }
+      catch (e) { toast.error(e.message); fetchPlaylistSongs(); }
+    }
+    const listDuration = computed(() => { const t = songs.value.reduce((a, s) => a + (s.duration || 0), 0); return t ? formatDuration(t) : ''; });
 
     function openAddSongs() { Object.assign(adder, { open: true, search: '', selected: [] }); if (!allSongs.value.length) fetchAll(); }
     async function confirmAdd() {
@@ -365,7 +389,7 @@ export default {
       filteredPlaylists, filteredSongs, addable, goHome, openAll, openPlaylist, play, playAll, playPlaylist, isCurrent, onRowClick,
       createPlaylist, renamePlaylist, deletePlaylist, toggleFavorite, addToPlaylist, addToNewPlaylist, removeFromPlaylist, deleteSong,
       openAddSongs, confirmAdd, onPickMusic, pickCover, onPickCover, openMenu, run,
-      player, toggle, songTitle, fileUrl, formatBytes,
+      player, toggle, songTitle, fileUrl, thumbUrl, formatBytes, canReorder, dragIndex, dragOverIndex, onSongDragStart, onSongDrop, listDuration,
     };
   },
 };

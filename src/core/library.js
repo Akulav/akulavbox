@@ -38,44 +38,18 @@ function categoryOf(filename, mime = '') {
   return 'other';
 }
 
-// --- migrations ---
-try { db.exec('ALTER TABLE folders ADD COLUMN system_key TEXT'); } catch (e) { /* exists */ }
-try { db.exec('ALTER TABLE files ADD COLUMN created_at TEXT'); } catch (e) { /* exists */ }
-// natural image size (photos are laid out at their real shape)
-try { db.exec('ALTER TABLE media_meta ADD COLUMN width INTEGER'); } catch (e) { /* exists or table not created yet */ }
-try { db.exec('ALTER TABLE media_meta ADD COLUMN height INTEGER'); } catch (e) { /* exists */ }
-db.exec(`
-  CREATE TABLE IF NOT EXISTS media_meta (
-    file_id TEXT PRIMARY KEY,
-    owner_id TEXT NOT NULL,
-    title TEXT,
-    participants TEXT DEFAULT '[]',
-    tags TEXT DEFAULT '[]',
-    details TEXT,
-    date TEXT,
-    series TEXT,
-    rating INTEGER,
-    duration REAL,
-    thumb_file_id TEXT,
-    progress TEXT,
-    updated_at TEXT,
-    width INTEGER,
-    height INTEGER
-  );
-  CREATE INDEX IF NOT EXISTS idx_media_meta_owner ON media_meta(owner_id);
-  CREATE INDEX IF NOT EXISTS idx_folders_system ON folders(owner_id, system_key);
-`);
-try { db.exec('ALTER TABLE media_meta ADD COLUMN width INTEGER'); } catch (e) { /* exists */ }
-try { db.exec('ALTER TABLE media_meta ADD COLUMN height INTEGER'); } catch (e) { /* exists */ }
+// (schema lives in core/migrations.js)
 
 function ensureSystemFolder(userId, key) {
   const def = SYSTEM[key];
   if (!def) throw new Error('Unknown system folder');
   const parentId = def.parent ? ensureSystemFolder(userId, def.parent) : null;
-  const row = db.prepare('SELECT id, parent_id FROM folders WHERE owner_id = ? AND system_key = ?').get(userId, key);
+  const row = db.prepare('SELECT id, parent_id, trashed_at FROM folders WHERE owner_id = ? AND system_key = ?').get(userId, key);
   if (row) {
     // keep it where it belongs (older versions put everything at the top level)
     if ((row.parent_id || null) !== parentId) db.prepare('UPDATE folders SET parent_id = ? WHERE id = ?').run(parentId, row.id);
+    // locked folders can't be trashed; heal anything an older build may have done
+    if (row.trashed_at) db.prepare('UPDATE folders SET trashed_at = NULL, trash_root = NULL WHERE id = ?').run(row.id);
     return row.id;
   }
   const id = crypto.randomUUID();
@@ -93,7 +67,7 @@ function ensureSystemFolder(userId, key) {
     for (const [key, def] of Object.entries(SYSTEM)) {
       const names = def.parent ? (def.legacy || []) : [def.name, ...(def.legacy || [])];
       for (const legacyName of names) {
-        const rows = db.prepare('SELECT id, owner_id FROM folders WHERE name = ? AND parent_id IS NULL AND system_key IS NULL').all(legacyName);
+        const rows = db.prepare('SELECT id, owner_id FROM folders WHERE name = ? AND parent_id IS NULL AND system_key IS NULL AND trashed_at IS NULL').all(legacyName);
         for (const r of rows) {
           if (db.prepare('SELECT 1 FROM folders WHERE owner_id = ? AND system_key = ?').get(r.owner_id, key)) continue;
           db.prepare('UPDATE folders SET system_key = ? WHERE id = ?').run(key, r.id);

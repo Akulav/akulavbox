@@ -4,14 +4,18 @@ import { reactive } from 'vue';
 export const toasts = reactive([]);
 let toastSeq = 0;
 
-export function toast(message, type = 'info', timeout = 3200) {
+/** Show a toast. `action` adds a button: { label, run } (e.g. Undo). */
+export function toast(message, type = 'info', timeout = 3200, action = null) {
   const id = ++toastSeq;
-  toasts.push({ id, message, type });
+  toasts.push({ id, message, type, timeout, action });
+  if (toasts.length > 5) toasts.splice(0, toasts.length - 5);
   if (timeout) setTimeout(() => dismissToast(id), timeout);
   return id;
 }
 toast.error = (m) => toast(m, 'error', 5000);
 toast.success = (m) => toast(m, 'success');
+/** "Moved to trash" with an Undo button */
+toast.undo = (m, undo, label = 'Undo') => toast(m, 'success', 6500, { label, run: undo });
 
 export function dismissToast(id) {
   const i = toasts.findIndex(t => t.id === id);

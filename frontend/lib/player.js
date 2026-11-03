@@ -1,6 +1,6 @@
 import { reactive } from 'vue';
 import { fileUrl, storage } from './api.js';
-import { saveMeta } from './library.js';
+import { saveMeta, thumbUrl } from './library.js';
 
 // One audio element for the whole app, so music keeps playing while you browse other sections.
 const audio = new Audio();
@@ -139,7 +139,7 @@ function updateMediaSession() {
       title: songTitle(s),
       artist: (s.participants || []).join(', '),
       album: s.series || player.source || 'AkulavBox',
-      artwork: s.cover_file_id ? [{ src: location.origin + fileUrl(s.cover_file_id), sizes: '512x512' }] : [],
+      artwork: s.cover_file_id ? [{ src: location.origin + thumbUrl(s.cover_file_id, 480), sizes: '480x480' }] : [],
     });
   } catch (e) { /* ignore */ }
 }

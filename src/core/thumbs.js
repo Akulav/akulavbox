@@ -3,6 +3,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const db = require('./db');
+const config = require('./config');
 
 // sharp is optional. Without it the browser makes thumbnails once and uploads
 // them (PUT /api/files/:id/thumb), so grids are still fast after the first visit.
@@ -12,7 +13,7 @@ catch (e) { console.warn('[thumbs] "sharp" is not installed. Run `npm install` f
 
 const WIDTHS = [240, 480, 960];
 const MAX_SOURCE = 200 * 1024 * 1024;
-const cacheRoot = path.join(process.cwd(), 'storage', 'thumbs');
+const cacheRoot = config.thumbsDir;
 const PARALLEL = Math.max(2, Math.min(6, os.cpus().length - 1));
 
 const pickWidth = (w) => {

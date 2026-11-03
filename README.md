@@ -1,70 +1,122 @@
+<div align="center">
+
+<img src="frontend/favicon.svg" width="96" height="96" alt="AkulavBox logo">
+
 # AkulavBox
 
-A self-hosted personal cloud: file storage, photo albums, music, videos, books, and chat with voice/video calls — all in one Node.js server with a no-build browser frontend.
+**Your files, your cloud.** A self-hosted personal cloud for encrypted files, photos, music, videos, books, and chat with voice calls. It's one Node.js server with a no-build browser frontend.
+
+![Version](https://img.shields.io/badge/version-2.0.0-E8A33D)
+![Node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-5fb3a1)
+![License](https://img.shields.io/badge/license-source--available-8ea1a4)
+
+Made with ♥ by **Akulav**
+
+</div>
+
+---
 
 ## Features
 
-- **File manager** — folders, chunked uploads (up to 50 GB per file), public share links, zip downloads
-- **Encryption at rest** — files are stored AES-256-CTR encrypted on disk
-- **Photos** — collections and albums, server-side thumbnails via `sharp` (falls back to browser-made thumbnails)
-- **Music** — library, playlists, favorites, custom artwork
-- **Videos & Books** — media library with covers and a built-in EPUB reader
-- **Chat & calls** — real-time messaging over Socket.IO, WebRTC voice/video with optional TURN relay
-- **Multi-user** — per-user storage quotas and an admin panel
-
-## Tech stack
-
-- **Backend:** [Fastify](https://fastify.dev/), Socket.IO, built-in `node:sqlite`, JWT auth, bcrypt
-- **Frontend:** plain ES modules served statically from `frontend/` (no build step)
+| | |
+| --- | --- |
+| **Files** | Folders, drag and drop, chunked uploads up to 50 GB per file (3 files in parallel, cancel or retry each one), **folder uploads**, search, zip downloads of any selection, public share links, and in-browser previews and editing of text, code, Markdown, CSV, JSON, Word, Excel, PDF, and zip files |
+| **Trash** | Deleted files and folders go to the trash with **Undo**. Restore whole folder trees. Items are deleted for good after 30 days (configurable) |
+| **Encryption at rest** | AES-256-CTR. Each chunk is encrypted as it arrives, and range requests (video seeking) decrypt from any offset |
+| **Photos** | Collections and albums, justified "natural shape" grids, slideshow, server-side thumbnails via `sharp` (the browser makes them if `sharp` is missing) |
+| **Music** | Library, playlists you can reorder by dragging, favorites, artwork, a player that keeps playing while you browse, and media-key support |
+| **Videos and books** | Covers generated automatically, participants, tags, series, and ratings. The EPUB reader remembers your page |
+| **Chat and calls** | Real-time messaging between friends, unread counts that survive reloads, deleting your own messages, files that disappear after 10 minutes, and WebRTC voice calls with optional TURN relay |
+| **Multi-user** | Per-user storage quotas. The admin panel shows **free disk space on the server**, a storage breakdown, a warning when quotas promise more than the disk can hold, roles, password resets, and "sign out everywhere" |
+| **Security** | Revocable sessions (a password change signs out other devices), sign-in rate limiting, timing-safe login, tokens kept out of logs and `Referer` headers, and a sandbox for uploaded HTML and SVG |
+| **Polish** | Light, dark, and system themes, a subtle animated background (can be turned off), keyboard shortcuts (press `?`), installable as an app (PWA manifest), offline and update banners |
 
 ## Requirements
 
-- Node.js **22.13+** (for `node:sqlite` without flags)
+- Node.js **22.13 or later** (the built-in `node:sqlite` module needs it)
+- Optional: build tools for the native `bcrypt` and `sharp` modules. Both are optional. AkulavBox falls back to pure-JS `bcryptjs` and to thumbnails made in the browser.
 
 ## Getting started
 
 ```bash
 npm install
-cp .env.example .env   # then edit JWT_SECRET and MASTER_KEY
+cp .env.example .env   # then set JWT_SECRET and MASTER_KEY
 npm start
 ```
 
 Open http://localhost:3000.
 
-On first start a default admin account is created — **username `admin`, password `admin`**. Change the password right after logging in.
+On first start, a default admin account is created with **username `admin` and password `admin`**. The app keeps reminding you until you change it.
+
+To check that everything works, run the built-in test suite. It starts a throwaway server on a random port with temporary storage and never touches your data:
+
+```bash
+npm run check
+```
 
 ## Configuration
 
-All settings live in `.env` (see [.env.example](.env.example)):
+All settings live in `.env` (see [.env.example](.env.example)).
 
-| Variable | Required | Description |
+| Variable | Default | Description |
 | --- | --- | --- |
-| `PORT` | no | HTTP port (default `3000`) |
-| `JWT_SECRET` | yes | Secret for signing login tokens |
-| `MASTER_KEY` | yes | File encryption key — **exactly 32 characters**. Losing or changing it makes stored files unreadable |
-| `LOG_LEVEL` | no | Fastify log level (default `warn`) |
-| `TURN_URLS`, `TURN_USERNAME`, `TURN_CREDENTIAL` | no | Static TURN relay for calls |
-| `TURN_SECRET` | no | coturn `static-auth-secret` (short-lived credentials instead of static ones) |
-| `CF_TURN_KEY_ID`, `CF_TURN_API_TOKEN` | no | Cloudflare Realtime TURN |
-| `STUN_URLS` | no | Override default STUN servers |
+| `JWT_SECRET` | *required* | Secret for signing login tokens. Use a long random string |
+| `MASTER_KEY` | *required* | File encryption key, **exactly 32 characters**. Losing or changing it makes stored files unreadable |
+| `PORT` / `HOST` | `3000` / `0.0.0.0` | Where the server listens |
+| `STORAGE_DIR` | `./storage` | Where the database and files live |
+| `TRASH_DAYS` | `30` | How long deleted items stay in the trash |
+| `DISK_RESERVE_MB` | `512` | Uploads are refused when they would leave less free disk than this |
+| `TOKEN_TTL` | `7d` | Sign-in lifetime. Active sessions renew themselves daily |
+| `TRUST_PROXY` | off | Set to `1` behind a reverse proxy so rate limiting sees real client IPs |
+| `SQLITE_WAL` | on | Set to `0` if storage is on a network drive |
+| `LOG_LEVEL` | `warn` | Fastify log level (`info` logs every request) |
+| `TURN_URLS`, `TURN_USERNAME`, `TURN_CREDENTIAL` | | Static TURN relay for calls |
+| `TURN_SECRET` | | coturn `static-auth-secret` (short-lived credentials) |
+| `CF_TURN_KEY_ID`, `CF_TURN_API_TOKEN` | | Cloudflare Realtime TURN |
+| `STUN_URLS` | Cloudflare + Google | Override the STUN servers |
 
-A TURN relay is only needed when calls fail to connect peer-to-peer (strict NATs, privacy-hardened browsers).
+The server refuses to start if `MASTER_KEY` or `JWT_SECRET` is missing or invalid, and warns you if they are still the example values.
 
-## Project structure
+Calls only need a TURN relay when they fail to connect peer-to-peer (strict NATs, privacy-hardened browsers such as Brave).
+
+## Upgrading
+
+Upgrade in place. Your existing data keeps working:
+
+1. Stop the server, update the code, and run `npm install`.
+2. Start it. Pending database migrations run automatically, and **the database is snapshotted to `storage/backups/` first**.
+3. Encrypted files on disk use the same format as 1.x and are never rewritten.
+
+See [CHANGELOG.md](CHANGELOG.md) for what changed in each version.
+
+## Data and backups
+
+Everything lives in `storage/`:
 
 ```
-src/
-  server.js        Fastify entry point
-  core/            database, auth, thumbnails, MIME and library helpers
-  modules/         API routes: auth, admin, files, albums, music, library, chat
-frontend/
-  index.html       SPA shell
-  pages/           app screens (files, media, music, albums, chat, profile, admin)
-  components/      shared UI
-  lib/             API client, uploads, player, realtime
-storage/           runtime data (created automatically, git-ignored)
+storage/
+  akulavbox.db (+ -wal, -shm)   SQLite database
+  users/<id>/<file>.enc         encrypted files (.plain while shared publicly)
+  thumbs/                       encrypted thumbnail cache (safe to delete)
+  temp/                         unfinished uploads (cleared after 24 h)
+  chat_temp/                    chat files (deleted after 10 minutes)
+  backups/                      database snapshots taken before upgrades
 ```
 
-## Data & backups
+To back up, stop the server and copy `storage/` **together with your `MASTER_KEY`**. Files can't be decrypted without the key.
 
-Everything lives in `storage/`: the SQLite database (`akulavbox.db`), each user's encrypted files, and the thumbnail cache. To back up, stop the server and copy `storage/` **together with your `MASTER_KEY`** — the files can't be decrypted without it.
+## Documentation
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how the server, storage, encryption, and frontend fit together
+- [docs/API.md](docs/API.md): HTTP and Socket.IO reference
+- [CLAUDE.md](CLAUDE.md): conventions for working on the code
+- [CHANGELOG.md](CHANGELOG.md): release notes
+
+## Tech stack
+
+- **Backend:** [Fastify](https://fastify.dev/) 4, Socket.IO, the built-in `node:sqlite`, JWT, bcrypt, archiver, and sharp
+- **Frontend:** Vue 3 and Tailwind from CDNs, written as plain ES modules in `frontend/` with no build step
+
+## License
+
+Source-available. See [LICENSE](LICENSE). © 2026 Akulav.

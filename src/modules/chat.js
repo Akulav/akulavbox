@@ -2,63 +2,17 @@ const db = require('../core/db');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const jwt = require('jsonwebtoken');
 const { pipeline } = require('stream/promises');
-const { verifyUser } = require('../core/auth');
+const config = require('../core/config');
+const { verifyUser, authenticate } = require('../core/auth');
 const { guessMime, isActiveContent } = require('../core/mime');
+const store = require('../core/storage');
 
-// --- AUTOMATIC DB SETUP & OPTIMIZATION ---
-try {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS friends (
-      user_id TEXT NOT NULL,
-      friend_id TEXT NOT NULL,
-      status TEXT DEFAULT 'pending',
-      PRIMARY KEY (user_id, friend_id),
-      FOREIGN KEY(user_id) REFERENCES users(id),
-      FOREIGN KEY(friend_id) REFERENCES users(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS messages (
-      id TEXT PRIMARY KEY,
-      sender_id TEXT NOT NULL,
-      receiver_id TEXT NOT NULL,
-      content TEXT,
-      type TEXT DEFAULT 'text',
-      file_path TEXT,
-      file_size INTEGER DEFAULT 0,
-      file_mime TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_messages_pair ON messages(sender_id, receiver_id, created_at);
-
-    -- Keep only the latest 1000 messages per conversation
-    CREATE TRIGGER IF NOT EXISTS keep_1000_messages
-    AFTER INSERT ON messages
-    BEGIN
-      DELETE FROM messages
-      WHERE id NOT IN (
-        SELECT id FROM messages
-        WHERE (sender_id = NEW.sender_id AND receiver_id = NEW.receiver_id)
-           OR (sender_id = NEW.receiver_id AND receiver_id = NEW.sender_id)
-        ORDER BY created_at DESC
-        LIMIT 1000
-      )
-      AND (
-        (sender_id = NEW.sender_id AND receiver_id = NEW.receiver_id)
-        OR (sender_id = NEW.receiver_id AND receiver_id = NEW.sender_id)
-      );
-    END;
-  `);
-} catch (e) { console.error('Chat DB Init Error:', e); }
-
-const chatDir = path.join(process.cwd(), 'storage', 'chat_temp');
-if (!fs.existsSync(chatDir)) fs.mkdirSync(chatDir, { recursive: true });
-
+const chatDir = config.chatDir;
 const MAX_CHAT_FILE = 50 * 1024 * 1024;
+const MSG_COLS = 'id, sender_id, receiver_id, content, type, file_size, file_mime, created_at';
 
-module.exports = async function (fastify, opts) {
+module.exports = async function (fastify) {
   fastify.register(require('@fastify/multipart'), { limits: { fileSize: MAX_CHAT_FILE } });
 
   // --- SOCKET.IO (REAL-TIME ENGINE & WEBRTC SIGNALING) ---
@@ -71,19 +25,31 @@ module.exports = async function (fastify, opts) {
   const areFriends = (a, b) => !!db.prepare(`
     SELECT 1 FROM friends WHERE status = 'accepted' AND ((user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?))
   `).get(a, b, b, a);
+  const friendIdsOf = (me) => db.prepare(`
+    SELECT CASE WHEN user_id = ? THEN friend_id ELSE user_id END AS id FROM friends WHERE status = 'accepted' AND (user_id = ? OR friend_id = ?)
+  `).all(me, me, me).map(r => r.id);
 
   // --- GARBAGE COLLECTOR (10 Min Temporary Files) ---
-  const gcTimer = setInterval(() => {
+  const expire = () => {
     const expired = db.prepare(`SELECT id, sender_id, receiver_id, file_path, file_size FROM messages WHERE type = 'file' AND created_at < datetime('now', '-10 minutes')`).all();
-    expired.forEach(msg => {
-      if (msg.file_path && fs.existsSync(msg.file_path)) fs.unlinkSync(msg.file_path);
+    for (const msg of expired) {
+      if (msg.file_path) { try { fs.unlinkSync(msg.file_path); } catch (e) { /* gone */ } }
       db.prepare('UPDATE users SET used_bytes = MAX(0, used_bytes - ?) WHERE id = ?').run(msg.file_size, msg.sender_id);
       db.prepare(`UPDATE messages SET type = 'deleted_file', content = 'File expired (10 min limit)', file_path = NULL, file_size = 0 WHERE id = ?`).run(msg.id);
       emitToUser(msg.sender_id, 'file_expired', { message_id: msg.id });
       emitToUser(msg.receiver_id, 'file_expired', { message_id: msg.id });
-    });
-  }, 60000);
-  gcTimer.unref();
+    }
+  };
+  setInterval(expire, 60000).unref();
+  // Files whose message is gone (trimmed by the 1,000-message limit, or the server stopped mid-upload)
+  try {
+    const known = new Set(db.prepare("SELECT file_path FROM messages WHERE type = 'file' AND file_path IS NOT NULL").all().map(r => path.resolve(r.file_path)));
+    for (const name of fs.readdirSync(chatDir)) {
+      const p = path.resolve(chatDir, name);
+      if (!known.has(p)) { try { fs.unlinkSync(p); } catch (e) { /* ignore */ } }
+    }
+  } catch (e) { fastify.log.warn(e, 'chat file sweep failed'); }
+  expire();
 
   // --- ICE servers for calls ---------------------------------------------
   // Hardened browsers (Brave, Helium, LibreWolf…) hide local IPs / block direct
@@ -132,7 +98,7 @@ module.exports = async function (fastify, opts) {
   });
 
   // --- REST ENDPOINTS (Friends & Uploads) ---
-  fastify.get('/api/chat/users', { preHandler: verifyUser }, async (request, reply) => {
+  fastify.get('/api/chat/users', { preHandler: verifyUser }, async (request) => {
     return db.prepare(`
       SELECT u.id, u.username, u.profile_image,
         (SELECT status FROM friends f WHERE (f.user_id = ? AND f.friend_id = u.id) OR (f.user_id = u.id AND f.friend_id = ?) LIMIT 1) AS relation
@@ -140,7 +106,7 @@ module.exports = async function (fastify, opts) {
     `).all(request.user.id, request.user.id, request.user.id);
   });
 
-  fastify.get('/api/chat/friends', { preHandler: verifyUser }, async (request, reply) => {
+  fastify.get('/api/chat/friends', { preHandler: verifyUser }, async (request) => {
     const me = request.user.id;
     const rows = db.prepare(`
       SELECT f.status, f.user_id AS requester, u.id, u.username, u.profile_image
@@ -152,7 +118,11 @@ module.exports = async function (fastify, opts) {
     const lastMsg = db.prepare(`
       SELECT content, type, sender_id, created_at FROM messages
       WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)
-      ORDER BY created_at DESC LIMIT 1
+      ORDER BY created_at DESC, rowid DESC LIMIT 1
+    `);
+    const unread = db.prepare(`
+      SELECT COUNT(*) AS n FROM messages WHERE sender_id = ? AND receiver_id = ?
+        AND created_at > COALESCE((SELECT last_read_at FROM chat_reads WHERE user_id = ? AND friend_id = ?), '')
     `);
 
     // Deduplicate (both users may have sent each other a request) – accepted wins
@@ -166,10 +136,26 @@ module.exports = async function (fastify, opts) {
       if (!prev || entry.status === 'accepted') byId.set(r.id, entry);
     }
     for (const f of byId.values()) {
-      if (f.status === 'accepted') f.last_message = lastMsg.get(me, f.id, f.id, me) || null;
+      if (f.status !== 'accepted') continue;
+      f.last_message = lastMsg.get(me, f.id, f.id, me) || null;
+      f.unread = unread.get(f.id, me, me, f.id).n;
+      f.online = connectionCounts.has(f.id);
     }
     return [...byId.values()];
   });
+
+  // Remember that I've read my chat with someone (so unread counts survive a reload)
+  fastify.post('/api/chat/read/:friendId', { preHandler: verifyUser }, async (request) => {
+    db.prepare(`INSERT INTO chat_reads (user_id, friend_id, last_read_at) VALUES (?, ?, datetime('now'))
+      ON CONFLICT(user_id, friend_id) DO UPDATE SET last_read_at = excluded.last_read_at`).run(request.user.id, request.params.friendId);
+    return { success: true };
+  });
+
+  const presenceChanged = (a, b) => {
+    // tell both sides about each other's presence after they become friends
+    if (connectionCounts.has(a)) emitToUser(b, 'user_online', a);
+    if (connectionCounts.has(b)) emitToUser(a, 'user_online', b);
+  };
 
   fastify.post('/api/chat/friends/add', { preHandler: verifyUser }, async (request, reply) => {
     const me = request.user.id;
@@ -182,6 +168,7 @@ module.exports = async function (fastify, opts) {
     if (reverse) {
       db.prepare("UPDATE friends SET status = 'accepted' WHERE user_id = ? AND friend_id = ?").run(other, me);
       emitToUser(other, 'friends_changed', {});
+      presenceChanged(me, other);
       return { success: true, accepted: true };
     }
     db.prepare("INSERT OR IGNORE INTO friends (user_id, friend_id, status) VALUES (?, ?, 'pending')").run(me, other);
@@ -190,26 +177,43 @@ module.exports = async function (fastify, opts) {
   });
 
   fastify.post('/api/chat/friends/accept', { preHandler: verifyUser }, async (request, reply) => {
-    db.prepare("UPDATE friends SET status = 'accepted' WHERE user_id = ? AND friend_id = ?").run(request.body?.friend_id, request.user.id);
-    emitToUser(request.body?.friend_id, 'friends_changed', {});
+    const other = request.body?.friend_id;
+    const r = db.prepare("UPDATE friends SET status = 'accepted' WHERE user_id = ? AND friend_id = ?").run(other, request.user.id);
+    if (!r.changes) return reply.code(404).send({ error: 'No friend request from that person' });
+    emitToUser(other, 'friends_changed', {});
+    presenceChanged(request.user.id, other);
     return { success: true };
   });
 
   // Decline an incoming request, cancel an outgoing one, or remove a friend
-  fastify.post('/api/chat/friends/remove', { preHandler: verifyUser }, async (request, reply) => {
+  fastify.post('/api/chat/friends/remove', { preHandler: verifyUser }, async (request) => {
     const me = request.user.id, other = request.body?.friend_id;
     db.prepare('DELETE FROM friends WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)').run(me, other, other, me);
     emitToUser(other, 'friends_changed', {});
     return { success: true };
   });
 
-  fastify.get('/api/chat/messages/:friendId', { preHandler: verifyUser }, async (request, reply) => {
+  fastify.get('/api/chat/messages/:friendId', { preHandler: verifyUser }, async (request) => {
     const friendId = request.params.friendId;
     return db.prepare(`
-      SELECT id, sender_id, receiver_id, content, type, file_size, file_mime, created_at FROM messages
+      SELECT ${MSG_COLS} FROM messages
       WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)
       ORDER BY created_at ASC, rowid ASC
     `).all(request.user.id, friendId, friendId, request.user.id);
+  });
+
+  // Delete one of my own messages (for both people)
+  fastify.delete('/api/chat/messages/:id', { preHandler: verifyUser }, async (request, reply) => {
+    const msg = db.prepare('SELECT * FROM messages WHERE id = ? AND sender_id = ?').get(request.params.id, request.user.id);
+    if (!msg) return reply.code(404).send({ error: 'Message not found' });
+    if (msg.type === 'file' && msg.file_path) {
+      try { fs.unlinkSync(msg.file_path); } catch (e) { /* gone */ }
+      db.prepare('UPDATE users SET used_bytes = MAX(0, used_bytes - ?) WHERE id = ?').run(msg.file_size, msg.sender_id);
+    }
+    db.prepare('DELETE FROM messages WHERE id = ?').run(msg.id);
+    emitToUser(msg.receiver_id, 'message_deleted', { message_id: msg.id });
+    emitToUser(msg.sender_id, 'message_deleted', { message_id: msg.id });
+    return { success: true };
   });
 
   fastify.post('/api/chat/upload', { preHandler: verifyUser }, async (request, reply) => {
@@ -232,6 +236,10 @@ module.exports = async function (fastify, opts) {
       data.file.resume();
       return reply.code(400).send({ error: 'Storage quota exceeded.' });
     }
+    if (!store.hasRoomFor(expectedSize)) {
+      data.file.resume();
+      return reply.code(507).send({ error: 'The server’s disk is full.' });
+    }
 
     const fileId = crypto.randomUUID();
     const destPath = path.join(chatDir, fileId);
@@ -246,11 +254,12 @@ module.exports = async function (fastify, opts) {
     db.prepare('UPDATE users SET used_bytes = used_bytes + ? WHERE id = ?').run(stats.size, request.user.id);
 
     const msgId = crypto.randomUUID();
+    const name = String(data.filename || 'file').replace(/[\\/]/g, '_').slice(0, 255);
     db.prepare(`INSERT INTO messages (id, sender_id, receiver_id, content, type, file_path, file_size, file_mime) VALUES (?, ?, ?, ?, 'file', ?, ?, ?)`).run(
-      msgId, request.user.id, receiverId, data.filename, destPath, stats.size, guessMime(data.filename, data.mimetype)
+      msgId, request.user.id, receiverId, name, destPath, stats.size, guessMime(name, data.mimetype)
     );
 
-    const saved = db.prepare('SELECT id, sender_id, receiver_id, content, type, file_size, file_mime, created_at FROM messages WHERE id = ?').get(msgId);
+    const saved = db.prepare(`SELECT ${MSG_COLS} FROM messages WHERE id = ?`).get(msgId);
     // Delivered by the server, so clients can't spoof file messages
     emitToUser(receiverId, 'receive_message', saved);
     emitToUser(request.user.id, 'receive_message', saved);
@@ -260,9 +269,9 @@ module.exports = async function (fastify, opts) {
   fastify.get('/api/chat/download/:msgId', { preHandler: verifyUser }, async (request, reply) => {
     const msg = db.prepare("SELECT * FROM messages WHERE id = ? AND type = 'file'").get(request.params.msgId);
     if (!msg || (msg.sender_id !== request.user.id && msg.receiver_id !== request.user.id)) {
-      return reply.code(404).send('File expired or not found.');
+      return reply.code(404).send({ error: 'File expired or not found.' });
     }
-    if (!msg.file_path || !fs.existsSync(msg.file_path)) return reply.code(404).send('File expired or not found.');
+    if (!msg.file_path || !fs.existsSync(msg.file_path)) return reply.code(404).send({ error: 'File expired or not found.' });
 
     const mime = guessMime(msg.content, msg.file_mime);
     const download = request.query.download === '1';
@@ -276,7 +285,8 @@ module.exports = async function (fastify, opts) {
 
   io.use((socket, next) => {
     try {
-      socket.user = jwt.verify(socket.handshake.auth.token, process.env.JWT_SECRET);
+      const { user } = authenticate(socket.handshake.auth.token);
+      socket.user = { id: user.id, username: user.username, role: user.role };
       next();
     } catch (err) {
       next(new Error('Auth failed'));
@@ -286,24 +296,28 @@ module.exports = async function (fastify, opts) {
   io.on('connection', (socket) => {
     const me = socket.user.id;
     socket.join(roomOf(me));
+    const wasOnline = connectionCounts.has(me);
     connectionCounts.set(me, (connectionCounts.get(me) || 0) + 1);
 
-    // Tell the new client who is already online, and everyone else that we are
-    socket.emit('online_list', [...connectionCounts.keys()]);
-    io.emit('user_online', me);
+    // Presence is only shared with friends
+    const friends = friendIdsOf(me);
+    socket.emit('online_list', friends.filter(id => connectionCounts.has(id)));
+    if (!wasOnline) for (const f of friends) emitToUser(f, 'user_online', me);
 
-    socket.on('send_message', (data) => {
+    socket.on('send_message', (data, ack) => {
       const content = String(data?.content || '').trim().substring(0, 2000);
-      if (!content || !data?.receiver_id || !areFriends(me, data.receiver_id)) return;
+      const done = typeof ack === 'function' ? ack : () => {};
+      if (!content || !data?.receiver_id || !areFriends(me, data.receiver_id)) return done({ ok: false, error: 'You can only message friends.' });
       const msgId = crypto.randomUUID();
       db.prepare(`INSERT INTO messages (id, sender_id, receiver_id, content, type) VALUES (?, ?, ?, ?, 'text')`).run(msgId, me, data.receiver_id, content);
-      const savedMsg = db.prepare('SELECT id, sender_id, receiver_id, content, type, file_size, file_mime, created_at FROM messages WHERE id = ?').get(msgId);
+      const savedMsg = db.prepare(`SELECT ${MSG_COLS} FROM messages WHERE id = ?`).get(msgId);
       emitToUser(data.receiver_id, 'receive_message', savedMsg);
       emitToUser(me, 'receive_message', savedMsg);
+      done({ ok: true, id: msgId });
     });
 
     socket.on('typing', (data) => {
-      if (data?.target_id) emitToUser(data.target_id, 'typing', { user_id: me });
+      if (data?.target_id && areFriends(me, data.target_id)) emitToUser(data.target_id, 'typing', { user_id: me });
     });
 
     // WebRTC voice signaling – relayed only between friends
@@ -325,10 +339,12 @@ module.exports = async function (fastify, opts) {
       const n = (connectionCounts.get(me) || 1) - 1;
       if (n <= 0) {
         connectionCounts.delete(me);
-        io.emit('user_offline', me);
+        for (const f of friendIdsOf(me)) emitToUser(f, 'user_offline', me);
       } else {
         connectionCounts.set(me, n);
       }
     });
   });
+
+  fastify.addHook('preClose', (done) => { io.local.disconnectSockets(true); done(); });
 };

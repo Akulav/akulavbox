@@ -2,7 +2,7 @@ import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from
 import Icon from '../components/Icon.js';
 import FileViewer from '../components/FileViewer.js';
 import { Thumb, JustifiedGrid } from '../components/Library.js';
-import { api, formatBytes, downloadUrl, session, refreshAccount, storage } from '../lib/api.js';
+import { api, formatBytes, downloadUrl, downloadZip, session, refreshAccount, storage } from '../lib/api.js';
 import { toast, confirmDialog, promptDialog, attempt } from '../lib/ui.js';
 import { uploadMany } from '../lib/upload.js';
 import { systemFolder, thumbUrl, preload, rememberDims } from '../lib/library.js';
@@ -93,9 +93,9 @@ export default {
           <p v-if="!search" class="text-muted text-[13.5px] mb-5">{{ level === 'collections' ? 'A collection groups related albums, like a trip or a year.' : 'Create an album, then add photos to it.' }}</p>
           <button v-if="!search" class="btn btn-primary" @click="level === 'collections' ? createCollection() : createAlbum()"><Icon name="plus" :size="16" />{{ level === 'collections' ? 'New collection' : 'New album' }}</button>
         </div>
-        <div v-else class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-4 gap-y-6">
+        <div v-else class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-4 gap-y-6 stagger">
           <a v-for="g in groups" :key="g.id" class="group block" :href="level === 'collections' ? '#/albums/' + g.id : '#/albums/' + collection.id + '/' + g.id">
-            <div class="relative aspect-[4/3] rounded-xl overflow-hidden">
+            <div class="relative aspect-[4/3] rounded-xl overflow-hidden lift">
               <Thumb :file-id="g.display_cover_id" :w="480" icon="images" class="transition-transform duration-500 group-hover:scale-[1.03]" />
               <button class="absolute top-2 left-2 w-8 h-8 rounded-full grid place-items-center bg-black/45 backdrop-blur transition-opacity"
                       :class="g.is_favorite ? 'text-accent opacity-100' : 'text-white/80 opacity-0 group-hover:opacity-100'"
@@ -107,7 +107,7 @@ export default {
             </div>
             <div class="mt-2.5 px-0.5">
               <p class="font-medium truncate text-[14px]">{{ g.title }}</p>
-              <p class="text-xs text-muted truncate">{{ g.image_count || 0 }} photo{{ g.image_count === 1 ? '' : 's' }}<span v-if="g.notes" class="text-faint"> / {{ g.notes }}</span></p>
+              <p class="text-xs text-muted truncate"><template v-if="level === 'collections' && g.album_count">{{ g.album_count }} album{{ g.album_count === 1 ? '' : 's' }} · </template>{{ g.image_count || 0 }} photo{{ g.image_count === 1 ? '' : 's' }}<span v-if="g.notes" class="text-faint"> / {{ g.notes }}</span></p>
             </div>
           </a>
         </div>
@@ -336,7 +336,7 @@ export default {
       addTo.value = null;
       const ids = [...selected.value];
       await attempt(async () => {
-        for (const id of ids) await api(`/api/albums/${a.id}/images`, { method: 'POST', body: { file_id: id } });
+        await api(`/api/albums/${a.id}/images/bulk`, { method: 'POST', body: { file_ids: ids } });
         await fetchAlbums(colId.value);
         delete cache.images[`${colId.value}/${a.id}`];
       }, `Added ${ids.length} photo${ids.length === 1 ? '' : 's'} to ${a.title}`);
@@ -353,15 +353,15 @@ export default {
       const ids = [...selected.value];
       if (!await confirmDialog({ title: `Remove ${ids.length} photo${ids.length === 1 ? '' : 's'} from this album?`, message: 'The photos stay in Files and in other albums.', confirmText: 'Remove' })) return;
       await attempt(async () => {
-        for (const id of ids) await api(`/api/albums/${album.value.id}/images/${id}`, { method: 'DELETE' });
+        await api(`/api/albums/${album.value.id}/images/remove`, { method: 'POST', body: { file_ids: ids } });
         images.value = cache.images[`${colId.value}/${albId.value}`] = images.value.filter(i => !ids.includes(i.id));
         fetchAlbums(colId.value);
       }, 'Removed from album');
       clearSelection();
     }
     function downloadSelected() {
-      if (selected.value.length > 20 && album.value) { downloadAlbum(album.value); return; }
-      selected.value.forEach((id, i) => setTimeout(() => downloadUrl(fileUrl(id, { download: true })), i * 350));
+      if (selected.value.length === 1) return downloadUrl(fileUrl(selected.value[0], { download: true }));
+      downloadZip({ files: selected.value, name: heading.value });
     }
 
     // ---------- drag & drop upload into the open album ----------

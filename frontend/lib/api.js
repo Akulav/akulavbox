@@ -16,22 +16,37 @@ function initialSession() {
   // Drop expired tokens up front instead of letting every request fail
   if (!payload || (payload.exp && payload.exp * 1000 < Date.now())) {
     write('akulavToken', null); write('akulavRole', null);
-    return { token: null, role: null, id: null, username: '' };
+    return { token: null, role: null, id: null, username: '', weakPassword: false };
   }
-  return { token, role: payload.role, id: payload.id, username: payload.username || '' };
+  return { token, role: payload.role, id: payload.id, username: payload.username || '', weakPassword: read('akulavWeak') === '1' };
 }
 
 export const session = reactive(initialSession());
 
-export function setSession(token) {
+/** Store a token. `weak` is set at sign-in when the password is easy to guess. */
+export function setSession(token, { weak } = {}) {
   const p = decode(token) || {};
   session.token = token; session.role = p.role; session.id = p.id; session.username = p.username || '';
   write('akulavToken', token); write('akulavRole', p.role);
+  if (weak !== undefined) { session.weakPassword = !!weak; write('akulavWeak', weak ? '1' : null); }
 }
 
 export function clearSession() {
-  session.token = null; session.role = null; session.id = null; session.username = '';
-  write('akulavToken', null); write('akulavRole', null);
+  session.token = null; session.role = null; session.id = null; session.username = ''; session.weakPassword = false;
+  write('akulavToken', null); write('akulavRole', null); write('akulavWeak', null);
+}
+
+// Server/app info (version, author) from the public health endpoint
+export const app = reactive({ version: '', author: 'Akulav', name: 'AkulavBox', loadedVersion: '', updateAvailable: false });
+export async function checkVersion() {
+  try {
+    const res = await fetch('/api/health', { cache: 'no-store' });
+    const h = await res.json();
+    if (!app.loadedVersion) app.loadedVersion = h.version;
+    Object.assign(app, { version: h.version, author: h.author || app.author, name: h.name || app.name });
+    // the server was updated while this tab stayed open
+    app.updateAvailable = !!app.loadedVersion && h.version !== app.loadedVersion;
+  } catch (e) { /* offline: keep what we know */ }
 }
 
 export class ApiError extends Error {
@@ -54,6 +69,9 @@ export async function api(path, { method = 'GET', body, headers = {}, raw = fals
     clearSession();
     throw new ApiError('Your session expired. Sign in again.', 401);
   }
+  // Sliding sessions: the server hands out a fresh token once a day
+  const fresh = res.headers.get('X-Refresh-Token');
+  if (fresh && session.token) setSession(fresh);
   if (raw) return res;
   const text = await res.text();
   let data = null;
@@ -71,6 +89,18 @@ export function downloadUrl(url) {
   const a = document.createElement('a');
   a.href = url; a.rel = 'noopener';
   document.body.appendChild(a); a.click(); a.remove();
+}
+
+/** Download files and folders as one zip (a form POST, so the browser streams it to disk) */
+export function downloadZip({ files = [], folders = [], name = 'AkulavBox download' }) {
+  const form = document.createElement('form');
+  form.method = 'POST'; form.action = '/api/zip'; form.style.display = 'none';
+  for (const [k, v] of Object.entries({ token: session.token || '', files: files.join(','), folders: folders.join(','), name })) {
+    const input = document.createElement('input');
+    input.type = 'hidden'; input.name = k; input.value = v;
+    form.appendChild(input);
+  }
+  document.body.appendChild(form); form.submit(); form.remove();
 }
 
 export function formatBytes(bytes) {
@@ -113,7 +143,18 @@ export async function copyText(text) {
 export const storage = { read, write };
 
 // Signed-in account summary (storage meter, avatar) shared by the shell and pages
-export const account = reactive({ username: '', role: '', used_bytes: 0, quota_bytes: 0, profile_image: null, loaded: false });
+export const account = reactive({ username: '', role: '', used_bytes: 0, quota_bytes: 0, trash_bytes: 0, profile_image: null, loaded: false });
+
+export function formatRelative(s) {
+  const d = parseDbDate(s);
+  if (!d) return '—';
+  const sec = Math.round((Date.now() - d.getTime()) / 1000);
+  if (sec < 45) return 'just now';
+  const units = [['year', 31536000], ['month', 2592000], ['week', 604800], ['day', 86400], ['hour', 3600], ['minute', 60]];
+  const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+  for (const [u, n] of units) if (Math.abs(sec) >= n) return rtf.format(-Math.round(sec / n), u);
+  return 'just now';
+}
 
 export async function refreshAccount() {
   if (!session.token) return;
