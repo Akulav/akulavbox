@@ -2,6 +2,15 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 2.0.1 (2026-11-07)
+
+### Fixed
+- Profile and Admin pages hugged the left edge on wide screens. They are now centred like the rest of the app.
+- The sections in the top bar sat slightly off-centre (they were centred between the logo and the account buttons, which differ in width). They now sit at the exact centre of the page.
+
+### Development
+- `npm run commit` commits all changes with a message built from the new CHANGELOG.md lines, refuses to commit without one, and tags `v<version>` when the version changes (`--dry-run` to preview, `--push` to push).
+
 ## 2.0.0 (2026-11-04)
 
 ### Upgrading from 1.x

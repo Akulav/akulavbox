@@ -14,7 +14,7 @@ const applyTheme = (choice) => {
 export default {
   components: { Icon, Avatar, BrandMark, MadeBy },
   template: /*html*/`
-    <div class="max-w-3xl">
+    <div class="max-w-3xl mx-auto">
       <h1 class="title text-[28px] md:text-[32px] leading-tight mb-6">Profile</h1>
 
       <div class="space-y-5 stagger">

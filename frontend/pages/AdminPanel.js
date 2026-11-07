@@ -17,7 +17,7 @@ const PART_LABEL = {
 export default {
   components: { Icon, Avatar },
   template: /*html*/`
-    <div class="max-w-6xl">
+    <div class="max-w-6xl mx-auto">
       <div class="flex flex-wrap items-end gap-3 mb-6">
         <div class="flex-1 min-w-0">
           <h1 class="title text-[28px] md:text-[32px] leading-tight">Admin</h1>

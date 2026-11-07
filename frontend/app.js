@@ -107,10 +107,11 @@ createApp({
     <template v-else>
       <!-- Top bar: brand · sections · account (sections move to the bottom bar on phones) -->
       <header class="sticky top-0 z-40 border-b border-line glass">
-        <div class="max-w-[1500px] mx-auto h-14 md:h-16 px-3 md:px-8 flex items-center gap-2 md:gap-4">
-          <a href="#/files" class="shrink-0 min-w-0 mr-auto md:mr-0" title="AkulavBox"><BrandLockup :size="30" :animated="true" /></a>
+        <!-- three equal-weight columns, so the sections sit at the true centre of the page whatever the side widths -->
+        <div class="max-w-[1500px] mx-auto h-14 md:h-16 px-3 md:px-8 flex md:grid md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 md:gap-4">
+          <a href="#/files" class="shrink-0 min-w-0 mr-auto md:mr-0 md:justify-self-start" title="AkulavBox"><BrandLockup :size="30" :animated="true" /></a>
 
-          <nav class="hidden md:flex flex-1 justify-center" aria-label="Sections">
+          <nav class="hidden md:flex justify-center" aria-label="Sections">
             <div class="topnav">
               <a v-for="t in mainTabs" :key="t.id" :href="'#/' + t.id" class="topnav-item" :class="{ active: route.tab === t.id }"
                  :aria-current="route.tab === t.id ? 'page' : null" :title="t.label">
@@ -124,7 +125,7 @@ createApp({
             </div>
           </nav>
 
-          <div class="flex items-center gap-0.5 shrink-0">
+          <div class="flex items-center gap-0.5 shrink-0 md:justify-self-end">
             <a href="#/trash" class="icon-btn relative" :class="{ active: route.tab === 'trash' }" :title="account.trash_bytes ? 'Trash (' + formatBytes(account.trash_bytes) + ')' : 'Trash'">
               <Icon name="trash" :size="18" />
               <span v-if="account.trash_bytes" class="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-accent"></span>

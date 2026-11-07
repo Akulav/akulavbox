@@ -1,6 +1,6 @@
 {
   "name": "akulavbox",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "A self-hosted personal cloud: encrypted files, photos, music, videos, books and chat with calls.",
   "author": "Akulav",
   "license": "SEE LICENSE IN LICENSE",
@@ -11,7 +11,8 @@
   },
   "scripts": {
     "start": "node src/server.js",
-    "check": "node scripts/check.js"
+    "check": "node scripts/check.js",
+    "commit": "node scripts/commit.js"
   },
   "dependencies": {
     "@fastify/cors": "^9.0.1",

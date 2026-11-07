@@ -20,6 +20,7 @@ Notes for working on AkulavBox, a self-hosted personal cloud made by Akulav. Rea
 - **Every query that lists files or folders must filter `trashed_at IS NULL`** (alias it, e.g. `f.trashed_at`). Permanent deletion only goes through `purgeFile()` in `src/core/storage.js`.
 - Use `verifyUser` / `verifyAdmin` from `src/core/auth.js` on every private route, and always scope queries with `owner_id = request.user.id`.
 - Bump `version` in `package.json` and add a `CHANGELOG.md` entry for anything user-facing (semver: breaking → major, feature → minor, fix → patch). Run `npm install --package-lock-only --ignore-scripts` so the lockfile matches.
+- **Auto-commit:** when a change is finished and verified, describe it in `CHANGELOG.md` and run `npm run commit`. It stages everything, builds the commit message from the new changelog lines, and tags `v<version>` when the version changed. Preview with `npm run commit -- --dry-run`. Don't push unless the user asks (`--push`). git may only exist inside GitHub Desktop; the script finds it.
 
 ## Code conventions
 
