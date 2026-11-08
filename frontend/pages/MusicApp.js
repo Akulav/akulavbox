@@ -49,12 +49,7 @@ export default {
         <button :class="{ on: homeTab === 'playlists' }" @click="homeTab = 'playlists'" role="tab"><Icon name="list-music" :size="14" />Playlists<span v-if="playlists.length" class="text-faint tabular-nums">{{ playlists.length }}</span></button>
       </div>
       <Downloads v-if="view !== 'playlist' || dlKey > 0" :key="dlKey" kind="audio" @finished="onDownloaded" @open="playById" />
-      <LibraryFilters v-if="view !== 'home' && songs.length" :f="f" kind="music" :sorts="view === 'playlist' ? [['order', 'Playlist order'], ...SORTS] : SORTS" placeholder="Search titles, artists, tags" class="-mt-2 mb-3" />
-      <!-- quick filter chips for the most used tags -->
-      <div v-if="view !== 'home' && f.tags.value.length" class="flex gap-1.5 overflow-x-auto no-scrollbar mb-5">
-        <button v-for="t in f.tags.value.slice(0, 14)" :key="t.value" class="chip chip-tag !h-7 !px-3 shrink-0 max-w-[180px] hover:text-fg" :class="f.tag.value === t.value ? 'chip-accent' : ''" :title="'#' + t.value"
-                @click="f.tag.value = f.tag.value === t.value ? '' : t.value">#{{ t.value }}</button>
-      </div>
+      <LibraryFilters v-if="view !== 'home' && songs.length" :f="f" kind="music" :sorts="view === 'playlist' ? [['order', 'Playlist order'], ...SORTS] : SORTS" placeholder="Search titles, artists, tags" class="-mt-2 mb-5" />
 
       <!-- HOME: artists -->
       <template v-if="view === 'home' && homeTab === 'artists'">

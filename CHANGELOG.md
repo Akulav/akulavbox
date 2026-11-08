@@ -2,6 +2,11 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 2.7.5 (2026-11-08)
+
+### Changed
+- **Music no longer shows the row of tag chips** above song lists, like Videos. Filtering by tag is still in the “All tags” menu.
+
 ## 2.7.4 (2026-11-08)
 
 ### Changed
