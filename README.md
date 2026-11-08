@@ -6,7 +6,7 @@
 
 **Your files, your cloud.** A self-hosted personal cloud for encrypted files, photos, music, videos, books, and chat with voice calls. It's one Node.js server with a no-build browser frontend.
 
-![Version](https://img.shields.io/badge/version-2.2.0-E8A33D)
+![Version](https://img.shields.io/badge/version-2.3.0-E8A33D)
 ![Node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-5fb3a1)
 ![License](https://img.shields.io/badge/license-source--available-8ea1a4)
 
@@ -82,6 +82,9 @@ All settings live in `.env` (see [.env.example](.env.example)).
 | `VIDEO_AV1` | on | `off` keeps downloaded video in whatever format the site serves |
 | `DOWNLOAD_PARALLEL` | `2` | Downloads running at the same time |
 | `DOWNLOAD_PLAYLIST_MAX` | `200` | Most entries taken from one playlist or channel link |
+| `UPDATES` | on | `off` turns update checks and one-click updates from GitHub off |
+| `UPDATE_REPO` / `UPDATE_BRANCH` | `Akulav/akulavbox` / `main` | Where Admin → Updates looks |
+| `GITHUB_TOKEN` | | Only needed to update from a private fork |
 | `DOWNLOAD_PROXY` | | Send link downloads through a proxy (`http://…` or `socks5://…`), for sites blocked where the server is |
 
 The server refuses to start if `MASTER_KEY` or `JWT_SECRET` is missing or invalid, and warns you if they are still the example values.
@@ -90,7 +93,9 @@ Calls only need a TURN relay when they fail to connect peer-to-peer (strict NATs
 
 ## Upgrading
 
-Upgrade in place. Your existing data keeps working:
+The easy way: **Admin → Updates → Update**, then **Restart now**. AkulavBox downloads the new version from GitHub, installs dependencies if they changed, and can roll back. Restarting by itself needs a service manager (systemd, pm2, Docker…); otherwise start it again yourself.
+
+By hand, upgrade in place. Your existing data keeps working:
 
 1. Stop the server, update the code, and run `npm install`.
 2. Start it. Pending database migrations run automatically, and **the database is snapshotted to `storage/backups/` first**.

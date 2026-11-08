@@ -311,10 +311,20 @@ createApp({
     const usedPct = computed(() => account.quota_bytes ? Math.min(100, Math.round((account.used_bytes / account.quota_bytes) * 100)) : 0);
     const unread = computed(() => totalUnread());
 
+    // admins hear about new versions on GitHub (the server checks every few hours)
+    const newRelease = ref(null);
+    const checkRelease = () => {
+      if (session.role !== 'admin') return;
+      api('/api/admin/updates').then(u => { newRelease.value = u.available && !u.ready ? u.latest.version : null; }).catch(() => {});
+    };
+    watch(() => session.role, checkRelease, { immediate: true });
+    watch(() => route.tab, (t, old) => { if (old === 'admin') checkRelease(); });
+
     const banners = computed(() => {
       const out = [];
       if (!online.value) out.push({ id: 'offline', icon: 'alert', cls: 'border-danger/40 bg-danger/[0.07]', text: 'You’re offline. Changes and uploads continue when the connection comes back.' });
       if (appInfo.updateAvailable) out.push({ id: 'update', icon: 'rotate', cls: 'border-info/40 bg-info/[0.07]', text: `AkulavBox was updated to v${appInfo.version}. Reload to get the new version.`, action: { label: 'Reload', run: () => location.reload() } });
+      if (newRelease.value && session.role === 'admin' && route.tab !== 'admin') out.push({ id: 'release', icon: 'download', cls: 'border-info/40 bg-info/[0.07]', text: `AkulavBox ${newRelease.value} is available on GitHub.`, action: { label: 'See update', run: () => { location.hash = '#/admin/updates'; } } });
       if (session.weakPassword && route.tab !== 'profile') out.push({ id: 'weak', icon: 'key', cls: 'border-accent/40 bg-accent/[0.07]', text: 'Your password is easy to guess. Change it to keep your files safe.', action: { label: 'Change password', run: () => { location.hash = '#/profile'; } } });
       if (account.loaded && usedPct.value >= 95) out.push({ id: 'full', icon: 'hard-drive', cls: 'border-danger/40 bg-danger/[0.07]', text: `Your storage is ${usedPct.value}% full. Empty the trash or delete files to make room.`, action: account.trash_bytes ? { label: 'Open trash', run: () => { location.hash = '#/trash'; } } : null });
       return out;

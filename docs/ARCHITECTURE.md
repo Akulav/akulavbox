@@ -89,6 +89,13 @@ Compares `storage/users/` with `files`. Files written in the last hour are skipp
 - Body: entries of `type | name | gzip flag | u64 length | bytes`: `manifest.json` (counts, schema, version, the `MASTER_KEY`), `akulavbox.db` (a `VACUUM INTO` snapshot, gzip level 9), then every `users/<id>/<file>` as stored (already encrypted, so not compressed) and saved cookies. Thumbnails, tools and temp files are left out.
 - Import stages into `storage/import-staging/`, refuses backups with a newer schema, re-keys `.enc` files when the backup's key differs (same IV, old keystream off, new keystream on), and verifies the HMAC before writing `ready.json`. Nothing live changes until the next start: `applyPending()` runs in `db.js` before the database opens, moves the current database, `users/` and cookies to `storage/backups/pre-import-<time>/`, moves the staged data in, and clears the thumbnail cache. Migrations then bring an older backup up to date.
 
+## Updates from GitHub (`src/core/updater.js`)
+
+- The newest version is `package.json` on `UPDATE_BRANCH` (default `main`) of the repository named in `package.json` → `repository` (or `UPDATE_REPO`, or the git remote). No releases or tags are needed. Checked every 6 hours; notes are the `CHANGELOG.md` sections newer than the running version.
+- **git mode** (the app folder is a clone and git runs): refuse if tracked files are modified, `git fetch origin <branch>`, `git merge --ff-only <sha>`. Rollback is `git reset --hard <previous sha>`.
+- **archive mode**: download `/tarball/<sha>`, unpack with `tar`, check its version, copy the current code (everything but `storage/`, `node_modules/`, `.git/`, `.env*`, `logs/`) to `storage/updates/backup-<version>-<time>/`, copy the new code over, and delete files under `src/ frontend/ scripts/ docs/` that the new version no longer has. Rollback copies the backup back.
+- `npm install --omit=dev` runs when `dependencies`/`optionalDependencies` changed; if it fails the old code is put back. The previous version is recorded in `storage/updates/state.json`. The running process keeps the old code until it restarts.
+
 ## Realtime (`src/modules/chat.js`)
 
 Socket.IO shares the HTTP server. Each user joins the room `user:<id>`, so all of their tabs get events. Presence (`online_list`, `user_online`, `user_offline`) is sent to friends only. Messages are stored in `messages` (the last 1,000 per conversation are kept by a trigger). Chat files live in `storage/chat_temp/` for 10 minutes. WebRTC signaling is relayed only between friends. `/api/rtc/config` hands out STUN and TURN servers.

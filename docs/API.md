@@ -98,4 +98,7 @@ All endpoints are JSON unless noted. Authenticate with `Authorization: Bearer <t
 | PUT | `/api/admin/backup/upload?id=&offset=` | Raw `application/octet-stream` chunk of a backup (≤ 32 MB each) |
 | POST | `/api/admin/backup/import` | `{ id \| server_path, passphrase }`. Checks the passphrase at once, then unpacks and verifies in the background |
 | DELETE | `/api/admin/backup/import` | Drop a staged restore |
+| GET | `/api/admin/updates` | `{ enabled, repo, branch, current, latest: { version, sha, notes, node_ok }, available, mode, applying, step, error, ready, rollback }` (`?check=1` asks GitHub now) |
+| POST | `/api/admin/updates/apply` | Install the newest version in the background; it runs after a restart |
+| POST | `/api/admin/updates/rollback` | Put back the code from before the last update |
 | POST | `/api/admin/restart` | Exits the process so a service manager restarts it (applies a staged restore) |

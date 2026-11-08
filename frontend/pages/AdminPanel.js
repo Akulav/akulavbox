@@ -104,6 +104,31 @@ export default {
         </div>
       </section>
 
+      <!-- ===== Updates from GitHub ===== -->
+      <section id="updates" v-if="upd && upd.enabled" class="panel p-5 md:p-6 mb-5 min-w-0" :class="upd.available && !upd.ready ? '!border-info/50' : ''">
+        <div class="flex flex-wrap items-center gap-3">
+          <span class="w-10 h-10 rounded-xl bg-info/15 text-info grid place-items-center"><Icon name="download" :size="20" /></span>
+          <div class="flex-1 min-w-0">
+            <h2 class="font-semibold flex items-center gap-2 flex-wrap">Updates
+              <span v-if="upd.ready" class="chip chip-ok">{{ upd.ready.rollback ? 'Rolled back' : 'Installed' }}, restart to finish</span>
+              <span v-else-if="upd.available" class="chip !bg-info/15 !text-info">v{{ upd.latest.version }} available</span>
+              <span v-else-if="upd.latest" class="chip chip-ok">Up to date</span></h2>
+            <p class="text-xs text-muted truncate">v{{ upd.current }} installed · from <a :href="'https://github.com/' + upd.repo" target="_blank" rel="noopener" class="hover:text-fg underline-offset-2 hover:underline">{{ upd.repo }}</a> ({{ upd.branch }}) · {{ upd.mode === 'git' ? 'git checkout' : 'downloaded copy' }}<template v-if="upd.checked_at"> · checked {{ formatRelative(upd.checked_at) }}</template></p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button class="btn btn-sm" :disabled="upd.checking || upd.applying" @click="checkUpdates"><Icon :name="upd.checking ? 'loader' : 'rotate'" :size="14" />Check now</button>
+            <button v-if="upd.available && !upd.ready" class="btn btn-primary btn-sm" :disabled="upd.applying || (upd.latest && !upd.latest.node_ok)" @click="applyUpdate"><Icon :name="upd.applying ? 'loader' : 'download'" :size="14" />{{ upd.applying ? 'Updating…' : 'Update to v' + upd.latest.version }}</button>
+            <button v-if="upd.ready" class="btn btn-primary btn-sm" @click="restartNow"><Icon name="rotate" :size="14" />Restart now</button>
+            <button v-if="upd.rollback && !upd.applying" class="btn btn-ghost btn-sm" @click="rollbackUpdate" :title="'Go back to v' + upd.rollback.version"><Icon name="undo" :size="14" />Roll back to v{{ upd.rollback.version }}</button>
+          </div>
+        </div>
+        <p v-if="upd.applying" class="text-[13px] text-info mt-3 flex items-center gap-2"><Icon name="loader" :size="14" />{{ upd.step || 'Working…' }}</p>
+        <p v-if="upd.error" class="text-[13px] text-danger mt-3">{{ upd.error }}</p>
+        <p v-if="upd.latest && !upd.latest.node_ok && upd.available" class="text-[13px] text-danger mt-3">v{{ upd.latest.version }} needs Node.js {{ upd.latest.node }}. Update Node.js on the server first.</p>
+        <p v-if="upd.ready" class="text-[12.5px] text-muted mt-3">The new code is on disk. It runs after a restart: “Restart now” stops the server, and systemd, pm2, Docker or a similar service manager starts it again (otherwise start it yourself). Database changes, if any, run automatically on start, after a backup snapshot.</p>
+        <div v-if="upd.available && upd.latest.notes && !upd.ready" class="mt-4 rounded-xl border border-line max-h-72 overflow-y-auto px-4 py-3 text-[13px] leading-relaxed release-notes" v-html="notesHtml"></div>
+      </section>
+
       <!-- ===== Maintenance ===== -->
       <section class="grid lg:grid-cols-2 gap-5 mb-5">
         <div class="panel p-5 md:p-6 min-w-0">
@@ -392,9 +417,41 @@ export default {
       setTimeout(() => location.reload(), 6000);
     }
 
-    onMounted(() => { refresh(false); loadBackup(); });
+    // ---------- updates from GitHub ----------
+    const upd = ref(null);
+    const loadUpdates = async (check = false) => { try { upd.value = await api(`/api/admin/updates${check ? '?check=1' : ''}`); } catch (e) { /* older server */ } };
+    const checkUpdates = async () => { if (upd.value) upd.value.checking = true; await loadUpdates(true); if (upd.value?.error) toast.error(upd.value.error); else if (!upd.value?.available) toast.success('AkulavBox is up to date'); };
+    const pollUpdate = async () => { await loadUpdates(); if (upd.value?.applying) setTimeout(pollUpdate, 1500); else if (upd.value?.ready) toast.success('Update installed. Restart to finish.'); };
+    async function applyUpdate() {
+      const v = upd.value.latest.version;
+      if (!await confirmDialog({ title: `Update to v${v}?`, confirmText: 'Update',
+        message: `AkulavBox downloads v${v} from GitHub and installs it next to the running version${upd.value.mode === 'archive' ? ' (the current code is backed up first)' : ''}. Your data and .env aren’t touched. It takes effect after a restart, and you can roll back.` })) return;
+      if (await attempt(() => api('/api/admin/updates/apply', { method: 'POST' }))) { upd.value.applying = true; setTimeout(pollUpdate, 800); }
+    }
+    async function rollbackUpdate() {
+      const v = upd.value.rollback.version;
+      if (!await confirmDialog({ title: `Go back to v${v}?`, confirmText: 'Roll back', danger: true, message: `The code from before the last update is put back. It runs after a restart. A database already upgraded by the newer version stays upgraded.` })) return;
+      const r = await attempt(() => api('/api/admin/updates/rollback', { method: 'POST' }), `v${v} restored. Restart to finish.`);
+      if (r) await loadUpdates();
+    }
+    // the changelog is our own Markdown: headings, bullets, **bold** and `code`
+    const esc = (s) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const inline = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>');
+    const notesHtml = computed(() => (upd.value?.latest?.notes || '').split('\n').map(l => {
+      if (l.startsWith('## ')) return `<h3>${inline(l.slice(3))}</h3>`;
+      if (l.startsWith('### ')) return `<h4>${inline(l.slice(4))}</h4>`;
+      if (l.startsWith('- ')) return `<p class="li">${inline(l.slice(2))}</p>`;
+      return l.trim() ? `<p>${inline(l)}</p>` : '';
+    }).join(''));
+
+    onMounted(async () => {
+      refresh(false); loadBackup();
+      await loadUpdates();
+      if (upd.value?.applying) pollUpdate();
+      if (location.hash.includes('updates')) document.getElementById('updates')?.scrollIntoView({ behavior: 'smooth' });
+    });
     return { users, sys, sysBusy, busy, form, search, filtered, totalUsed, totalQuota, pctOf, otherBytes, pct, freePct, parts, stats, GB,
       refresh, toolAction, createUser, editQuota, resetPassword, toggleRole, signOut, deleteUser, formatBytes, formatRelative, session,
-      check, checkIssues, runCheck, cleanUp, bk, bkFile, importPct, exportBackup, importBackup, cancelImport, restartNow };
+      check, checkIssues, runCheck, cleanUp, upd, checkUpdates, applyUpdate, rollbackUpdate, notesHtml, bk, bkFile, importPct, exportBackup, importBackup, cancelImport, restartNow };
   },
 };

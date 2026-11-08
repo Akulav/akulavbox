@@ -12,6 +12,7 @@ const cookies = require('../core/cookies');
 const maintenance = require('../core/maintenance');
 const backup = require('../core/backup');
 const downloader = require('../core/downloader');
+const updater = require('../core/updater');
 const { LATEST } = require('../core/migrations');
 
 const USERNAME_RE = /^[\p{L}\p{N}._ -]{1,32}$/u;
@@ -236,6 +237,27 @@ module.exports = async function (fastify) {
 
   fastify.delete('/api/admin/backup/import', { preHandler: verifyAdmin }, async (request, reply) => (
     backup.cancelPending() ? { success: true } : reply.code(409).send({ error: 'The import is still running.' })));
+
+  // --- Updates from GitHub ---
+  fastify.get('/api/admin/updates', { preHandler: verifyAdmin }, async (request, reply) => {
+    if (request.query.check === '1') {
+      try { await updater.check({ force: true }); } catch (e) { return { ...updater.info(), error: e.message }; }
+    }
+    return updater.info();
+  });
+  // Download and install the newest version in the background; poll GET /api/admin/updates
+  fastify.post('/api/admin/updates/apply', { preHandler: verifyAdmin }, async (request, reply) => {
+    const i = updater.info();
+    if (i.applying) return reply.code(409).send({ error: 'An update is already running.' });
+    if (!i.available) return reply.code(400).send({ error: 'There is no newer version to install. Check again first.' });
+    updater.apply().catch((e) => fastify.log.warn(`update failed: ${e.message}`));
+    return { success: true, started: true };
+  });
+  fastify.post('/api/admin/updates/rollback', { preHandler: verifyAdmin }, async (request, reply) => {
+    try { return { success: true, ...(await updater.rollback()) }; }
+    catch (e) { return reply.code(400).send({ error: e.message }); }
+  });
+  fastify.addHook('onReady', async () => { updater.start(); });
 
   // Restart so a staged restore is applied. Needs a service manager (systemd, pm2, Docker) to start
   // the process again; the page says so before offering it.

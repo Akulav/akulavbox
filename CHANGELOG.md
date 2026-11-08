@@ -2,6 +2,15 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 2.3.0 (2026-11-08)
+
+### New
+- **Update from GitHub.** Admin → Updates shows the installed version, checks GitHub every few hours (or on “Check now”), and shows what’s new since your version. “Update” downloads and installs it, and it runs after a restart. “Roll back” puts the previous version back. Admins see a banner anywhere in the app when a new version is out.
+  - In a git clone it fast-forwards to the GitHub version, and refuses if files were edited by hand. Any other install downloads the code from GitHub, backs the current code up to `storage/updates/`, and copies the new code over.
+  - Your data (`storage/`), `.env` and `node_modules` are never touched. `npm install` runs only when dependencies changed, and a failure puts the previous version back.
+  - Updates needing a newer Node.js are refused with a clear message.
+  - `UPDATES=off` turns this off; `UPDATE_REPO`, `UPDATE_BRANCH` and `GITHUB_TOKEN` (for a private fork) change where it looks.
+
 ## 2.2.0 (2026-11-08)
 
 ### New

@@ -1,10 +1,14 @@
 {
   "name": "akulavbox",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "A self-hosted personal cloud: encrypted files, photos, music, videos, books and chat with calls.",
   "author": "Akulav",
   "license": "SEE LICENSE IN LICENSE",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Akulav/akulavbox.git"
+  },
   "main": "src/server.js",
   "engines": {
     "node": ">=22.13"

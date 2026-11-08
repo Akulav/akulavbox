@@ -25,6 +25,7 @@ const env = {
   YTDLP_PATH: path.join(__dirname, 'test', 'fake-yt-dlp.js'),   // no network: a stand-in answers like yt-dlp
   FFMPEG_PATH: path.join(__dirname, 'test', 'fake-ffmpeg.js'),  // and ffprobe
   AUTO_INSTALL_TOOLS: '0',
+  UPDATES: 'off',   // never ask GitHub during the test
 };
 const dbArg = process.argv.indexOf('--db');
 if (dbArg !== -1) fs.copyFileSync(process.argv[dbArg + 1], path.join(tmp, 'akulavbox.db'));
@@ -308,6 +309,16 @@ async function main() {
       let fails = 0;
       for (let i = 0; i < 11; i++) { const r = await api('/api/login', { method: 'POST', body: { username: 'ghost', password: 'x' }, auth: false }); if (r.status === 429) fails++; }
       ok(fails > 0, 'repeated failed sign-ins are rate limited');
+
+      console.log('\nUpdates');
+      const upd = await api('/api/admin/updates');
+      ok(upd.status === 200 && upd.data.enabled === false && upd.data.repo === 'Akulav/akulavbox' && upd.data.current === health.data.version, 'update info (repo from package.json, off in tests)');
+      ok((await api('/api/admin/updates/apply', { method: 'POST' })).status === 400, 'nothing to install without a newer version');
+      ok((await api('/api/admin/updates/rollback', { method: 'POST' })).status === 400, 'no rollback before an update');
+      process.env.STORAGE_DIR = tmp; // the module loads config, which must not touch the real storage/
+      const { newer, notesSince } = require('../src/core/updater');
+      ok(newer('2.10.0', '2.9.9') && !newer('2.2.0', '2.2.0') && !newer('1.9.9', '2.0.0'), 'version comparison');
+      ok(notesSince('# C\n\n## 2.3.0 (x)\n- new\n\n## 2.2.0 (y)\n- old\n', '2.2.0') === '## 2.3.0 (x)\n- new', 'release notes since the installed version');
 
       console.log('\nStorage check');
       const adminDir = path.join(tmp, 'users', 'admin-uuid-0000');
