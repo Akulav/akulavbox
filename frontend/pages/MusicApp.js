@@ -5,11 +5,12 @@ import { toast, confirmDialog, promptDialog, attempt } from '../lib/ui.js';
 import { uploadMany, uploadFile } from '../lib/upload.js';
 import { player, playQueue, toggle, songTitle, forget } from '../lib/player.js';
 import { MetaEditor, LibraryFilters, Stars } from '../components/Library.js';
+import Downloads from '../components/Downloads.js';
 import { useLibraryFilter, systemFolder, formatDuration, thumbUrl } from '../lib/library.js';
 import { moveToTrash } from '../lib/trash.js';
 
 export default {
-  components: { Icon, MetaEditor, LibraryFilters, Stars },
+  components: { Icon, MetaEditor, LibraryFilters, Stars, Downloads },
   template: /*html*/`
     <div>
       <!-- Header -->
@@ -40,6 +41,7 @@ export default {
       </div>
 
       <input ref="coverInput" type="file" accept="image/*" class="hidden" @change="onPickCover">
+      <Downloads v-if="view !== 'playlist'" kind="audio" @finished="onDownloaded" @open="playById" />
       <LibraryFilters v-if="view !== 'home' && songs.length" :f="f" kind="music" :sorts="view === 'playlist' ? [['order', 'Playlist order'], ...SORTS] : SORTS" placeholder="Search titles, artists, tags" class="-mt-2 mb-5" />
 
       <!-- HOME: playlists -->
@@ -252,6 +254,13 @@ export default {
     const openAll = () => { if (f.sort.value === 'order') f.sort.value = 'title'; f.reset(); view.value = 'all'; playlist.value = null; search.value = ''; songs.value = allSongs.value; guarded(fetchAll); };
     const openPlaylist = (p) => { f.reset(); f.sort.value = 'order'; selected.value = []; selecting.value = false; playlist.value = p; view.value = 'playlist'; search.value = ''; songs.value = []; guarded(fetchPlaylistSongs); };
 
+    const onDownloaded = () => { fetchAll().catch(() => {}); fetchPlaylists().catch(() => {}); refreshAccount(); };
+    async function playById(id) {
+      if (!allSongs.value.some(s => s.id === id)) await fetchAll().catch(() => {});
+      const i = allSongs.value.findIndex(s => s.id === id);
+      if (i !== -1) playQueue(allSongs.value, i, 'Downloads');
+    }
+
     const sourceName = () => view.value === 'playlist' ? playlist.value.title : 'All songs';
     const play = (i) => playQueue(filteredSongs.value, i, sourceName());
     const playAll = (shuffled) => {
@@ -388,7 +397,7 @@ export default {
       f, SORTS, editors, selecting, selected, isSel, toggleSel, toggleSelecting, onMetaSaved, addManyTo, openAddMany, formatDuration,
       filteredPlaylists, filteredSongs, addable, goHome, openAll, openPlaylist, play, playAll, playPlaylist, isCurrent, onRowClick,
       createPlaylist, renamePlaylist, deletePlaylist, toggleFavorite, addToPlaylist, addToNewPlaylist, removeFromPlaylist, deleteSong,
-      openAddSongs, confirmAdd, onPickMusic, pickCover, onPickCover, openMenu, run,
+      openAddSongs, confirmAdd, onPickMusic, pickCover, onPickCover, openMenu, run, onDownloaded, playById,
       player, toggle, songTitle, fileUrl, thumbUrl, formatBytes, canReorder, dragIndex, dragOverIndex, onSongDragStart, onSongDrop, listDuration,
     };
   },

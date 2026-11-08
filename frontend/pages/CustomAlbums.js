@@ -93,22 +93,25 @@ export default {
           <p v-if="!search" class="text-muted text-[13.5px] mb-5">{{ level === 'collections' ? 'A collection groups related albums, like a trip or a year.' : 'Create an album, then add photos to it.' }}</p>
           <button v-if="!search" class="btn btn-primary" @click="level === 'collections' ? createCollection() : createAlbum()"><Icon name="plus" :size="16" />{{ level === 'collections' ? 'New collection' : 'New album' }}</button>
         </div>
-        <div v-else class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-4 gap-y-6 stagger">
-          <a v-for="g in groups" :key="g.id" class="group block" :href="level === 'collections' ? '#/albums/' + g.id : '#/albums/' + collection.id + '/' + g.id">
-            <div class="relative aspect-[4/3] rounded-xl overflow-hidden lift">
-              <Thumb :file-id="g.display_cover_id" :w="480" icon="images" class="transition-transform duration-500 group-hover:scale-[1.03]" />
-              <button class="absolute top-2 left-2 w-8 h-8 rounded-full grid place-items-center bg-black/45 backdrop-blur transition-opacity"
-                      :class="g.is_favorite ? 'text-accent opacity-100' : 'text-white/80 opacity-0 group-hover:opacity-100'"
-                      @click.prevent.stop="toggleFavorite(g)" :title="g.is_favorite ? 'Remove from favorites' : 'Add to favorites'">
-                <Icon :name="g.is_favorite ? 'star-fill' : 'star'" :size="16" />
-              </button>
-              <button class="absolute top-2 right-2 w-8 h-8 rounded-full grid place-items-center bg-black/45 backdrop-blur text-white opacity-0 group-hover:opacity-100 focus:opacity-100"
-                      @click.prevent.stop="openMenu($event, g)" :aria-label="'Actions for ' + g.title"><Icon name="more" :size="17" /></button>
+        <div v-else class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3 stagger">
+          <a v-for="g in groups" :key="g.id" class="group tile lift" :class="g.display_cover_id ? 'tile-media tile-cap-on' : 'tile-folder'"
+             :href="level === 'collections' ? '#/albums/' + g.id : '#/albums/' + collection.id + '/' + g.id" :title="g.title">
+            <div v-if="g.display_cover_id" class="absolute inset-0 zoom-media"><Thumb :file-id="g.display_cover_id" :w="480" icon="images" /></div>
+            <Icon v-else :name="level === 'collections' ? 'box' : 'images'" size="100%" :stroke="1.25" class="tile-mark" />
+            <span class="tile-badge" :class="g.display_cover_id ? 'bg-black/55 text-white backdrop-blur' : 'bg-accent/15 text-accent'">
+              <Icon :name="level === 'collections' ? 'box' : 'images'" :size="11" :stroke="2.25" />{{ level === 'collections' ? (g.album_count || 0) + ' album' + (g.album_count === 1 ? '' : 's') : (g.image_count || 0) }}
+            </span>
+            <span v-if="!g.display_cover_id" class="tile-count">{{ g.image_count || 0 }}</span>
+            <div class="tile-cap">
+              <p class="truncate text-[13.5px] font-semibold leading-tight">{{ g.title }}</p>
+              <p class="text-[11px] leading-tight mt-0.5 tile-sub truncate">{{ g.image_count || 0 }} photo{{ g.image_count === 1 ? '' : 's' }}<template v-if="g.notes"> · {{ g.notes }}</template></p>
             </div>
-            <div class="mt-2.5 px-0.5">
-              <p class="font-medium truncate text-[14px]">{{ g.title }}</p>
-              <p class="text-xs text-muted truncate"><template v-if="level === 'collections' && g.album_count">{{ g.album_count }} album{{ g.album_count === 1 ? '' : 's' }} · </template>{{ g.image_count || 0 }} photo{{ g.image_count === 1 ? '' : 's' }}<span v-if="g.notes" class="text-faint"> / {{ g.notes }}</span></p>
-            </div>
+            <button class="absolute z-[3] bottom-2 right-2 w-7 h-7 rounded-full grid place-items-center bg-black/45 backdrop-blur transition-opacity"
+                    :class="g.is_favorite ? 'text-accent opacity-100' : 'text-white/80 opacity-0 group-hover:opacity-100'"
+                    @click.prevent.stop="toggleFavorite(g)" :title="g.is_favorite ? 'Remove from favorites' : 'Add to favorites'">
+              <Icon :name="g.is_favorite ? 'star-fill' : 'star'" :size="14" />
+            </button>
+            <button class="tile-more" @click.prevent.stop="openMenu($event, g)" :aria-label="'Actions for ' + g.title"><Icon name="more" :size="16" /></button>
           </a>
         </div>
       </template>

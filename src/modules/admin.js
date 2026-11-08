@@ -55,6 +55,9 @@ module.exports = async function (fastify) {
         'DELETE FROM playlists WHERE owner_id = ?',
         'DELETE FROM song_covers WHERE file_id IN (SELECT id FROM files WHERE owner_id = ?)',
         'DELETE FROM media_meta WHERE owner_id = ?',
+        'DELETE FROM media_collection_items WHERE collection_id IN (SELECT id FROM media_collections WHERE owner_id = ?)',
+        'DELETE FROM media_collections WHERE owner_id = ?',
+        'DELETE FROM downloads WHERE owner_id = ?',
         'DELETE FROM files WHERE owner_id = ?',
         'DELETE FROM folders WHERE owner_id = ?',
       ];
@@ -151,6 +154,8 @@ module.exports = async function (fastify) {
       uptime_s: Math.round((Date.now() - startedAt) / 1000),
       memory_rss: process.memoryUsage().rss,
       thumbnails: thumbs.available() ? 'server (sharp)' : 'browser',
+      // Refresh re-checks, so installing yt-dlp / ffmpeg needs no restart
+      downloader: (request.query.fresh === '1' && require('../core/downloader').detect(true), require('../core/downloader').status()),
       trash_days: config.trashDays,
       measured_at: new Date(breakdownCache.at).toISOString(),
     };

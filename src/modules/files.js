@@ -112,7 +112,7 @@ module.exports = async function (fastify) {
   });
 
   fastify.get('/api/folders/all', { preHandler: verifyUser }, async (request) => {
-    return db.prepare('SELECT id, name, parent_id, system_key FROM folders WHERE owner_id = ? AND trashed_at IS NULL ORDER BY name COLLATE NOCASE').all(request.user.id);
+    return db.prepare(`SELECT id, name, parent_id, system_key FROM folders WHERE owner_id = ? AND trashed_at IS NULL AND (system_key IS NULL OR system_key NOT IN ${lib.HIDDEN_SQL}) ORDER BY name COLLATE NOCASE`).all(request.user.id);
   });
 
   fastify.patch('/api/folders/:id/name', { preHandler: verifyUser }, async (request, reply) => {
@@ -166,7 +166,8 @@ module.exports = async function (fastify) {
 
   // Folder sizes and item counts for the whole tree in one pass (1.x ran a recursive query per folder)
   function folderStats(userId) {
-    const folders = db.prepare('SELECT id, parent_id FROM folders WHERE owner_id = ? AND trashed_at IS NULL').all(userId);
+    const folders = db.prepare('SELECT id, parent_id, system_key FROM folders WHERE owner_id = ? AND trashed_at IS NULL').all(userId);
+    const hidden = new Set(folders.filter(f => lib.HIDDEN.includes(f.system_key)).map(f => f.id));
     const sums = db.prepare('SELECT folder_id, SUM(size_bytes) AS bytes, COUNT(*) AS n FROM files WHERE owner_id = ? AND trashed_at IS NULL GROUP BY folder_id').all(userId);
     const own = new Map(sums.map(s => [s.folder_id, s]));
     const children = new Map();
@@ -181,7 +182,8 @@ module.exports = async function (fastify) {
       memo.set(id, total);
       return total;
     };
-    const countOf = (id) => (own.get(id)?.n || 0) + (children.get(id)?.length || 0);
+    // sizes include covers (they use space), counts only what Files shows
+    const countOf = (id) => (own.get(id)?.n || 0) + (children.get(id) || []).filter(c => !hidden.has(c)).length;
     return { sizeOf, countOf };
   }
 
@@ -192,7 +194,7 @@ module.exports = async function (fastify) {
     const folderId = request.params.folderId || null;
     if (folderId && !ownsFolder(folderId, uid)) return reply.code(404).send({ error: 'Folder not found' });
 
-    const folders = db.prepare('SELECT id, name, parent_id, system_key FROM folders WHERE owner_id = ? AND parent_id IS ? AND trashed_at IS NULL').all(uid, folderId);
+    const folders = db.prepare(`SELECT id, name, parent_id, system_key FROM folders WHERE owner_id = ? AND parent_id IS ? AND trashed_at IS NULL AND (system_key IS NULL OR system_key NOT IN ${lib.HIDDEN_SQL})`).all(uid, folderId);
     const files = db.prepare(`SELECT id, filename, size_bytes, mime_type, is_encrypted, public_hash, created_at FROM files
       WHERE owner_id = ? AND folder_id IS ? AND trashed_at IS NULL`).all(uid, folderId);
 
@@ -231,11 +233,11 @@ module.exports = async function (fastify) {
     const files = db.prepare(`
       SELECT f.id, f.filename, f.size_bytes, f.mime_type, f.is_encrypted, f.public_hash, f.created_at, f.folder_id, d.name AS folder_name
       FROM files f LEFT JOIN folders d ON d.id = f.folder_id
-      WHERE f.owner_id = ? AND f.trashed_at IS NULL AND f.filename LIKE ? ESCAPE '\\' ORDER BY f.filename COLLATE NOCASE LIMIT 200
+      WHERE f.owner_id = ? AND f.trashed_at IS NULL AND (d.system_key IS NULL OR d.system_key NOT IN ${lib.HIDDEN_SQL}) AND f.filename LIKE ? ESCAPE '\\' ORDER BY f.filename COLLATE NOCASE LIMIT 200
     `).all(request.user.id, like);
     const folders = db.prepare(`
       SELECT id, name, parent_id, system_key, (system_key IS NOT NULL) AS is_system FROM folders
-      WHERE owner_id = ? AND trashed_at IS NULL AND name LIKE ? ESCAPE '\\' ORDER BY name COLLATE NOCASE LIMIT 50
+      WHERE owner_id = ? AND trashed_at IS NULL AND (system_key IS NULL OR system_key NOT IN ${lib.HIDDEN_SQL}) AND name LIKE ? ESCAPE '\\' ORDER BY name COLLATE NOCASE LIMIT 50
     `).all(request.user.id, like);
     return { files, folders };
   });

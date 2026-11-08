@@ -29,6 +29,7 @@ The schema version is `PRAGMA user_version`. Each entry in `MIGRATIONS` is one v
 | 4 | Trash columns `trashed_at`, `trash_root` on files and folders |
 | 5 | `album_images.added_at`, `playlist_songs.position` |
 | 6 | `chat_reads` (persistent unread counts) |
+| 7 | `media_collections`, `media_collection_items`, `downloads`, `media_meta.source_url` / `source_id` |
 
 ## Authentication
 
@@ -57,6 +58,20 @@ The schema version is `PRAGMA user_version`. Each entry in `MIGRATIONS` is one v
 ## Locked library folders
 
 Photos, Music (+ Artwork), Videos (+ Covers), and Books (+ Covers) are system folders (`folders.system_key`), defined in `src/core/library.js`. They can't be renamed, moved, deleted, or given sub-folders, and they only accept their media type. The Photos, Music, Videos, and Books pages are views over them, with per-file details in `media_meta`.
+
+The cover and artwork sub-folders (`library.HIDDEN`) are hidden from Files listings, search and the Move picker. Their sizes still count towards the parent folder.
+
+## Collections and link downloads
+
+- `media_collections` and `media_collection_items` group library items, the way `playlists` and `playlist_songs` group songs (`src/core/collections.js`, `src/modules/collections.js`). Only videos use them in the UI today, but `kind` allows books.
+- `src/core/tools.js` installs **yt-dlp** and a static **ffmpeg** into `storage/tools/` on first start. It picks the right build for Windows or Linux on x64 or ARM, downloads it from the official GitHub releases, checks the published SHA-256, and unpacks it with `tar`. yt-dlp runs `-U` once a day. Explicit `YTDLP_PATH` / `FFMPEG_PATH` and copies on PATH win.
+- `src/core/downloader.js` keeps jobs in the `downloads` table (they resume after a restart) and runs `DOWNLOAD_PARALLEL` at once:
+  1. `yt-dlp -J --flat-playlist`: a playlist becomes one job per entry. A `media_meta.source_id` match means the item is already in the library.
+  2. Download to `storage/temp/dl-<job>/`. With ffmpeg, an AV1 stream ≤ 1080p is preferred.
+  3. If the video isn't AV1 and ffmpeg has an AV1 encoder (`libsvtav1`), it is re-encoded one at a time (`converting`). The result is kept only if smaller.
+  4. `storeFile()` encrypts the media (and its thumbnail as a cover) into the Videos/Music folders. `media_meta` gets the title, creator, date, length, description and source.
+  5. Filing: a video goes into the collection named after its creator, a song into the playlist named after its artist.
+- Links must be public http(s). Literal private IPs and `localhost` are refused, and yt-dlp is spawned with an argument array and `--` before the URL.
 
 ## Realtime (`src/modules/chat.js`)
 

@@ -56,6 +56,7 @@ export default {
     startIndex: { type: Number, default: 0 },
     startEditing: { type: Boolean, default: false },
     infoOpen: { type: Boolean, default: undefined },
+    autoplayNext: { type: Boolean, default: false }, // collections: go on to the next video when one ends
   },
   emits: ['close', 'changed'],
   template: /*html*/`
@@ -153,7 +154,8 @@ export default {
 
             <!-- VIDEO -->
             <div v-else-if="kind === 'video'" class="absolute inset-0 bg-black grid place-items-center">
-              <video :key="file.id" :src="url" controls autoplay playsinline class="max-w-full max-h-full" @error="fail('Your browser can’t play this video format. Download it to watch with a media player.')"></video>
+              <video :key="file.id" :src="url" controls autoplay playsinline class="max-w-full max-h-full" @ended="onMediaEnded" @error="fail('Your browser can’t play this video format. Download it to watch with a media player.')"></video>
+              <span v-if="autoplayNext && index < files.length - 1" class="absolute top-3 left-1/2 -translate-x-1/2 chip !bg-black/60 !text-white backdrop-blur pointer-events-none">Up next: {{ displayTitle(files[index + 1]) }}</span>
             </div>
 
             <!-- AUDIO -->
@@ -600,6 +602,7 @@ export default {
       index.value = n;
     }
 
+    const onMediaEnded = () => { if (props.autoplayNext && index.value < props.files.length - 1) go(1); };
     const download = () => downloadUrl(fileUrl(file.value.id, { download: true }));
     const copyLink = async () => { if (await copyText(sharedUrl(file.value.public_hash))) toast.success('Public link copied'); };
     const copyContents = async () => { if (await copyText(state.text || '')) toast.success('Copied to clipboard'); };
@@ -647,7 +650,7 @@ export default {
       isShared, epubRef, thumbUrl, displayTitle, rootEl, slideshow, imageCount, toggleSlideshow, toggleFullscreen,
       index, file, kind, ext, tint, url, state, mode, modes, wrap, showInfo, showsCode, isImageView, lineCount, gutter, tableWidth,
       zoom, drag, zoomBy, resetZoom, toggleZoom, onWheel, onPointerDown, onPointerMove, onPointerUp, onTouchStart, onTouchEnd,
-      go, load, fail, download, imgEl, onImgLoad, copyLink, copyContents, showSheet, openEntry, closeEntry, entry, dims,
+      go, load, fail, download, onMediaEnded, imgEl, onImgLoad, copyLink, copyContents, showSheet, openEntry, closeEntry, entry, dims,
       iconFor, kindLabel, formatBytes, formatDate, TEXT_LIMIT, ROW_LIMIT,
     };
   },

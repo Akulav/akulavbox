@@ -22,6 +22,8 @@ const env = {
   MASTER_KEY: crypto.randomBytes(16).toString('hex'),   // 32 characters
   JWT_SECRET: crypto.randomBytes(32).toString('hex'),
   DISK_RESERVE_MB: '0',
+  YTDLP_PATH: path.join(__dirname, 'test', 'fake-yt-dlp.js'),   // no network: a stand-in answers like yt-dlp
+  FFMPEG_PATH: path.join(tmp, 'no-ffmpeg'),
 };
 const dbArg = process.argv.indexOf('--db');
 if (dbArg !== -1) fs.copyFileSync(process.argv[dbArg + 1], path.join(tmp, 'akulavbox.db'));
@@ -176,6 +178,64 @@ async function main() {
       ok(pl.status === 200, 'create a playlist');
       ok((await api(`/api/music/playlists/${pl.data.id}/order`, { method: 'PUT', body: { file_ids: [] } })).status === 200, 'reorder a playlist');
       for (const s of ['photos', 'videos', 'books']) ok((await api(`/api/library/${s}`)).status === 200, `library: ${s}`);
+
+      console.log('\nLink downloads & collections');
+      const waitJobs = async (kind) => {
+        for (let i = 0; i < 80; i++) {
+          const jobs = (await api(`/api/downloads?kind=${kind}`)).data;
+          if (jobs.length && jobs.every(j => !['queued', 'probing', 'downloading', 'converting', 'processing'].includes(j.status))) return jobs;
+          await new Promise(r => setTimeout(r, 250));
+        }
+        return (await api(`/api/downloads?kind=${kind}`)).data;
+      };
+      const st = await api('/api/downloads/status');
+      ok(st.data.available && st.data.ytdlp, 'downloader detected (stand-in yt-dlp)');
+      ok((await api('/api/downloads', { method: 'POST', body: { url: 'http://127.0.0.1/x', kind: 'video' } })).status === 400, 'links into the server’s own network are refused');
+      ok((await api('/api/downloads', { method: 'POST', body: { url: 'https://example.com/v/clip1', kind: 'video' } })).status === 200, 'paste a video link');
+      let jobs = await waitJobs('video');
+      ok(jobs[0].status === 'done' && jobs[0].file_id && jobs[0].creator === 'Test Creator', 'video downloaded', JSON.stringify(jobs[0]));
+      const vids = (await api('/api/library/videos')).data.items;
+      const v = vids.find(x => x.id === jobs[0].file_id);
+      ok(v && v.title === 'Test video clip1' && v.participants[0] === 'Test Creator' && v.duration === 42 && v.thumb_file_id && v.date === '2026-01-02', 'title, creator, date, length and cover filled in');
+      let cols = (await api('/api/media-collections?kind=videos')).data;
+      const byCreator = cols.find(c => c.title === 'Test Creator');
+      ok(byCreator && byCreator.item_count === 1, 'filed into a collection named after the creator');
+      await api('/api/downloads', { method: 'POST', body: { url: 'https://example.com/v/clip1', kind: 'video' } });
+      jobs = await waitJobs('video');
+      ok(jobs[0].error === 'Already in your library' && jobs[0].file_id === v.id, 'the same link twice isn’t downloaded again');
+      await api('/api/downloads', { method: 'POST', body: { url: 'https://example.com/playlist/p1', kind: 'video' } });
+      jobs = await waitJobs('video');
+      ok(jobs.some(j => j.status === 'expanded') && jobs.filter(j => j.status === 'done').length >= 4, 'a playlist link downloads every entry');
+      await api('/api/downloads', { method: 'POST', body: { url: 'https://example.com/v/fail', kind: 'video' } });
+      jobs = await waitJobs('video');
+      ok(jobs.find(j => j.url.endsWith('/fail'))?.error === 'This video is unavailable', 'failures show yt-dlp’s reason');
+      await api('/api/downloads', { method: 'POST', body: { url: 'https://example.com/v/song1', kind: 'audio' } });
+      jobs = await waitJobs('audio');
+      ok(jobs[0].status === 'done', 'audio downloaded');
+      const song = (await api('/api/music/songs')).data.songs.find(s => s.id === jobs[0].file_id);
+      ok(song && song.cover_file_id && song.series === 'Test Album' && song.participants[0] === 'Test Artist', 'song gets artist, album and artwork');
+      const pls = (await api('/api/music/playlists')).data;
+      ok(pls.some(p => p.title === 'Test Artist' && p.song_count === 1), 'filed into a playlist named after the artist');
+      ok((await api('/api/downloads/clear', { method: 'POST' })).data.removed > 0, 'clear finished downloads');
+      const videosFolder = (await api('/api/library/folder/videos')).data.id;
+      const inFiles = await api(`/api/directory/${videosFolder}`);
+      ok(!inFiles.data.folders.length && inFiles.data.files.length > 0, 'Files shows just the videos, not the Covers folder');
+      ok(!(await api('/api/folders/all')).data.some(d => d.system_key === 'video_covers'), 'cover folders are hidden from Move');
+      ok(!(await api('/api/search?q=cover')).data.files.length, 'cover images are hidden from search');
+
+      const vc = await api('/api/media-collections', { method: 'POST', body: { kind: 'videos', title: 'Favourites', file_ids: vids.map(x => x.id).slice(0, 1) } });
+      ok(vc.status === 200 && vc.data.added === 1, 'create a video collection with items');
+      const allVids = (await api('/api/library/videos')).data.items.map(x => x.id);
+      await api(`/api/media-collections/${vc.data.id}/items`, { method: 'POST', body: { file_ids: allVids } });
+      await api(`/api/media-collections/${vc.data.id}/order`, { method: 'PUT', body: { file_ids: [...allVids].reverse() } });
+      let items = (await api(`/api/media-collections/${vc.data.id}/items`)).data;
+      ok(items.length === allVids.length && items[0].id === allVids[allVids.length - 1], 'add more and reorder');
+      await api('/api/items/trash', { method: 'POST', body: { files: [items[0].id] } });
+      items = (await api(`/api/media-collections/${vc.data.id}/items`)).data;
+      ok(items.length === allVids.length - 1, 'trashed videos leave the collection view');
+      ok((await api(`/api/media-collections/${vc.data.id}`, { method: 'PATCH', body: { title: 'Best' } })).status === 200, 'rename a collection');
+      ok((await api(`/api/media-collections/${vc.data.id}`, { method: 'DELETE' })).status === 200, 'delete a collection (videos stay)');
+      ok((await api('/api/library/videos')).data.items.length === allVids.length - 1, 'videos are still in the library');
 
       console.log('\nAccounts');
       const u = await api('/api/admin/users', { method: 'POST', body: { username: 'checker', password: 'secret123', quota: 1024 * 1024 } });

@@ -6,11 +6,11 @@
 
 **Your files, your cloud.** A self-hosted personal cloud for encrypted files, photos, music, videos, books, and chat with voice calls. It's one Node.js server with a no-build browser frontend.
 
-![Version](https://img.shields.io/badge/version-2.0.1-E8A33D)
+![Version](https://img.shields.io/badge/version-2.1.0-E8A33D)
 ![Node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-5fb3a1)
 ![License](https://img.shields.io/badge/license-source--available-8ea1a4)
 
-Made with ♥ by **Akulav**
+Made with â™¥ by **Akulav**
 
 </div>
 
@@ -25,7 +25,8 @@ Made with ♥ by **Akulav**
 | **Encryption at rest** | AES-256-CTR. Each chunk is encrypted as it arrives, and range requests (video seeking) decrypt from any offset |
 | **Photos** | Collections and albums, justified "natural shape" grids, slideshow, server-side thumbnails via `sharp` (the browser makes them if `sharp` is missing) |
 | **Music** | Library, playlists you can reorder by dragging, favorites, artwork, a player that keeps playing while you browse, and media-key support |
-| **Videos and books** | Covers generated automatically, participants, tags, series, and ratings. The EPUB reader remembers your page |
+| **Download from a link** | Paste a YouTube, Vimeo, SoundCloud or other link (playlists and channels too). Title, creator, date, cover and length are filled in, videos are filed into a collection per channel and songs into a playlist per artist, and video is kept as space-efficient AV1. yt-dlp and ffmpeg install themselves |
+| **Videos and books** | Video collections with play-all, a Creators view, covers generated automatically, participants, tags, series, and ratings. The EPUB reader remembers your page |
 | **Chat and calls** | Real-time messaging between friends, unread counts that survive reloads, deleting your own messages, files that disappear after 10 minutes, and WebRTC voice calls with optional TURN relay |
 | **Multi-user** | Per-user storage quotas. The admin panel shows **free disk space on the server**, a storage breakdown, a warning when quotas promise more than the disk can hold, roles, password resets, and "sign out everywhere" |
 | **Security** | Revocable sessions (a password change signs out other devices), sign-in rate limiting, timing-safe login, tokens kept out of logs and `Referer` headers, and a sandbox for uploaded HTML and SVG |
@@ -74,6 +75,12 @@ All settings live in `.env` (see [.env.example](.env.example)).
 | `TURN_SECRET` | | coturn `static-auth-secret` (short-lived credentials) |
 | `CF_TURN_KEY_ID`, `CF_TURN_API_TOKEN` | | Cloudflare Realtime TURN |
 | `STUN_URLS` | Cloudflare + Google | Override the STUN servers |
+| `DOWNLOADS` | on | `off` turns link downloads off |
+| `AUTO_INSTALL_TOOLS` | on | `0` stops AkulavBox installing yt-dlp and ffmpeg into `storage/tools/` |
+| `YTDLP_PATH` / `FFMPEG_PATH` | auto | Use your own copies instead |
+| `VIDEO_AV1` | on | `off` keeps downloaded video in whatever format the site serves |
+| `DOWNLOAD_PARALLEL` | `2` | Downloads running at the same time |
+| `DOWNLOAD_PLAYLIST_MAX` | `200` | Most entries taken from one playlist or channel link |
 
 The server refuses to start if `MASTER_KEY` or `JWT_SECRET` is missing or invalid, and warns you if they are still the example values.
 
@@ -100,6 +107,7 @@ storage/
   thumbs/                       encrypted thumbnail cache (safe to delete)
   temp/                         unfinished uploads (cleared after 24 h)
   chat_temp/                    chat files (deleted after 10 minutes)
+  tools/                        yt-dlp and ffmpeg, installed automatically (safe to delete)
   backups/                      database snapshots taken before upgrades
 ```
 
@@ -119,4 +127,4 @@ To back up, stop the server and copy `storage/` **together with your `MASTER_KEY
 
 ## License
 
-Source-available. See [LICENSE](LICENSE). © 2026 Akulav.
+Source-available. See [LICENSE](LICENSE). Â© 2026 Akulav.

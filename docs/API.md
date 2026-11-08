@@ -53,6 +53,19 @@ All endpoints are JSON unless noted. Authenticate with `Authorization: Bearer <t
 | PATCH | `/api/library/meta/:fileId` | Title, participants, tags, details, date, series, rating, duration, thumb_file_id, progress |
 | POST | `/api/library/meta/bulk` | `{ file_ids, add_participants, remove_participants, add_tags, remove_tags, set }` |
 
+## Video collections
+`/api/media-collections?kind=videos` (GET: with `item_count`, `total_duration`, `display_cover_id`; POST `{ kind, title, file_ids? }`), `/api/media-collections/:id` (PATCH `{ title?, notes?, cover_file_id? }`, DELETE: the videos stay), `/:id/favorite` (PATCH), `/:id/items` (GET; POST `{ file_ids }`), `/:id/items/remove` (POST `{ file_ids }`), `/:id/order` (PUT `{ file_ids }`).
+
+## Link downloads
+| Method | Path | |
+| --- | --- | --- |
+| GET | `/api/downloads/status` | `{ enabled, available, ytdlp, ffmpeg, av1, installing, step, error }` |
+| GET | `/api/downloads?kind=video\|audio` | My recent jobs: `status` is `queued`, `probing`, `downloading`, `converting`, `processing`, `done`, `error`, `cancelled` or `expanded` (a playlist that became one job per entry) |
+| POST | `/api/downloads` | `{ url, kind }`. Several links can be separated by spaces |
+| DELETE | `/api/downloads/:id` | Cancel, or remove a finished job from the list |
+| POST | `/api/downloads/clear` | Remove finished jobs |
+| POST | `/api/downloads/tools` | Admins: `{ action: 'install' \| 'update' }` reinstalls the tools or updates yt-dlp |
+
 ## Albums
 `/api/collections` (GET, POST), `/api/collections/:id` (DELETE), `/:id/title`, `/:id/notes`, `/:id/favorite`, `/:id/cover` (PATCH), `/:id/download`, `/:colId/images`, `/:colId/albums` (GET, POST).
 `/api/albums/:id` (DELETE), `/:id/title`, `/:id/notes`, `/:id/favorite`, `/:id/cover` (PATCH), `/:id/images` (GET, POST `{ file_id }`), `/:id/images/bulk` and `/:id/images/remove` (POST `{ file_ids }`), `/:id/images/:fileId` (DELETE), `/:id/download`, `/api/albums/migrate` (POST).

@@ -52,6 +52,7 @@
   <link rel="modulepreload" href="/components/Brand.js">
   <link rel="modulepreload" href="/components/Shell.js">
   <link rel="modulepreload" href="/components/Library.js">
+  <link rel="modulepreload" href="/components/Downloads.js">
   <link rel="modulepreload" href="/components/FileViewer.js">
   <link rel="modulepreload" href="/components/EpubReader.js">
   <link rel="modulepreload" href="/pages/FileManager.js">
@@ -222,8 +223,8 @@
     .menu-sep { height: 1px; background: rgb(var(--line)); margin: 4px 6px; }
 
     .seg { display: inline-flex; padding: 3px; border-radius: 10px; background: rgb(var(--elevated)); gap: 2px; }
-    .seg > button { height: 28px; padding: 0 10px; border-radius: 7px; color: rgb(var(--muted)); font-size: 12.5px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }
-    .seg > button.on { background: rgb(var(--surface)); color: rgb(var(--fg)); box-shadow: 0 1px 2px rgb(0 0 0 / .2); }
+    .seg > button, .seg > a { height: 28px; padding: 0 10px; border-radius: 7px; color: rgb(var(--muted)); font-size: 12.5px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }
+    .seg > button.on, .seg > a.on { background: rgb(var(--surface)); color: rgb(var(--fg)); box-shadow: 0 1px 2px rgb(0 0 0 / .2); }
 
     /* top navigation: one segmented pill of sections */
     .topnav { display: flex; gap: 2px; padding: 4px; border-radius: 14px; background: rgb(var(--elevated) / .55); border: 1px solid rgb(var(--line) / .7); }
@@ -245,6 +246,41 @@
     .avatar-ring > span:first-child { border-radius: 999px; box-shadow: 0 0 0 2px rgb(var(--surface)); }
     .avatar-ring:hover, .avatar-ring.on { box-shadow: 0 0 0 3px rgb(var(--accent) / .25); }
     .avatar-ring:active { transform: scale(.96); }
+
+    /* square tiles (Files grid, collections): a big tilted watermark of the type behind the name */
+    .tile { --tint: rgb(var(--accent)); position: relative; aspect-ratio: 1; border-radius: 14px; overflow: hidden; isolation: isolate; cursor: pointer;
+      border: 1px solid rgb(var(--line)); color: var(--tint);
+      background: radial-gradient(120% 90% at 100% 100%, color-mix(in srgb, var(--tint) 16%, transparent), transparent 70%), rgb(var(--surface) / .92); }
+    .tile-folder { --tint: rgb(var(--accent)); }
+    .tile-system { --tint: rgb(var(--accent)); background: radial-gradient(120% 90% at 100% 100%, rgb(var(--accent) / .3), transparent 70%), rgb(var(--accent) / .08); border-color: rgb(var(--accent) / .35); }
+    .tile-mark { position: absolute; right: -16%; bottom: -14%; width: 82% !important; height: 82% !important; opacity: .14; transform: rotate(-12deg); z-index: 0; pointer-events: none;
+      transition: transform .6s cubic-bezier(.2,.8,.2,1), opacity .3s; }
+    .tile:hover .tile-mark { transform: rotate(-5deg) scale(1.06); opacity: .22; }
+    .tile-badge { position: absolute; top: 9px; left: 9px; z-index: 2; display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: 99px;
+      font-size: 10.5px; font-weight: 600; letter-spacing: .02em; transition: opacity .15s; }
+    .tile-ext { background: color-mix(in srgb, var(--tint) 20%, transparent); color: var(--tint); font-family: 'Geist Mono', monospace; }
+    .tile-count { position: absolute; left: 10px; top: 32%; z-index: 1; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 750; font-size: clamp(26px, 3.4vw, 44px);
+      line-height: 1; letter-spacing: -.03em; opacity: .9; }
+    .tile-cap { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; padding: 22px 10px 9px; color: rgb(var(--fg));
+      background: linear-gradient(to top, rgb(var(--surface) / .95) 35%, rgb(var(--surface) / 0)); }
+    .tile-sub { color: rgb(var(--muted)); }
+    .tile-media .tile-cap { color: #fff; background: linear-gradient(to top, rgb(0 0 0 / .72), rgb(0 0 0 / 0)); opacity: 0; transform: translateY(6px); transition: opacity .2s, transform .25s; }
+    .tile-media .tile-sub { color: rgb(255 255 255 / .75); }
+    .tile-media:hover .tile-cap, .tile-media.tile-sel .tile-cap, .tile-cap-on .tile-cap { opacity: 1; transform: none; }
+    .tile-cap-on:hover .tile-badge { opacity: 1; }
+    .tile-check { position: absolute; top: 9px; left: 9px; z-index: 3; background: rgb(var(--surface)); opacity: 0; transition: opacity .15s; }
+    .tile:hover .tile-check { opacity: 1; }
+    .tile:hover .tile-badge, .tile-sel .tile-badge { opacity: 0; }
+    .tile-more { position: absolute; top: 6px; right: 6px; z-index: 3; width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center;
+      background: rgb(var(--surface) / .85); color: rgb(var(--fg)); opacity: 0; transition: opacity .15s; }
+    .tile:hover .tile-more, .tile-more:focus-visible { opacity: 1; }
+    .tile-shared { position: absolute; top: 9px; right: 9px; z-index: 2; width: 22px; height: 22px; border-radius: 99px; display: grid; place-items: center;
+      background: rgb(var(--accent)); color: rgb(var(--accent-fg)); }
+    .tile:hover .tile-shared { opacity: 0; }
+    .tile-sel { outline: 2px solid rgb(var(--accent)); outline-offset: -2px; }
+    .tile-drop { outline: 2px dashed rgb(var(--accent)); outline-offset: -2px; background: rgb(var(--accent) / .12); }
+    /* touch screens: no hover, so the controls stay visible (the checkbox takes the badge's corner) */
+    @media (hover: none) { .tile-check, .tile-more { opacity: 1; } .tile-badge, .tile-shared { display: none; } .tile-media .tile-cap { opacity: 1; transform: none; } }
 
     .meter { height: 6px; border-radius: 99px; background: rgb(var(--elevated)); overflow: hidden; }
     .meter > span { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, rgb(var(--accent)), rgb(var(--accent-hi))); transition: width .6s cubic-bezier(.2,.8,.2,1); position: relative; overflow: hidden; }

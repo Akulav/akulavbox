@@ -85,6 +85,21 @@ export default {
             </div>
           </dl>
           <div v-else class="grid grid-cols-2 gap-3"><div v-for="i in 8" :key="i" class="h-16 rounded-xl skeleton"></div></div>
+          <div v-if="sys && sys.downloader && sys.downloader.enabled" class="mt-4 rounded-xl border border-line p-3.5">
+            <div class="flex items-center gap-2 mb-2">
+              <Icon name="download" :size="15" class="text-accent" /><p class="font-medium text-[13.5px] flex-1">Link downloader</p>
+              <span class="chip" :class="sys.downloader.available ? 'chip-ok' : sys.downloader.installing ? 'chip-accent' : '!bg-danger/15 !text-danger'">{{ sys.downloader.available ? 'Ready' : sys.downloader.installing ? 'Installing' : 'Not available' }}</span>
+            </div>
+            <p class="text-[12px] text-muted leading-relaxed">
+              yt-dlp {{ sys.downloader.ytdlp || '—' }} · ffmpeg {{ sys.downloader.ffmpeg || '—' }}<template v-if="sys.downloader.av1"> · AV1 conversion on</template>
+            </p>
+            <p v-if="sys.downloader.installing" class="text-[12px] text-accent mt-1 flex items-center gap-1.5"><Icon name="loader" :size="12" />{{ sys.downloader.step }}</p>
+            <p v-else-if="sys.downloader.error" class="text-[12px] text-danger mt-1">{{ sys.downloader.error }}</p>
+            <div class="flex gap-2 mt-3">
+              <button class="btn btn-sm" :disabled="sys.downloader.installing" @click="toolAction('update')"><Icon name="rotate" :size="13" />Update yt-dlp</button>
+              <button class="btn btn-sm" :disabled="sys.downloader.installing" @click="toolAction('install')"><Icon name="download" :size="13" />Reinstall tools</button>
+            </div>
+          </div>
           <p v-if="sys" class="text-[11.5px] text-faint mt-4">Measured {{ formatRelative(sys.measured_at) }}. Trash keeps items {{ sys.trash_days }} days.</p>
         </div>
       </section>
@@ -184,6 +199,13 @@ export default {
     };
     const refresh = (fresh) => Promise.all([fetchUsers(), fetchSystem(fresh)]);
 
+    // installs run in the background on the server: re-check until they finish
+    async function toolAction(action) {
+      if (!await attempt(() => api('/api/downloads/tools', { method: 'POST', body: { action } }), action === 'update' ? 'Updating yt-dlp…' : 'Reinstalling the download tools…')) return;
+      const poll = async () => { await fetchSystem(true); if (sys.value?.downloader?.installing) setTimeout(poll, 3000); };
+      setTimeout(poll, 1500);
+    }
+
     async function createUser() {
       busy.value = true;
       await attempt(async () => {
@@ -230,6 +252,6 @@ export default {
 
     onMounted(() => refresh(false));
     return { users, sys, sysBusy, busy, form, search, filtered, totalUsed, totalQuota, pctOf, otherBytes, pct, freePct, parts, stats, GB,
-      refresh, createUser, editQuota, resetPassword, toggleRole, signOut, deleteUser, formatBytes, formatRelative, session };
+      refresh, toolAction, createUser, editQuota, resetPassword, toggleRole, signOut, deleteUser, formatBytes, formatRelative, session };
   },
 };

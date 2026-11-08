@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const db = require('./db');
 const config = require('./config');
 const thumbs = require('./thumbs');
+const { pipeline } = require('stream/promises');
 
 // ---------------------------------------------------------------------------
 // On-disk layout and encryption (unchanged since 1.0, so old files keep working):
@@ -90,10 +91,34 @@ function purgeFile(file) {
   db.prepare('UPDATE albums SET cover_file_id = NULL WHERE cover_file_id = ?').run(file.id);
   db.prepare('UPDATE collections SET cover_file_id = NULL WHERE cover_file_id = ?').run(file.id);
   db.prepare('UPDATE playlists SET cover_file_id = NULL WHERE cover_file_id = ?').run(file.id);
+  db.prepare('DELETE FROM media_collection_items WHERE file_id = ?').run(file.id);
+  db.prepare('UPDATE media_collections SET cover_file_id = NULL WHERE cover_file_id = ?').run(file.id);
   db.prepare('DELETE FROM media_meta WHERE file_id = ?').run(file.id);
   db.prepare('UPDATE media_meta SET thumb_file_id = NULL WHERE thumb_file_id = ?').run(file.id);
   thumbs.purge(file.owner_id, file.id);
   db.prepare('UPDATE users SET used_bytes = MAX(0, used_bytes - ?) WHERE id = ?').run(file.size_bytes, file.owner_id);
+}
+
+/**
+ * Encrypt a file that is already on this server (e.g. a finished link download)
+ * into someone's storage. Checks quota and free disk first. Returns the new file row.
+ */
+async function storeFile({ ownerId, folderId, srcPath, filename, mime }) {
+  const size = fs.statSync(srcPath).size;
+  const u = db.prepare('SELECT quota_bytes, used_bytes FROM users WHERE id = ?').get(ownerId);
+  if (!u || u.used_bytes + size > u.quota_bytes) throw Object.assign(new Error('Storage quota exceeded'), { code: 'QUOTA' });
+  if (!hasRoomFor(size)) throw Object.assign(new Error('The server’s disk is full'), { code: 'DISK' });
+  const id = crypto.randomUUID();
+  const iv = crypto.randomBytes(16).toString('hex');
+  fs.mkdirSync(userDirOf(ownerId), { recursive: true });
+  const dest = path.join(userDirOf(ownerId), `${id}.enc`);
+  await pipeline(fs.createReadStream(srcPath), ctrAt(iv, 0), fs.createWriteStream(dest));
+  db.tx(() => {
+    db.prepare(`INSERT INTO files (id, owner_id, folder_id, filename, size_bytes, mime_type, is_encrypted, iv_hex, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, 1, ?, datetime('now'))`).run(id, ownerId, folderId, filename, size, mime, iv);
+    db.prepare('UPDATE users SET used_bytes = used_bytes + ? WHERE id = ?').run(size, ownerId);
+  });
+  return db.prepare('SELECT * FROM files WHERE id = ?').get(id);
 }
 
 // ---------------------------------------------------------------------------
@@ -120,4 +145,4 @@ function appendToZip(archive, entries) {
   }
 }
 
-module.exports = { MASTER_KEY, userDirOf, diskPathOf, ctrAt, readRange, readAll, diskSpace, hasRoomFor, dirSize, purgeFile, appendToZip };
+module.exports = { MASTER_KEY, userDirOf, diskPathOf, ctrAt, readRange, readAll, diskSpace, hasRoomFor, dirSize, purgeFile, appendToZip, storeFile };

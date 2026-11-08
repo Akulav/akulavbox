@@ -192,32 +192,37 @@ export default {
       </div>
 
       <!-- GRID -->
-      <div v-else class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 2xl:grid-cols-7 gap-3 stagger">
+      <!-- square tiles: a big tilted watermark of the type, a badge, and the name on a fade at the bottom -->
+      <div v-else class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-9 gap-2.5 stagger">
         <div v-for="f in visibleFolders" :key="'d' + f.id"
-             class="group relative panel !shadow-none p-3 cursor-pointer hover:border-faint lift"
-             :class="[isSel('folder', f.id) ? '!border-accent' : '', dropTarget === f.id ? '!border-accent bg-accent/10' : '']"
-             :draggable="!f.is_system" @dragstart="onDragStart($event, 'folder', f)" @dragend="dragging = null"
+             class="group tile lift" :class="[f.system_key ? 'tile-system' : 'tile-folder', isSel('folder', f.id) ? 'tile-sel' : '', dropTarget === f.id ? 'tile-drop' : '']"
+             :title="f.name" :draggable="!f.is_system" @dragstart="onDragStart($event, 'folder', f)" @dragend="dragging = null"
              @dragover.prevent.stop="onDragOverFolder($event, f.id)" @dragleave="dropTarget = null" @drop.stop.prevent="onDropOnFolder($event, f.id)"
              @click="onRowClick($event, 'folder', f)" @contextmenu.prevent="openMenu($event, 'folder', f)">
-          <div class="aspect-[4/3] rounded-lg grid place-items-center mb-2.5" :class="f.system_key ? 'bg-accent/10' : 'bg-elevated/60'"><FolderGlyph :size="52" :system-key="f.system_key" /></div>
-          <p class="truncate text-[13.5px] font-medium">{{ f.name }}</p>
-          <p class="text-xs flex items-center gap-1" :class="f.system_key ? 'text-accent' : 'text-faint'"><template v-if="f.system_key"><Icon name="lock" :size="11" :stroke="2.25" />{{ SECTION_OF[f.system_key] }}, </template>{{ f.item_count || 0 }} items</p>
-          <input type="checkbox" class="checkbox absolute top-2.5 left-2.5 bg-surface" :class="isSel('folder', f.id) ? '' : 'opacity-0 group-hover:opacity-100'" :checked="isSel('folder', f.id)" @click.stop="toggleSel('folder', f.id, $event)">
-          <button class="icon-btn icon-btn-sm absolute top-2 right-2 bg-surface/80 opacity-0 group-hover:opacity-100" @click.stop="openMenu($event, 'folder', f)"><Icon name="more" :size="16" /></button>
+          <Icon :name="f.system_key ? (SYS_ICON[f.system_key] || 'box') : 'folder'" size="100%" :stroke="1.25" class="tile-mark" />
+          <span class="tile-badge" :class="f.system_key ? 'bg-accent text-accent-fg' : 'bg-accent/15 text-accent'"><Icon :name="f.system_key ? 'lock' : 'folder'" :size="11" :stroke="2.25" />{{ f.system_key ? SECTION_OF[f.system_key] : 'Folder' }}</span>
+          <span class="tile-count">{{ f.item_count || 0 }}</span>
+          <div class="tile-cap">
+            <p class="truncate text-[13px] font-semibold leading-tight">{{ f.name }}</p>
+            <p class="text-[11px] text-muted leading-tight mt-0.5">{{ f.item_count === 1 ? '1 item' : (f.item_count || 0) + ' items' }} · {{ formatBytes(f.size_bytes) }}</p>
+          </div>
+          <input type="checkbox" class="checkbox tile-check" :class="isSel('folder', f.id) ? '!opacity-100' : ''" :checked="isSel('folder', f.id)" @click.stop="toggleSel('folder', f.id, $event)" :aria-label="'Select ' + f.name">
+          <button class="tile-more" @click.stop="openMenu($event, 'folder', f)" :aria-label="'Actions for ' + f.name"><Icon name="more" :size="16" /></button>
         </div>
         <div v-for="(file, i) in visibleFiles" :key="file.id"
-             class="group relative panel !shadow-none p-3 cursor-pointer hover:border-faint lift"
-             :class="isSel('file', file.id) ? '!border-accent' : ''"
-             draggable="true" @dragstart="onDragStart($event, 'file', file)" @dragend="dragging = null"
+             class="group tile lift" :class="[isImageKind(kindOf(file)) ? 'tile-media' : '', isSel('file', file.id) ? 'tile-sel' : '']" :style="isImageKind(kindOf(file)) ? '' : tileVars(file)"
+             :title="file.filename" draggable="true" @dragstart="onDragStart($event, 'file', file)" @dragend="dragging = null"
              @click="onRowClick($event, 'file', file, i)" @contextmenu.prevent="openMenu($event, 'file', file)">
-          <div class="aspect-[4/3] rounded-lg overflow-hidden mb-2.5 grid place-items-center zoom-media" :style="isImageKind(kindOf(file)) ? '' : tileStyle(file)">
-            <Thumb v-if="isImageKind(kindOf(file))" :file-id="file.id" :w="480" />
-            <Icon v-else :name="iconFor(kindOf(file))" :size="34" :stroke="1.4" />
+          <div v-if="isImageKind(kindOf(file))" class="absolute inset-0 zoom-media"><Thumb :file-id="file.id" :w="480" /></div>
+          <Icon v-else :name="iconFor(kindOf(file))" size="100%" :stroke="1.25" class="tile-mark" />
+          <span v-if="!isImageKind(kindOf(file))" class="tile-badge tile-ext">{{ extLabel(file) }}</span>
+          <span v-if="!file.is_encrypted" class="tile-shared" title="Shared publicly"><Icon name="globe" :size="12" /></span>
+          <div class="tile-cap">
+            <p class="truncate text-[13px] font-semibold leading-tight">{{ file.filename }}</p>
+            <p class="text-[11px] leading-tight mt-0.5 tile-sub">{{ formatBytes(file.size_bytes) }} · {{ formatDate(file.created_at) }}</p>
           </div>
-          <p class="truncate text-[13.5px]" :title="file.filename">{{ file.filename }}</p>
-          <p class="text-xs text-faint flex items-center gap-1">{{ formatBytes(file.size_bytes) }}<Icon v-if="!file.is_encrypted" name="globe" :size="12" class="text-accent" /></p>
-          <input type="checkbox" class="checkbox absolute top-2.5 left-2.5 bg-surface" :class="isSel('file', file.id) ? '' : 'opacity-0 group-hover:opacity-100'" :checked="isSel('file', file.id)" @click.stop="toggleSel('file', file.id, $event)">
-          <button class="icon-btn icon-btn-sm absolute top-2 right-2 bg-surface/80 opacity-0 group-hover:opacity-100" @click.stop="openMenu($event, 'file', file)"><Icon name="more" :size="16" /></button>
+          <input type="checkbox" class="checkbox tile-check" :class="isSel('file', file.id) ? '!opacity-100' : ''" :checked="isSel('file', file.id)" @click.stop="toggleSel('file', file.id, $event)" :aria-label="'Select ' + file.filename">
+          <button class="tile-more" @click.stop="openMenu($event, 'file', file)" :aria-label="'Actions for ' + file.filename"><Icon name="more" :size="16" /></button>
         </div>
       </div>
 
@@ -328,9 +333,10 @@ export default {
     const results = ref(null);
     const searching = computed(() => query.value.trim().length >= 2);
 
-    const layout = ref(storage.read('akulavLayout') || 'list');
+    // tiles are the default (the new storage key moves everyone onto them once; the toggle still remembers a choice)
+    const layout = ref(storage.read('akulavLayout2') || 'grid');
     const sortKey = ref(storage.read('akulavSort') || 'name');
-    watch(layout, v => storage.write('akulavLayout', v));
+    watch(layout, v => storage.write('akulavLayout2', v));
     watch(sortKey, v => storage.write('akulavSort', v));
 
     const selection = reactive({ files: [], folders: [] });
@@ -672,6 +678,8 @@ export default {
     }
 
     const tileStyle = (file) => { const t = tintFor(kindOf(file)); return { background: t + '1f', color: t }; };
+    const tileVars = (file) => ({ '--tint': tintFor(kindOf(file)) });
+    const extLabel = (file) => { const e = (file.filename || '').split('.'); return e.length > 1 ? e.pop().slice(0, 5).toUpperCase() : 'FILE'; };
 
     const onKey = (e) => {
       if (viewer.value || move.open || document.querySelector('[role=dialog]')) return;
@@ -698,7 +706,7 @@ export default {
       share, unshare, copyLink, move, openMove, moveOptions, confirmMove,
       dragging, dropTarget, externalDrag, onDragStart, onDragOverFolder, onDropOnFolder, onDragEnter, onDragLeave, onDragOverPage, onDropPage, onPick,
       lockedHere, thumbUrl, SECTION_OF, ROUTE_OF, ACCEPTS_LABEL,
-      fileUrl, formatBytes, formatDate, kindOf, iconFor, isImageKind, tileStyle,
+      fileUrl, formatBytes, formatDate, kindOf, iconFor, isImageKind, tileStyle, tileVars, extLabel, SYS_ICON,
     };
   },
 };

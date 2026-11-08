@@ -185,8 +185,8 @@ createApp({
             <FileManager v-if="route.tab === 'files'" key="files" :folder-id="route.arg" @navigate="goFolder" />
             <Trash v-else-if="route.tab === 'trash'" key="trash" />
             <CustomAlbums v-else-if="route.tab === 'albums'" key="albums" :args="route.args" />
-            <MediaLibrary v-else-if="route.tab === 'videos'" key="videos" kind="videos" />
-            <MediaLibrary v-else-if="route.tab === 'books'" key="books" kind="books" />
+            <MediaLibrary v-else-if="route.tab === 'videos'" key="videos" kind="videos" :args="route.args" />
+            <MediaLibrary v-else-if="route.tab === 'books'" key="books" kind="books" :args="route.args" />
             <Music v-else-if="route.tab === 'music'" key="music" />
             <ChatVoice v-else-if="route.tab === 'chat'" key="chat" />
             <Profile v-else-if="route.tab === 'profile'" key="profile" />

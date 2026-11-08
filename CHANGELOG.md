@@ -2,6 +2,23 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 2.1.0 (2026-11-08)
+
+### New
+- **Download from a link.** Paste a YouTube, Vimeo, SoundCloud or other link (or a whole playlist or channel) in Videos or Music, or paste it anywhere on those pages. AkulavBox downloads it and fills in the title, creator, date, length, description and cover. Progress shows live, and you can cancel or retry. The same link twice isn’t downloaded again.
+- **Organized by creator automatically.** Each downloaded video is filed into a collection named after its channel, and each song into a playlist named after its artist.
+- **Space-efficient AV1 video.** Downloads use the site’s AV1 stream when there is one (YouTube usually has it). Anything else is re-encoded to AV1, and kept only if it comes out smaller. Turn this off with `VIDEO_AV1=off`.
+- **Zero setup.** The server installs yt-dlp and ffmpeg itself, on Windows or Linux (x64 or ARM). Both come from their official GitHub releases and are checked against the published SHA-256 sums. yt-dlp updates itself daily. Admin shows the downloader’s status, with Update and Reinstall buttons.
+- **Video collections**, like music playlists: create, rename, favorite, set a cover, add from a video’s menu or a selection, drag to reorder, and Play all or Shuffle with the next video starting automatically.
+- **Creators view** in Videos: one tile per creator, with their newest cover, how many videos they have and the total length.
+- **Square tiles** in Files: denser, with a large watermark of each item’s type, a type badge, and the name and size on the tile. Photos fill their tile. Photo collections and albums use square tiles too. Tiles are now the default view.
+
+### Changed
+- Files shows just Photos, Music, Videos and Books. The Covers and Artwork folders inside them are hidden from Files, search and Move, because their sections manage them.
+
+### Fixed
+- Video counts under a minute showed “0 min”.
+
 ## 2.0.1 (2026-11-07)
 
 ### Fixed

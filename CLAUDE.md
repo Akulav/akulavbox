@@ -6,6 +6,7 @@ Notes for working on AkulavBox, a self-hosted personal cloud made by Akulav. Rea
 
 - `npm start`: the server on `PORT` (default 3000), using `./storage` and `.env`.
 - `npm run check`: **run this after backend changes.** It boots a throwaway server (temporary `STORAGE_DIR`, random port, generated keys) and exercises the API end to end. It never touches `storage/`.
+- `npm run check` tests link downloads with `scripts/test/fake-yt-dlp.js`, a stand-in that answers like yt-dlp with no network access. Real downloads use the tools auto-installed into `storage/tools/` (`src/core/tools.js`). For a real test, use a throwaway `STORAGE_DIR`, which installs a fresh copy.
 - `node scripts/check.js --db <copy-of-real.db>`: also verifies that migrations and read endpoints work against a copy of a real database. Never point it at the live file.
 - For UI testing, start a separate instance: set `STORAGE_DIR` to a temp folder, set another `PORT`, and use test values for `MASTER_KEY` (32 characters) and `JWT_SECRET`. A fresh instance signs in as `admin` / `admin`.
 - `node scripts/icons.js` regenerates the PNG and ICO icons from `frontend/favicon.svg` (needs `sharp`).

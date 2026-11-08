@@ -240,6 +240,52 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    name: 'video collections, link downloads, where media came from',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS media_collections (
+          id TEXT PRIMARY KEY,
+          owner_id TEXT NOT NULL,
+          kind TEXT NOT NULL DEFAULT 'videos',
+          title TEXT NOT NULL,
+          notes TEXT DEFAULT '',
+          cover_file_id TEXT,
+          is_favorite INTEGER DEFAULT 0,
+          created_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_media_collections_owner ON media_collections(owner_id, kind);
+        CREATE TABLE IF NOT EXISTS media_collection_items (
+          collection_id TEXT NOT NULL,
+          file_id TEXT NOT NULL,
+          position INTEGER,
+          added_at TEXT,
+          PRIMARY KEY (collection_id, file_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_media_collection_items_file ON media_collection_items(file_id);
+        CREATE TABLE IF NOT EXISTS downloads (
+          id TEXT PRIMARY KEY,
+          owner_id TEXT NOT NULL,
+          url TEXT NOT NULL,
+          kind TEXT NOT NULL,
+          status TEXT NOT NULL,
+          progress REAL DEFAULT 0,
+          title TEXT,
+          creator TEXT,
+          file_id TEXT,
+          error TEXT,
+          speed REAL,
+          created_at TEXT,
+          updated_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_downloads_owner ON downloads(owner_id, created_at);
+      `);
+      // source_id ("Youtube:abc123") lets a second paste of the same link find the copy you already have
+      addColumn(db, 'media_meta', 'source_url', 'TEXT');
+      addColumn(db, 'media_meta', 'source_id', 'TEXT');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_media_meta_source ON media_meta(owner_id, source_id)');
+    },
+  },
 ];
 
 const LATEST = MIGRATIONS.length;

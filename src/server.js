@@ -56,6 +56,8 @@ fastify.register(require('./modules/albums'));
 fastify.register(require('./modules/chat'));
 fastify.register(require('./modules/music'));
 fastify.register(require('./modules/library'));
+fastify.register(require('./modules/collections'));
+fastify.register(require('./modules/downloads'));
 
 // Unknown /api routes answer in JSON; anything else falls back to the app
 fastify.setNotFoundHandler((request, reply) => {

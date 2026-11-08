@@ -22,6 +22,10 @@ const SYSTEM = {
   book_covers:  { name: 'Covers',  section: 'Books',  accepts: 'image', parent: 'books', role: 'Book cover images' },
 };
 const ORDER = Object.keys(SYSTEM);
+// Covers and artwork are managed by their section, so Files doesn't show them:
+// Files shows just Photos, Music, Videos and Books.
+const HIDDEN = Object.keys(SYSTEM).filter(k => SYSTEM[k].parent);
+const HIDDEN_SQL = `(${HIDDEN.map(k => `'${k}'`).join(', ')})`;
 
 const BOOK_EXT = ['pdf', 'epub', 'mobi', 'azw', 'azw3', 'djvu', 'fb2', 'cbz', 'cbr', 'txt'];
 const IMAGE_EXT = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'bmp', 'heic', 'heif', 'svg', 'tif', 'tiff'];
@@ -137,4 +141,4 @@ function deleteMetaFor(fileId) {
   db.prepare('UPDATE media_meta SET thumb_file_id = NULL WHERE thumb_file_id = ?').run(fileId);
 }
 
-module.exports = { SYSTEM, ORDER, categoryOf, ensureSystemFolder, systemKeyOf, accepts, rejectMessage, withMeta, parseList, META_COLS, deleteMetaFor };
+module.exports = { SYSTEM, ORDER, HIDDEN, HIDDEN_SQL, categoryOf, ensureSystemFolder, systemKeyOf, accepts, rejectMessage, withMeta, parseList, META_COLS, deleteMetaFor };
