@@ -7,7 +7,8 @@ import { toast, confirmDialog, promptDialog, attempt } from '../lib/ui.js';
 import { uploadMany, uploadFile, uploadTick, filesFromDrop, filesFromPicker } from '../lib/upload.js';
 import { moveToTrash, countLabel } from '../lib/trash.js';
 import { kindOf, iconFor, tintFor, isImageKind } from '../lib/filetypes.js';
-import { thumbUrl, SECTION_OF, ROUTE_OF, ACCEPTS_LABEL } from '../lib/library.js';
+import { thumbUrl, SECTION_OF, ROUTE_OF, ACCEPTS_LABEL, compareText } from '../lib/library.js';
+import { useRenderLimit } from '../lib/lists.js';
 
 const SYS_ICON = { gallery: 'images', music: 'music', music_art: 'image', videos: 'film', video_covers: 'image', books: 'file-text', book_covers: 'image' };
 const SYS_ORDER = ['gallery', 'music', 'music_art', 'videos', 'video_covers', 'books', 'book_covers'];
@@ -158,7 +159,7 @@ export default {
           </li>
           </template>
 
-          <li v-for="(file, i) in visibleFiles" :key="file.id"
+          <li v-for="(file, i) in shownFiles" :key="file.id"
               class="group grid grid-cols-[32px_minmax(0,1fr)_auto] md:grid-cols-[32px_minmax(0,1fr)_110px_110px_76px] items-center gap-3 px-4 h-[58px] border-b border-line last:border-0 cursor-pointer row-hover"
               :class="isSel('file', file.id) ? 'bg-accent/[0.07]' : ''"
               draggable="true" @dragstart="onDragStart($event, 'file', file)" @dragend="dragging = null"
@@ -209,7 +210,7 @@ export default {
           <input type="checkbox" class="checkbox tile-check" :class="isSel('folder', f.id) ? '!opacity-100' : ''" :checked="isSel('folder', f.id)" @click.stop="toggleSel('folder', f.id, $event)" :aria-label="'Select ' + f.name">
           <button class="tile-more" @click.stop="openMenu($event, 'folder', f)" :aria-label="'Actions for ' + f.name"><Icon name="more" :size="16" /></button>
         </div>
-        <div v-for="(file, i) in visibleFiles" :key="file.id"
+        <div v-for="(file, i) in shownFiles" :key="file.id"
              class="group tile lift" :class="[isImageKind(kindOf(file)) ? 'tile-media' : '', isSel('file', file.id) ? 'tile-sel' : '']" :style="isImageKind(kindOf(file)) ? '' : tileVars(file)"
              :title="file.filename" draggable="true" @dragstart="onDragStart($event, 'file', file)" @dragend="dragging = null"
              @click="onRowClick($event, 'file', file, i)" @contextmenu.prevent="openMenu($event, 'file', file)">
@@ -226,6 +227,7 @@ export default {
         </div>
       </div>
 
+      <div v-if="moreFiles && (visibleFolders.length || visibleFiles.length)" ref="filesEnd" class="h-px" aria-hidden="true"></div>
       <p v-if="loaded && !searching && (folders.length || files.length)" class="text-faint text-xs mt-3 px-1">
         {{ folders.length }} folder{{ folders.length === 1 ? '' : 's' }}, {{ files.length }} file{{ files.length === 1 ? '' : 's' }}, {{ formatBytes(totalSize) }}
       </p>
@@ -379,18 +381,20 @@ export default {
       switch (sortKey.value) {
         case 'size': return (b.size_bytes || 0) - (a.size_bytes || 0);
         case 'date': return String(b.created_at || '').localeCompare(String(a.created_at || ''));
-        case 'type': return kindOf(a).localeCompare(kindOf(b)) || getName(a).localeCompare(getName(b), undefined, { numeric: true, sensitivity: 'base' });
-        default: return getName(a).localeCompare(getName(b), undefined, { numeric: true, sensitivity: 'base' });
+        case 'type': return kindOf(a).localeCompare(kindOf(b)) || compareText(getName(a), getName(b));
+        default: return compareText(getName(a), getName(b));
       }
     };
     const visibleFolders = computed(() => {
       const list = searching.value ? (results.value?.folders || []) : folders.value;
       const rank = (f) => f.system_key ? SYS_ORDER.indexOf(f.system_key) : 99;
-      const byName = (a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+      const byName = (a, b) => rank(a) - rank(b) || compareText(a.name, b.name);
       return [...list].sort(sortKey.value === 'size' ? (a, b) => rank(a) - rank(b) || sorter(f => f.name)(a, b) : byName);
     });
     const visibleFiles = computed(() => [...(searching.value ? (results.value?.files || []) : files.value)].sort(sorter(f => f.filename)));
     const totalSize = computed(() => files.value.reduce((s, f) => s + (f.size_bytes || 0), 0) + folders.value.reduce((s, f) => s + (f.size_bytes || 0), 0));
+    // a folder with thousands of files builds them a chunk at a time (see lib/lists.js)
+    const { shown: shownFiles, more: moreFiles, end: filesEnd } = useRenderLimit(visibleFiles, { step: 200, resetOn: () => [props.folderId, searching.value && results.value, sortKey.value, layout.value] });
 
     // ---------- navigation ----------
     const navigate = (id) => { query.value = ''; emit('navigate', id || null); };
@@ -401,7 +405,10 @@ export default {
     watch(() => props.folderId, () => { clearSelection(); load(); });
 
     // ---------- selection ----------
-    const isSel = (type, id) => (type === 'file' ? selection.files : selection.folders).includes(id);
+    // Sets for lookups: every row asks, and "select all" in a big folder would make that slow
+    const selFiles = computed(() => new Set(selection.files));
+    const selFolders = computed(() => new Set(selection.folders));
+    const isSel = (type, id) => (type === 'file' ? selFiles : selFolders).value.has(id);
     let lastClicked = null;
     function toggleSel(type, id, ev) {
       const list = type === 'file' ? selection.files : selection.folders;
@@ -409,7 +416,8 @@ export default {
       if (ev && ev.shiftKey && lastClicked && lastClicked.type === type && type === 'file') {
         const ids = visibleFiles.value.map(f => f.id);
         const [a, b] = [ids.indexOf(lastClicked.id), ids.indexOf(id)].sort((x, y) => x - y);
-        for (const fid of ids.slice(a, b + 1)) if (!list.includes(fid)) list.push(fid);
+        const have = selFiles.value;
+        list.push(...ids.slice(a, b + 1).filter(fid => !have.has(fid)));
       } else {
         const i = list.indexOf(id);
         if (i === -1) list.push(id); else list.splice(i, 1);
@@ -699,7 +707,7 @@ export default {
 
     return {
       folderInput, newMenu, onPickFolder, createTextFile, account,
-      folders, files, currentPath, loading, loaded, fileInput, query, searching, layout, sortKey, visibleFolders, visibleFiles, totalSize,
+      folders, files, currentPath, loading, loaded, fileInput, query, searching, layout, sortKey, visibleFolders, visibleFiles, shownFiles, moreFiles, filesEnd, totalSize,
       selection, isSel, toggleSel, selCount, allSelected, someSelected, toggleAll, clearSelection, onRowClick,
       menu, openMenu, act, viewer, openViewer, isEditable, onFileChanged, navigate, goUp,
       createFolder, renameFolder, renameFile, deleteFolder, deleteFile, deleteSelected, downloadFile, downloadFolder, downloadSelected,

@@ -7,7 +7,8 @@ import { Thumb, Stars, MetaEditor, LibraryFilters, labelsFor } from '../componen
 import { api, fileUrl, formatBytes, formatDate, downloadUrl, refreshAccount } from '../lib/api.js';
 import { toast, confirmDialog, promptDialog, attempt } from '../lib/ui.js';
 import { uploadMany } from '../lib/upload.js';
-import { useLibraryFilter, displayTitle, formatDuration, autoCover, backfillCovers, backfillSizes, resolutionLabel, setCover, thumbUrl, preload } from '../lib/library.js';
+import { useLibraryFilter, displayTitle, formatDuration, autoCover, backfillCovers, backfillSizes, resolutionLabel, setCover, thumbUrl, preload, groupByPerson } from '../lib/library.js';
+import { useRenderLimit, useSelection } from '../lib/lists.js';
 import { kindOf } from '../lib/filetypes.js';
 import { moveToTrash } from '../lib/trash.js';
 
@@ -87,10 +88,9 @@ export default {
           <button class="btn btn-primary" @click="newCollection()"><Icon name="plus" :size="16" />New collection</button>
         </div>
         <div v-else :class="TILE_GRID">
-          <a v-for="c in collections" :key="c.id" :href="'#/' + kind + '/collections/' + c.id" class="group tile lift" :class="c.display_cover_id ? 'tile-media tile-cap-on' : 'tile-folder'" :title="c.title">
+          <a v-for="c in shownCollections" :key="c.id" :href="'#/' + kind + '/collections/' + c.id" class="group tile lift" :class="c.display_cover_id ? 'tile-media tile-cap-on' : 'tile-folder'" :title="c.title">
             <div v-if="c.display_cover_id" class="absolute inset-0 zoom-media"><Thumb :file-id="c.display_cover_id" :w="480" :icon="C.icon" /></div>
             <Icon v-else name="list-music" size="100%" :stroke="1.25" class="tile-mark" />
-            <span class="tile-badge" :class="c.display_cover_id ? 'bg-black/55 text-white backdrop-blur' : 'bg-accent/15 text-accent'"><Icon :name="C.icon" :size="11" :stroke="2.25" />{{ c.item_count }}</span>
             <span v-if="!c.display_cover_id" class="tile-count">{{ c.item_count }}</span>
             <span class="absolute z-[2] inset-0 grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" v-if="c.item_count">
               <span class="w-11 h-11 rounded-full bg-accent text-accent-fg grid place-items-center shadow-lg"><Icon name="play" :size="16" class="translate-x-[1px]" /></span>
@@ -105,6 +105,7 @@ export default {
             <button class="tile-more" @click.prevent.stop="openColMenu($event, c)" :aria-label="'Actions for ' + c.title"><Icon name="more" :size="16" /></button>
           </a>
         </div>
+        <div v-if="moreCollections" ref="collectionsEnd" class="h-px" aria-hidden="true"></div>
       </template>
 
       <!-- ===== Creators ===== -->
@@ -116,19 +117,19 @@ export default {
           <p class="text-muted text-[13.5px] max-w-md mx-auto">Creators come from the {{ L.people.toLowerCase() }} on your {{ kind }}. Downloads from a link fill this in for you.</p>
         </div>
         <div v-else :class="TILE_GRID">
-          <a v-for="p in creators" :key="p.value" :href="'#/' + kind" class="group tile lift" :class="p.cover ? 'tile-media tile-cap-on' : ''" :style="p.cover ? '' : { '--tint': p.tint }" :title="p.value" @click="showCreator(p.value)">
+          <a v-for="p in shownCreators" :key="p.value" :href="'#/' + kind" class="group tile lift" :class="p.cover ? 'tile-media tile-cap-on' : ''" :style="p.cover ? '' : { '--tint': p.tint }" :title="p.value" @click="showCreator(p.value)">
             <div v-if="p.cover" class="absolute inset-0 zoom-media"><Thumb :file-id="p.cover" :w="480" :icon="C.icon" /></div>
             <template v-else>
               <Icon name="user" size="100%" :stroke="1.25" class="tile-mark" />
               <span class="tile-count">{{ p.value.charAt(0).toUpperCase() }}</span>
             </template>
-            <span class="tile-badge" :class="p.cover ? 'bg-black/55 text-white backdrop-blur' : 'tile-ext'"><Icon name="users" :size="11" :stroke="2.25" />{{ p.count }}</span>
             <div class="tile-cap">
               <p class="truncate text-[13.5px] font-semibold leading-tight">{{ p.value }}</p>
               <p class="text-[11px] leading-tight mt-0.5 tile-sub">{{ p.count }} video{{ p.count === 1 ? '' : 's' }}<template v-if="p.duration"> · {{ formatDuration(p.duration) }}</template></p>
             </div>
           </a>
         </div>
+        <div v-if="moreCreators" ref="creatorsEnd" class="h-px" aria-hidden="true"></div>
       </template>
 
       <!-- ===== Items (everything, or one collection) ===== -->
@@ -163,7 +164,7 @@ export default {
         </div>
 
         <div v-else class="grid gap-x-4 gap-y-6 stagger" :class="C.grid">
-          <div v-for="(it, i) in list" :key="it.id" class="group relative cursor-pointer" :class="[dragIndex === i ? 'opacity-40' : '', dragOverIndex === i ? 'ring-2 ring-accent ring-offset-4 ring-offset-bg rounded-xl' : '']"
+          <div v-for="(it, i) in shownList" :key="it.id" class="group relative cursor-pointer" :class="[dragIndex === i ? 'opacity-40' : '', dragOverIndex === i ? 'ring-2 ring-accent ring-offset-4 ring-offset-bg rounded-xl' : '']"
                :draggable="!!openCol" @dragstart="onCardDragStart($event, i)" @dragover.prevent="openCol && (dragOverIndex = i)" @dragleave="dragOverIndex = null" @drop.prevent.stop="onCardDrop(i)" @dragend="dragIndex = dragOverIndex = null"
                @click="onCardClick(i, it)" @contextmenu.prevent="openMenu($event, it)">
             <div class="relative rounded-xl overflow-hidden ring-2 lift zoom-media" :class="[C.aspect, isSel(it.id) ? 'ring-accent' : 'ring-transparent']">
@@ -202,6 +203,7 @@ export default {
             </div>
           </div>
         </div>
+        <div v-if="moreList && list.length" ref="listEnd" class="h-px" aria-hidden="true"></div>
       </template>
 
       <!-- Selection bar -->
@@ -316,7 +318,7 @@ export default {
     const folderId = ref('');
     const fileInput = ref(null);
     const selecting = ref(false);
-    const selected = ref([]);
+    const { selected, isSel, toggle: toggleSel } = useSelection();
     const menu = ref(null);
     const editors = ref(null);
     const viewer = ref(null);
@@ -340,13 +342,14 @@ export default {
     const totalDuration = computed(() => (props.kind === 'videos' ? fmtTotal(f.filtered.value.reduce((a, it) => a + (it.duration || 0), 0)) : ''));
     const colDuration = computed(() => fmtTotal(colItems.value.reduce((a, it) => a + (it.duration || 0), 0)));
 
-    // one tile per creator, with the cover of their newest video
-    const TINTS = ['#E8A33D', '#5fb3a1', '#6ea8e6', '#c78bd8', '#d0806b', '#60c798', '#e0655a'];
-    const creators = computed(() => f.people.value.map((p, i) => {
-      const mine = items.value.filter(it => (it.participants || []).some(x => x.toLowerCase() === p.value.toLowerCase()));
-      const newest = [...mine].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0];
-      return { ...p, cover: newest && newest.thumb_file_id ? newest.id : null, duration: mine.reduce((a, it) => a + (it.duration || 0), 0), tint: TINTS[i % TINTS.length] };
-    }));
+    // one tile per creator, with the cover of their newest video that has one
+    const creators = computed(() => groupByPerson(items.value, it => it.thumb_file_id).map(p => ({ ...p, cover: p.newest ? p.newest.id : null })));
+
+    // big libraries build a chunk of cards at a time (see lib/lists.js)
+    const filterKey = () => [f.search.value, f.person.value, f.tag.value, f.series.value, f.sort.value, view.value, openColId.value];
+    const { shown: shownList, more: moreList, end: listEnd } = useRenderLimit(list, { step: 120, resetOn: filterKey });
+    const { shown: shownCreators, more: moreCreators, end: creatorsEnd } = useRenderLimit(creators, { step: 120, resetOn: () => view.value });
+    const { shown: shownCollections, more: moreCollections, end: collectionsEnd } = useRenderLimit(collections, { step: 120, resetOn: () => view.value });
 
     async function load() {
       try {
@@ -396,11 +399,9 @@ export default {
     const progressOf = (it) => { try { return JSON.parse(it.progress || 'null')?.pct || 0; } catch (e) { return 0; } };
 
     // ---------- selection ----------
-    const isSel = (id) => selected.value.includes(id);
-    const toggleSel = (id) => { const i = selected.value.indexOf(id); if (i === -1) selected.value.push(id); else selected.value.splice(i, 1); };
     const toggleSelecting = () => { selecting.value = !selecting.value; if (!selecting.value) selected.value = []; };
     const selectAll = () => { selected.value = list.value.map(i => i.id); };
-    const editSelected = () => { editors.value = items.value.filter(i => selected.value.includes(i.id)); };
+    const editSelected = () => { editors.value = items.value.filter(i => isSel(i.id)); };
 
     function onCardClick(i, it) {
       if (!openCol.value && (selecting.value || selected.value.length)) { toggleSel(it.id); return; }
@@ -628,6 +629,7 @@ export default {
     return {
       C, L, TILE_GRID, items, loaded, folderId, fileInput, f, selecting, selected, menu, editors, viewer, dragOver, totalDuration,
       view, openCol, collections, collectionsLoaded, colItems, colLoaded, colDuration, list, creators,
+      shownList, moreList, listEnd, shownCreators, moreCreators, creatorsEnd, shownCollections, moreCollections, collectionsEnd,
       isSel, toggleSel, toggleSelecting, selectAll, editSelected, onCardClick, open, openById, filterBy, showCreator, openMenu, run, remove, deleteSelected, onSaved, onDownloaded,
       trim, dlKey, currentTime, videoDuration, openTrim, previewTrim, onTrimStarted,
       playCollection, playCollectionById, shuffleList, canConvert, toSongs, collectionToSongs, TAGS_SHOWN, allTags, newCollection, renameCollection, deleteCollection, toggleColFavorite, removeFromCol, setColCover,

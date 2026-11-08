@@ -53,6 +53,11 @@ export function formatDuration(sec) {
   return h ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`;
 }
 
+// One collator for every sort: localeCompare with options sets one up on each call,
+// which adds up when sorting thousands of items.
+const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+export const compareText = (a, b) => collator.compare(String(a ?? ''), String(b ?? ''));
+
 /** Unique values of a list field across items, most used first */
 export function facet(items, field) {
   const counts = new Map();
@@ -61,10 +66,30 @@ export function facet(items, field) {
     const cur = counts.get(k) || { value: v, count: 0 };
     cur.count++; counts.set(k, cur);
   }
-  return [...counts.values()].sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
+  return [...counts.values()].sort((a, b) => b.count - a.count || compareText(a.value, b.value));
 }
 export function distinct(items, field) {
-  return [...new Set(items.map(i => i[field]).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  return [...new Set(items.map(i => i[field]).filter(Boolean))].sort(compareText);
+}
+
+/** Tile colors for people without a cover (creators, artists) */
+export const TINTS = ['#E8A33D', '#5fb3a1', '#6ea8e6', '#c78bd8', '#d0806b', '#60c798', '#e0655a'];
+
+/**
+ * One entry per person (a video's creators, a song's artists) in a single pass:
+ * { value, count, duration, newest (their most recently added item that `hasCover`), tint }, most items first.
+ */
+export function groupByPerson(items, hasCover = () => true) {
+  const by = new Map();
+  for (const it of items) for (const p of (it.participants || [])) {
+    const k = p.toLowerCase();
+    let g = by.get(k);
+    if (!g) by.set(k, g = { value: p, count: 0, duration: 0, newest: null });
+    g.count++;
+    g.duration += it.duration || 0;
+    if (hasCover(it) && (!g.newest || String(it.created_at) > String(g.newest.created_at))) g.newest = it;
+  }
+  return [...by.values()].sort((a, b) => b.count - a.count || compareText(a.value, b.value)).map((g, i) => ({ ...g, tint: TINTS[i % TINTS.length] }));
 }
 
 /**
@@ -83,19 +108,30 @@ export function useLibraryFilter(itemsRef, storeKey, defaultSort = 'added') {
   const tags = computed(() => facet(itemsRef.value, 'tags'));
   const seriesList = computed(() => distinct(itemsRef.value, 'series'));
 
-  const cmp = (a, b) => String(a || '').localeCompare(String(b || ''), undefined, { numeric: true, sensitivity: 'base' });
+  const cmp = compareText;
+  // The searchable text of every item, built once per change to the items rather than
+  // on every keystroke (descriptions of downloads can be long).
+  const hays = computed(() => {
+    const m = new Map();
+    for (const it of itemsRef.value) {
+      m.set(it.id, [displayTitle(it), it.filename, it.details, it.series, it.date, ...(it.participants || []), ...(it.tags || [])].join(' \u0001 ').toLowerCase());
+    }
+    return m;
+  });
   const filtered = computed(() => {
     const q = search.value.trim().toLowerCase();
-    let list = itemsRef.value.filter((it) => {
-      if (person.value && !(it.participants || []).some(p => p.toLowerCase() === person.value.toLowerCase())) return false;
-      if (tag.value && !(it.tags || []).some(t => t.toLowerCase() === tag.value.toLowerCase())) return false;
+    const words = q ? q.split(/\s+/) : [];
+    const who = person.value.toLowerCase(), tg = tag.value.toLowerCase();
+    const hay = words.length ? hays.value : null;
+    const list = itemsRef.value.filter((it) => {
+      if (who && !(it.participants || []).some(p => p.toLowerCase() === who)) return false;
+      if (tg && !(it.tags || []).some(t => t.toLowerCase() === tg)) return false;
       if (series.value && it.series !== series.value) return false;
-      if (!q) return true;
-      const hay = [displayTitle(it), it.filename, it.details, it.series, it.date, ...(it.participants || []), ...(it.tags || [])].join(' \u0001 ').toLowerCase();
-      return q.split(/\s+/).every(w => hay.includes(w));
+      if (!hay) return true;
+      const h = hay.get(it.id) || '';
+      return words.every(w => h.includes(w));
     });
     const s = sort.value;
-    list = [...list];
     const empties = (v) => v === null || v === undefined || v === '';
     const byTitle = (a, b) => cmp(displayTitle(a), displayTitle(b));
     const sorters = {

@@ -48,6 +48,7 @@
   <link rel="modulepreload" href="/lib/filetypes.js">
   <link rel="modulepreload" href="/lib/cdn.js">
   <link rel="modulepreload" href="/lib/trash.js">
+  <link rel="modulepreload" href="/lib/lists.js">
   <link rel="modulepreload" href="/components/Icon.js">
   <link rel="modulepreload" href="/components/Brand.js">
   <link rel="modulepreload" href="/components/Shell.js">
@@ -335,6 +336,8 @@
     .stagger > *:nth-child(8) { animation-delay: 210ms; } .stagger > *:nth-child(9) { animation-delay: 240ms; }
     .stagger > *:nth-child(10) { animation-delay: 270ms; } .stagger > *:nth-child(11) { animation-delay: 300ms; }
     .stagger > *:nth-child(12) { animation-delay: 330ms; } .stagger > *:nth-child(n+13) { animation-delay: 360ms; }
+    /* only the first screenful rises in: animating thousands of cards (or each chunk added while scrolling) costs more than it shows */
+    .stagger > *:nth-child(n+25) { animation: none; }
     .rise { animation: rise .5s cubic-bezier(.2,.8,.2,1) both; }
     @keyframes rise { from { opacity: 0; transform: translateY(12px) scale(.985); } }
 

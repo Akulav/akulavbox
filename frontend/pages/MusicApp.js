@@ -7,7 +7,8 @@ import { player, playQueue, playList, toggle, songTitle, forget, positionOf, pre
 import TrimPanel from '../components/Trim.js';
 import { MetaEditor, LibraryFilters, Stars } from '../components/Library.js';
 import Downloads from '../components/Downloads.js';
-import { useLibraryFilter, systemFolder, formatDuration, thumbUrl } from '../lib/library.js';
+import { useLibraryFilter, systemFolder, formatDuration, thumbUrl, groupByPerson } from '../lib/library.js';
+import { useRenderLimit, useSelection } from '../lib/lists.js';
 import { moveToTrash } from '../lib/trash.js';
 
 export default {
@@ -63,13 +64,12 @@ export default {
           <p class="text-muted text-[13.5px] max-w-md mx-auto">Artists come from your songs’ details. Downloads and songs saved from videos fill them in for you.</p>
         </div>
         <div v-else class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3 stagger">
-          <button v-for="a in filteredArtists" :key="a.name" class="group tile lift text-left" :class="a.cover ? 'tile-media tile-cap-on' : ''" :style="a.cover ? '' : { '--tint': a.tint }" :title="a.name" @click="openArtist(a.name)">
+          <button v-for="a in shownArtists" :key="a.name" class="group tile lift text-left" :class="a.cover ? 'tile-media tile-cap-on' : ''" :style="a.cover ? '' : { '--tint': a.tint }" :title="a.name" @click="openArtist(a.name)">
             <div v-if="a.cover" class="absolute inset-0 zoom-media"><img :src="thumbUrl(a.cover, 480)" loading="lazy" alt="" class="w-full h-full object-cover"></div>
             <template v-else>
               <Icon name="user" size="100%" :stroke="1.25" class="tile-mark" />
               <span class="tile-count">{{ a.name.charAt(0).toUpperCase() }}</span>
             </template>
-            <span class="tile-badge" :class="a.cover ? 'bg-black/55 text-white backdrop-blur' : 'tile-ext'"><Icon name="music" :size="11" :stroke="2.25" />{{ a.count }}</span>
             <span class="absolute z-[3] bottom-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
               <span class="w-8 h-8 rounded-full bg-black/55 backdrop-blur text-white grid place-items-center" role="button" :aria-label="'Shuffle ' + a.name" @click.stop="playArtist(a.name, true)"><Icon name="shuffle" :size="14" /></span>
               <span class="w-8 h-8 rounded-full bg-accent text-accent-fg grid place-items-center" role="button" :aria-label="'Play ' + a.name" @click.stop="playArtist(a.name, false)"><Icon name="play" :size="13" class="translate-x-[1px]" /></span>
@@ -80,6 +80,7 @@ export default {
             </div>
           </button>
         </div>
+        <div v-if="moreArtists" ref="artistsEnd" class="h-px" aria-hidden="true"></div>
       </template>
 
       <!-- HOME: playlists -->
@@ -125,7 +126,7 @@ export default {
           <button v-else class="btn btn-primary" @click="view === 'all' ? musicInput.click() : openAddSongs()"><Icon :name="view === 'all' ? 'upload' : 'plus'" :size="16" />{{ view === 'all' ? 'Upload music' : 'Add songs' }}</button>
         </div>
         <ol v-else class="panel overflow-hidden stagger">
-          <li v-for="(s, i) in filteredSongs" :key="s.id"
+          <li v-for="(s, i) in shownSongs" :key="s.id"
               class="group grid grid-cols-[32px_minmax(0,1fr)_auto] md:grid-cols-[32px_minmax(0,1fr)_150px_auto] items-center gap-3 px-3 md:px-4 h-[60px] border-b border-line last:border-0 row-hover cursor-pointer"
               :class="[isCurrent(s) || isSel(s.id) ? 'bg-accent/[0.07]' : '', dragOverIndex === i ? 'shadow-[inset_0_2px_0_rgb(var(--accent))]' : '', dragIndex === i ? 'opacity-40' : '']"
               :draggable="canReorder" @dragstart="onSongDragStart($event, i)" @dragover.prevent="canReorder && (dragOverIndex = i)" @dragleave="dragOverIndex = null"
@@ -156,6 +157,7 @@ export default {
             <button class="icon-btn md:opacity-0 group-hover:opacity-100 focus:opacity-100" @click.stop="openMenu($event, { type: 'song', item: s })" :aria-label="'Actions for ' + songTitle(s)"><Icon name="more" :size="18" /></button>
           </li>
         </ol>
+        <div v-if="moreSongs && !loading && filteredSongs.length" ref="songsEnd" class="h-px" aria-hidden="true"></div>
       </template>
 
       <!-- Menus -->
@@ -206,7 +208,7 @@ export default {
               </div>
             </div>
             <ul class="flex-1 overflow-y-auto px-2 min-h-[160px]">
-              <li v-for="s in addable" :key="s.id">
+              <li v-for="s in shownAddable" :key="s.id">
                 <label class="flex items-center gap-3 px-3 h-12 rounded-lg hover:bg-elevated cursor-pointer">
                   <input type="checkbox" class="checkbox" :value="s.id" v-model="adder.selected">
                   <img v-if="s.cover_file_id" :src="thumbUrl(s.cover_file_id, 240)" alt="" class="w-8 h-8 rounded object-cover">
@@ -214,6 +216,7 @@ export default {
                   <span class="truncate text-[13.5px]">{{ songTitle(s) }}</span>
                 </label>
               </li>
+              <li v-if="moreAddable" ref="addableEnd" class="h-px" aria-hidden="true"></li>
               <li v-if="!addable.length" class="text-muted text-[13px] text-center py-8">{{ allSongs.length ? 'Every matching song is already in this playlist.' : 'Upload music to your library first.' }}</li>
             </ul>
             <div class="flex items-center gap-2 p-4 border-t border-line">
@@ -231,7 +234,7 @@ export default {
           <span class="text-[13.5px] font-medium mr-2 whitespace-nowrap">{{ selected.length }} selected</span>
           <button class="btn btn-ghost btn-sm" @click="selected = selected.length === filteredSongs.length ? [] : filteredSongs.map(s => s.id)">{{ selected.length === filteredSongs.length ? 'None' : 'All' }}</button>
           <button class="btn btn-ghost btn-sm" @click="playSelected" title="Play the selection"><Icon name="play" :size="14" /><span class="hidden sm:inline">Play</span></button>
-          <button class="btn btn-ghost btn-sm" @click="editors = songs.filter(s => selected.includes(s.id))"><Icon name="pencil" :size="15" /><span class="hidden sm:inline">Edit details</span></button>
+          <button class="btn btn-ghost btn-sm" @click="editors = songs.filter(s => isSel(s.id))"><Icon name="pencil" :size="15" /><span class="hidden sm:inline">Edit details</span></button>
           <button class="btn btn-ghost btn-sm" @click="openAddMany"><Icon name="list-music" :size="15" /><span class="whitespace-nowrap">Add to playlist</span></button>
           <button v-if="view === 'playlist'" class="btn btn-ghost btn-sm" @click="removeSelectedFromPlaylist"><Icon name="x" :size="15" /><span class="whitespace-nowrap">Remove</span></button>
           <button class="btn btn-ghost btn-sm !text-danger" @click="deleteSelected" title="Move to trash"><Icon name="trash" :size="15" /><span class="hidden sm:inline">Delete</span></button>
@@ -278,31 +281,31 @@ export default {
     const filteredSongs = f.filtered;
     const editors = ref(null);
     const selecting = ref(false);
-    const selected = ref([]);
-    const isSel = (id) => selected.value.includes(id);
+    const sel = useSelection();
+    const { selected, isSel } = sel;
     // shift-click selects everything between the last click and this one
     let lastSel = null;
     const toggleSel = (id, e, index) => {
       if (e && e.shiftKey && lastSel !== null && index !== undefined) {
         const [a, b] = [Math.min(lastSel, index), Math.max(lastSel, index)];
-        const ids = filteredSongs.value.slice(a, b + 1).map(s => s.id);
-        selected.value = [...new Set([...selected.value, ...ids])];
-      } else {
-        const i = selected.value.indexOf(id);
-        if (i === -1) selected.value.push(id); else selected.value.splice(i, 1);
-      }
+        sel.add(filteredSongs.value.slice(a, b + 1).map(s => s.id));
+      } else sel.toggle(id);
       if (index !== undefined) lastSel = index;
     };
     const toggleSelecting = () => { selecting.value = !selecting.value; lastSel = null; if (!selecting.value) selected.value = []; };
     const endSelection = () => { selected.value = []; selecting.value = false; lastSel = null; };
-    const selectedSongs = () => filteredSongs.value.filter(s => selected.value.includes(s.id));
+    const selectedSongs = () => filteredSongs.value.filter(s => isSel(s.id));
+    // long lists build a chunk of rows at a time (see lib/lists.js)
+    const { shown: shownSongs, more: moreSongs, end: songsEnd } = useRenderLimit(filteredSongs, {
+      step: 150, resetOn: () => [f.search.value, f.person.value, f.tag.value, f.series.value, f.sort.value, view.value, playlist.value?.id],
+    });
     const playSelected = () => { playQueue(selectedSongs(), 0, `${selected.value.length} selected`); };
     async function deleteSelected() {
       const ids = [...selected.value];
       ids.forEach(forget);
       endSelection();
       await moveToTrash({ files: ids }, `${ids.length} song${ids.length === 1 ? '' : 's'}`, async () => { await fetchAll(); if (view.value === 'playlist') await fetchPlaylistSongs(); });
-      if (view.value === 'playlist') songs.value = songs.value.filter(s => !ids.includes(s.id));
+      if (view.value === 'playlist') { const gone = new Set(ids); songs.value = songs.value.filter(s => !gone.has(s.id)); }
     }
     async function removeSelectedFromPlaylist() {
       const ids = [...selected.value];
@@ -310,7 +313,7 @@ export default {
       endSelection();
       await attempt(async () => {
         await api(`/api/music/playlists/${pid}/songs/remove`, { method: 'POST', body: { file_ids: ids } });
-        songs.value = songs.value.filter(s => !ids.includes(s.id));
+        { const gone = new Set(ids); songs.value = songs.value.filter(s => !gone.has(s.id)); }
         fetchPlaylists();
       }, `Removed ${ids.length} song${ids.length === 1 ? '' : 's'} from ${playlist.value.title}`);
     }
@@ -341,6 +344,7 @@ export default {
       const aq = adder.search.trim().toLowerCase();
       return allSongs.value.filter(s => !inList.has(s.id) && s.filename.toLowerCase().includes(aq));
     });
+    const { shown: shownAddable, more: moreAddable, end: addableEnd } = useRenderLimit(addable, { step: 150, resetOn: () => [adder.open, adder.search] });
 
     const fetchPlaylists = async () => { playlists.value = await api('/api/music/playlists'); };
     const fetchAll = async () => {
@@ -364,23 +368,11 @@ export default {
 
     // ---------- artists (like Creators in Videos) ----------
     const homeTab = ref('playlists');
-    const TINTS = ['#E8A33D', '#5fb3a1', '#6ea8e6', '#c78bd8', '#d0806b', '#60c798', '#e0655a'];
-    const artists = computed(() => {
-      const by = new Map();
-      for (const s of allSongs.value) {
-        for (const p of (s.participants || [])) {
-          const key = p.toLowerCase();
-          const a = by.get(key) || { name: p, songs: [] };
-          a.songs.push(s);
-          by.set(key, a);
-        }
-      }
-      return [...by.values()].map((a, i) => {
-        const newest = [...a.songs].sort((x, y) => String(y.created_at).localeCompare(String(x.created_at))).find(s => s.cover_file_id);
-        return { name: a.name, count: a.songs.length, duration: a.songs.reduce((t, s) => t + (s.duration || 0), 0), cover: newest ? newest.cover_file_id : null, tint: TINTS[i % TINTS.length] };
-      }).sort((x, y) => y.count - x.count || x.name.localeCompare(y.name));
-    });
+    // one tile per artist, with the artwork of their newest song that has some
+    const artists = computed(() => groupByPerson(allSongs.value, s => s.cover_file_id)
+      .map(a => ({ name: a.value, count: a.count, duration: a.duration, cover: a.newest ? a.newest.cover_file_id : null, tint: a.tint })));
     const filteredArtists = computed(() => artists.value.filter(a => a.name.toLowerCase().includes(q.value)));
+    const { shown: shownArtists, more: moreArtists, end: artistsEnd } = useRenderLimit(filteredArtists, { step: 120, resetOn: () => [q.value, homeTab.value] });
     const songsBy = (name) => allSongs.value.filter(s => (s.participants || []).some(p => p.toLowerCase() === name.toLowerCase()));
     function openArtist(name) { openAll(); f.person.value = name; }
     const playArtist = (name, shuffled) => playList(songsBy(name), shuffled, name);
@@ -528,7 +520,7 @@ export default {
       view, playlists, allSongs, songs, playlist, loading, search, musicInput, coverInput, menu, adder,
       f, SORTS, editors, selecting, selected, isSel, toggleSel, toggleSelecting, onMetaSaved, addManyTo, addManyToNew, openAddMany, formatDuration,
       playSelected, deleteSelected, removeSelectedFromPlaylist, shuffleEverything,
-      homeTab, artists, filteredArtists, openArtist, playArtist, canTrim, trimSong, dlKey, onTrimStarted, positionOf, previewRange,
+      homeTab, artists, filteredArtists, openArtist, shownArtists, moreArtists, artistsEnd, shownSongs, moreSongs, songsEnd, shownAddable, moreAddable, addableEnd, playArtist, canTrim, trimSong, dlKey, onTrimStarted, positionOf, previewRange,
       filteredPlaylists, filteredSongs, addable, goHome, openAll, openPlaylist, play, playAll, playPlaylist, isCurrent, onRowClick,
       createPlaylist, renamePlaylist, deletePlaylist, toggleFavorite, addToPlaylist, addToNewPlaylist, removeFromPlaylist, deleteSong,
       openAddSongs, confirmAdd, onPickMusic, pickCover, onPickCover, openMenu, run, onDownloaded, playById,

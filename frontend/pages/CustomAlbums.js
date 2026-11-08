@@ -6,6 +6,7 @@ import { api, formatBytes, downloadUrl, downloadZip, session, refreshAccount, st
 import { toast, confirmDialog, promptDialog, attempt } from '../lib/ui.js';
 import { uploadMany } from '../lib/upload.js';
 import { systemFolder, thumbUrl, preload, rememberDims } from '../lib/library.js';
+import { useRenderLimit, useSelection } from '../lib/lists.js';
 import { fileUrl } from '../lib/api.js';
 
 // Survives switching tabs: lists render instantly when you come back, and each
@@ -124,7 +125,7 @@ export default {
           <p class="text-muted text-[13.5px] mb-5">{{ album ? 'Add photos from your device to fill this album.' : 'Photos added to albums in this collection appear here.' }}</p>
           <button v-if="album" class="btn btn-primary" @click="uploadInput.click()"><Icon name="upload" :size="16" />Add photos</button>
         </div>
-        <JustifiedGrid v-else-if="layout === 'justified'" :items="sortedImages" :row-height="density === 'small' ? 160 : 250" :gap="density === 'small' ? 4 : 6">
+        <JustifiedGrid v-else-if="layout === 'justified'" :items="shownImages" :row-height="density === 'small' ? 160 : 250" :gap="density === 'small' ? 4 : 6">
           <template #default="{ item, index }">
             <div class="group absolute inset-0 rounded-md overflow-hidden" :class="[selecting ? 'cursor-pointer' : 'cursor-zoom-in', isSel(item.id) ? 'ring-[3px] ring-accent ring-inset' : '']" @click="onTileClick(item, index)">
               <Thumb :file-id="item.id" :w="density === 'small' ? 240 : 480" :eager="index < 12" @dims="d => onDims(item, d)" />
@@ -139,7 +140,7 @@ export default {
           </template>
         </JustifiedGrid>
         <div v-else class="grid gap-1.5 sm:gap-2" :class="density === 'small' ? 'grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10' : 'grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6'">
-          <div v-for="(img, i) in sortedImages" :key="img.id" class="group relative aspect-square rounded-md overflow-hidden"
+          <div v-for="(img, i) in shownImages" :key="img.id" class="group relative aspect-square rounded-md overflow-hidden"
                :class="[selecting ? 'cursor-pointer' : 'cursor-zoom-in', isSel(img.id) ? 'ring-[3px] ring-accent ring-inset' : '']"
                style="content-visibility: auto; contain-intrinsic-size: 220px;" @click="onTileClick(img, i)">
             <Thumb :file-id="img.id" :w="density === 'small' ? 240 : 480" :eager="i < 12" @dims="d => onDims(img, d)" />
@@ -152,7 +153,7 @@ export default {
             </div>
           </div>
         </div>
-        <p v-if="sortedImages.length" class="text-faint text-xs mt-3">{{ sortedImages.length }} photo{{ sortedImages.length === 1 ? '' : 's' }}, {{ formatBytes(sortedImages.reduce((s, i) => s + (i.size_bytes || 0), 0)) }}</p>
+        <div v-if="moreImages && !loading && sortedImages.length" ref="imagesEnd" class="h-px" aria-hidden="true"></div>
       </template>
 
       <!-- Photo selection -->
@@ -224,7 +225,7 @@ export default {
     const layout = ref(storage.read('akulavPhotoLayout') || 'justified');
     watch(layout, v => storage.write('akulavPhotoLayout', v));
     const selecting = ref(false);
-    const selected = ref([]);
+    const { selected, isSel, toggle: toggleSel } = useSelection();
     const addTo = ref(null);
     const dragOver = ref(false);
     let dragDepth = 0;
@@ -266,6 +267,9 @@ export default {
       else if (imageSort.value === 'name') list.sort((a, b) => (a.filename || '').localeCompare(b.filename || '', undefined, { numeric: true }));
       return list;
     });
+    const imagesBytes = computed(() => sortedImages.value.reduce((s, i) => s + (i.size_bytes || 0), 0));
+    // a big album builds its photos a chunk at a time (see lib/lists.js)
+    const { shown: shownImages, more: moreImages, end: imagesEnd, reveal: revealImages } = useRenderLimit(sortedImages, { step: 240, resetOn: () => [routeKey.value, imageSort.value] });
 
     // ---------- loading (cache first, then refresh) ----------
     const fetchCollections = async () => { collections.value = cache.collections = await api('/api/collections'); };
@@ -304,7 +308,12 @@ export default {
 
     function restoreScroll(my) {
       const y = scrollMemory.get(routeKey.value) || 0;
-      nextTick(() => requestAnimationFrame(() => { if (my === loadSeq) window.scrollTo({ top: y, behavior: 'instant' }); }));
+      // photos render a chunk at a time: build enough of them for the page to reach y first
+      nextTick(() => requestAnimationFrame(async () => {
+        if (my !== loadSeq) return;
+        if (y && level.value === 'images') await revealImages(y);
+        if (my === loadSeq) window.scrollTo({ top: y, behavior: 'instant' });
+      }));
     }
 
     // Remember the scroll position of the page we're leaving
@@ -318,8 +327,6 @@ export default {
     }, { flush: 'pre' });
 
     // ---------- photo selection ----------
-    const isSel = (id) => selected.value.includes(id);
-    const toggleSel = (id) => { const i = selected.value.indexOf(id); if (i === -1) selected.value.push(id); else selected.value.splice(i, 1); };
     const clearSelection = () => { selected.value = []; selecting.value = false; };
     const toggleSelecting = () => { if (selecting.value) clearSelection(); else selecting.value = true; };
     function onTileClick(img, index) {
@@ -357,7 +364,8 @@ export default {
       if (!await confirmDialog({ title: `Remove ${ids.length} photo${ids.length === 1 ? '' : 's'} from this album?`, message: 'The photos stay in Files and in other albums.', confirmText: 'Remove' })) return;
       await attempt(async () => {
         await api(`/api/albums/${album.value.id}/images/remove`, { method: 'POST', body: { file_ids: ids } });
-        images.value = cache.images[`${colId.value}/${albId.value}`] = images.value.filter(i => !ids.includes(i.id));
+        const gone = new Set(ids);
+        images.value = cache.images[`${colId.value}/${albId.value}`] = images.value.filter(i => !gone.has(i.id));
         fetchAlbums(colId.value);
       }, 'Removed from album');
       clearSelection();
@@ -487,7 +495,7 @@ export default {
 
     return {
       level, collections, albums, images, collection, album, loading, uploading, uploadInput, search, groupSort, imageSort, density,
-      heading, currentNotes, groups, sortedImages, viewerIndex, menu, notes, layout, selecting, selected, addTo, dragOver,
+      heading, currentNotes, groups, sortedImages, shownImages, moreImages, imagesEnd, imagesBytes, viewerIndex, menu, notes, layout, selecting, selected, addTo, dragOver,
       isSel, toggleSel, clearSelection, toggleSelecting, onTileClick, onDims, openAddTo, addSelectedTo, addSelectedToNew, removeSelected, downloadSelected,
       onDragEnter, onDragLeave, onDrop,
       goBack, createCollection, createAlbum, toggleFavorite, rename, editNotes, saveNotes, remove, downloadCollection, downloadAlbum,

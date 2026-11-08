@@ -200,6 +200,8 @@ async function main() {
       const vids = (await api('/api/library/videos')).data.items;
       const v = vids.find(x => x.id === jobs[0].file_id);
       ok(v && v.title === 'Test video clip1' && v.participants[0] === 'Test Creator' && v.duration === 42 && v.thumb_file_id && v.date === '2026-01-02', 'title, creator, date, length and cover filled in');
+      ok(v && ['demo', 'test', 'Cooking', 'Education'].every(t => v.tags.includes(t)) && !v.tags.includes('2026') && !v.tags.includes('anchor'),
+        'tags come from the site, the description’s #hashtags and its categories', JSON.stringify(v?.tags));
       let cols = (await api('/api/media-collections?kind=videos')).data;
       const byCreator = cols.find(c => c.title === 'Test Creator');
       ok(byCreator && byCreator.item_count === 1, 'filed into a collection named after the creator');

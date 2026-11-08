@@ -35,6 +35,20 @@ fastify.addHook('onSend', async (request, reply, payload) => {
   return payload;
 });
 
+// Gzip large JSON answers: a library of thousands of videos (with their descriptions)
+// or a big folder listing shrinks 5–10×. Media streams are left alone.
+const gzip = require('util').promisify(require('zlib').gzip);
+fastify.addHook('onSend', async (request, reply, payload) => {
+  if (typeof payload !== 'string' || payload.length < 4096) return payload;
+  if (!/\bgzip\b/.test(String(request.headers['accept-encoding'] || ''))) return payload;
+  if (reply.hasHeader('content-encoding') || !/json/.test(String(reply.getHeader('content-type') || ''))) return payload;
+  const vary = reply.getHeader('vary');
+  reply.header('Vary', vary ? `${vary}, Accept-Encoding` : 'Accept-Encoding');
+  reply.header('Content-Encoding', 'gzip');
+  reply.removeHeader('content-length');
+  return gzip(payload, { level: 5 });
+});
+
 // Serve the static frontend SPA (revalidated on every load so updates show up immediately)
 fastify.register(require('@fastify/static'), {
   root: path.join(__dirname, '../frontend'),

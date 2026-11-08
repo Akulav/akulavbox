@@ -4,6 +4,26 @@ import { thumbUrl, saveMeta, bulkMeta, setCover, captureVideoFrame, autoCover, d
 import { toast } from '../lib/ui.js';
 import { fileUrl } from '../lib/api.js';
 
+// One observer for every thumbnail on the page instead of one each (a grid can hold thousands)
+const nearView = new Map(); // element -> callback
+let thumbObserver = null;
+function whenNearView(el, fn) {
+  if (!thumbObserver) {
+    thumbObserver = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        if (!e.isIntersecting) continue;
+        const cb = nearView.get(e.target);
+        nearView.delete(e.target);
+        thumbObserver.unobserve(e.target);
+        if (cb) cb();
+      }
+    }, { rootMargin: '900px 0px' });
+  }
+  nearView.set(el, fn);
+  thumbObserver.observe(el);
+  return () => { if (nearView.delete(el)) thumbObserver.unobserve(el); };
+}
+
 /**
  * Lazy thumbnail: a placeholder until it scrolls near the viewport, then the
  * server-made preview fades in. Falls back to an icon when there's no preview.
@@ -58,15 +78,12 @@ export const Thumb = {
     }
     watch(() => [props.fileId, props.w, props.version, props.src], () => { if (visible.value) pick(); });
 
-    let io = null;
+    let stopWatching = null;
     onMounted(() => {
       if (props.eager) { visible.value = true; pick(); return; }
-      io = new IntersectionObserver((entries) => {
-        if (entries.some(e => e.isIntersecting)) { visible.value = true; io.disconnect(); io = null; pick(); }
-      }, { rootMargin: '900px 0px' });
-      io.observe(el.value);
+      stopWatching = whenNearView(el.value, () => { stopWatching = null; visible.value = true; pick(); });
     });
-    onUnmounted(() => { if (io) io.disconnect(); });
+    onUnmounted(() => { if (stopWatching) stopWatching(); });
     return { el, visible, loaded, failed, current, onLoad, onError };
   },
 };

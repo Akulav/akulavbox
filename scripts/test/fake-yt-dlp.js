@@ -33,7 +33,7 @@ if (args.includes('-J')) {
   } else {
     console.log(JSON.stringify({ id, title: `Test video ${id}`, track: `Test song ${id}`, uploader: 'Test Creator', channel: 'Test Creator',
       artist: 'Test Artist', album: 'Test Album', duration: 42, upload_date: '20260102', tags: ['demo', 'test'],
-      description: 'A test download.', extractor_key: 'Fake', webpage_url: url }));
+      description: 'A test download. #Cooking #2026 more at https://example.com/#anchor', categories: ['Education'], extractor_key: 'Fake', webpage_url: url }));
   }
   process.exit(0);
 }

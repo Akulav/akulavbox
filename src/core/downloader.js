@@ -93,6 +93,7 @@ function checkUrl(raw) {
 // --- jobs --------------------------------------------------------------------
 // 'encode_wait': downloaded, waiting for its turn at the AV1 encoder (no download slot held)
 const ACTIVE = ['queued', 'probing', 'downloading', 'encode_wait', 'converting', 'processing'];
+const ACTIVE_SQL = ACTIVE.map(s => `'${s}'`).join(', ');
 const COLS = 'id, url, kind, status, progress, title, creator, file_id, error, speed, created_at, updated_at';
 const update = (id, fields) => {
   const keys = Object.keys(fields);
@@ -160,9 +161,8 @@ const isInternal = (url) => CONVERT_RE.test(url) || TRIM_RE.test(url);
 function listJobs(ownerId, kind) {
   const k = kind ? 'AND kind = ?' : '';
   const args = kind ? [ownerId, kind] : [ownerId];
-  const inList = ACTIVE.map(s => `'${s}'`).join(', ');
-  const open = db.prepare(`SELECT ${COLS}, rowid AS _r FROM downloads WHERE owner_id = ? ${k} AND status IN (${inList}) LIMIT 2000`).all(...args);
-  const done = db.prepare(`SELECT ${COLS}, rowid AS _r FROM downloads WHERE owner_id = ? ${k} AND status NOT IN (${inList}) ORDER BY created_at DESC, rowid DESC LIMIT 60`).all(...args);
+  const open = db.prepare(`SELECT ${COLS}, rowid AS _r FROM downloads WHERE owner_id = ? ${k} AND status IN (${ACTIVE_SQL}) LIMIT 2000`).all(...args);
+  const done = db.prepare(`SELECT ${COLS}, rowid AS _r FROM downloads WHERE owner_id = ? ${k} AND status NOT IN (${ACTIVE_SQL}) ORDER BY created_at DESC, rowid DESC LIMIT 60`).all(...args);
   return [...open, ...done]
     .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)) || b._r - a._r)
     .map(({ _r, ...j }) => j);
@@ -257,6 +257,35 @@ function explain(err, hadCookies) {
 const cleanTitle = (s) => String(s || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 180) || 'Download';
 const isoDate = (d) => (/^\d{8}$/.test(String(d || '')) ? `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}` : null);
 
+/**
+ * Tags for a download. yt-dlp's `tags` is only part of it: YouTube shows the
+ * description's #hashtags above the title (they're often the only "tags" a video
+ * has), and many sites only fill `categories`. Up to 60 unique tags (the editor's
+ * limit), the site's own first.
+ */
+const TAGS_MAX = 60;
+function tagsOf(info) {
+  const text = `${info.title || ''}\n${info.description || ''}`;
+  const hashtags = [...text.matchAll(/(?:^|[^\p{L}\p{N}_&#/])#([\p{L}\p{N}_][\p{L}\p{N}_-]{0,79})/gu)].map(m => m[1]).filter(t => !/^\d+$/.test(t));
+  const list = (v) => (Array.isArray(v) ? v : typeof v === 'string' ? v.split(',') : []);
+  const out = [], seen = new Set();
+  for (const raw of [...list(info.tags), ...hashtags, ...list(info.categories), ...list(info.genres)]) {
+    const t = String(raw ?? '').replace(/^#/, '').replace(/\s+/g, ' ').trim().slice(0, 80);
+    const k = t.toLowerCase();
+    if (!t || seen.has(k)) continue;
+    seen.add(k); out.push(t);
+    if (out.length >= TAGS_MAX) break;
+  }
+  return out;
+}
+
+/** Fill in tags on an item that came from this source before it had any (re-pasting a link repairs it) */
+function fillMissingTags(fileId, info) {
+  const tags = tagsOf(info);
+  if (!tags.length) return;
+  db.prepare(`UPDATE media_meta SET tags = ?, updated_at = datetime('now') WHERE file_id = ? AND (tags IS NULL OR tags = '' OR tags = '[]')`).run(JSON.stringify(tags), fileId);
+}
+
 function creatorOf(info, kind) {
   const c = kind === 'audio'
     ? (info.artist || info.creator || info.uploader || info.channel)
@@ -294,8 +323,9 @@ const insertMeta = (fields) => {
 };
 
 /** File a song under its artist: artwork link + the artist's playlist */
+const setSongCover = (fileId, coverId) => db.prepare('INSERT OR REPLACE INTO song_covers (file_id, cover_file_id) VALUES (?, ?)').run(fileId, coverId);
 function fileSong(ownerId, fileId, coverId, artist) {
-  if (coverId) db.prepare('INSERT OR REPLACE INTO song_covers (file_id, cover_file_id) VALUES (?, ?)').run(fileId, coverId);
+  if (coverId) setSongCover(fileId, coverId);
   if (artist) col.addToPlaylist(col.playlistByTitle(ownerId, artist), fileId);
 }
 
@@ -335,14 +365,16 @@ async function download(job, work) {
     const entries = (info.entries || []).filter(Boolean).slice(0, PLAYLIST_MAX);
     // Entries already in the library (or already waiting in my queue) are skipped right here,
     // so re-pasting a playlist only downloads what's new, without looking each one up again.
-    const queued = new Set(db.prepare(`SELECT url FROM downloads WHERE owner_id = ? AND status IN (${ACTIVE.map(s => `'${s}'`).join(', ')})`).all(ownerId).map(r => r.url));
+    const queued = new Set(db.prepare(`SELECT url FROM downloads WHERE owner_id = ? AND status IN (${ACTIVE_SQL})`).all(ownerId).map(r => r.url));
     let fresh = 0, have = 0, waiting = 0;
     db.tx(() => {
       for (const e of entries) {
         const url = e.webpage_url || (/^https?:/.test(e.url || '') ? e.url : null) || (e.ie_key === 'Youtube' && e.id ? `https://www.youtube.com/watch?v=${e.id}` : null);
         if (!url) continue;
         const ie = e.ie_key || info.extractor_key || info.extractor;
-        if (e.id && ie && alreadyHave(ownerId, folderId, `${ie}:${e.id}`)) { have++; continue; }
+        const known = e.id && ie && alreadyHave(ownerId, folderId, `${ie}:${e.id}`);
+        // a flat listing rarely carries tags, but when it does they repair older downloads
+        if (known) { if (e.tags || e.categories) fillMissingTags(known.id, e); have++; continue; }
         if (queued.has(url)) { waiting++; continue; }
         addJob(ownerId, url, kind, e.title || null);
         queued.add(url);
@@ -364,9 +396,13 @@ async function download(job, work) {
 
   // already have it? link the existing copy instead of downloading again
   const existing = alreadyHave(ownerId, folderId, sourceId);
-  if (existing) { update(id, { status: 'done', progress: 1, file_id: existing.id, error: 'Already in your library' }); return; }
+  if (existing) {
+    fillMissingTags(existing.id, info);
+    update(id, { status: 'done', progress: 1, file_id: existing.id, error: 'Already in your library' });
+    return;
+  }
 
-  const u = db.prepare('SELECT quota_bytes, used_bytes FROM users WHERE id = ?').get(ownerId);
+  const u =db.prepare('SELECT quota_bytes, used_bytes FROM users WHERE id = ?').get(ownerId);
   const left = u.quota_bytes - u.used_bytes;
   const approx = info.filesize || info.filesize_approx || 0;
   if (approx && approx > left) throw new Error('Not enough storage left for this download');
@@ -433,9 +469,8 @@ async function download(job, work) {
   const coverId = thumb ? await storeCover(ownerId, kind === 'video' ? 'video_covers' : 'music_art', thumb.p, title) : null;
 
   // 4. details + filing by creator
-  const tags = (Array.isArray(info.tags) ? info.tags : []).map(x => String(x).trim().slice(0, 40)).filter(Boolean).slice(0, 8);
   insertMeta({
-    file_id: file.id, owner_id: ownerId, title, participants: JSON.stringify([creator]), tags: JSON.stringify(tags),
+    file_id: file.id, owner_id: ownerId, title, participants: JSON.stringify([creator]), tags: JSON.stringify(tagsOf(info)),
     details: info.description ? String(info.description).slice(0, 4000) : null,
     date: kind === 'audio' ? (info.release_year ? String(info.release_year) : isoDate(info.upload_date)) : isoDate(info.upload_date),
     series: kind === 'audio' && info.album ? String(info.album).slice(0, 300) : null,
@@ -592,7 +627,7 @@ async function trimMedia(job, work) {
     for (const c of db.prepare('SELECT collection_id FROM media_collection_items WHERE file_id = ?').all(video.id)) col.addToCollection(c.collection_id, ownerId, [copy.id]);
     for (const p of db.prepare('SELECT playlist_id FROM playlist_songs WHERE file_id = ?').all(video.id)) col.addToPlaylist(p.playlist_id, copy.id);
     const art = db.prepare('SELECT cover_file_id FROM song_covers WHERE file_id = ?').get(video.id);
-    if (art) db.prepare('INSERT OR REPLACE INTO song_covers (file_id, cover_file_id) VALUES (?, ?)').run(copy.id, art.cover_file_id);
+    if (art) setSongCover(copy.id, art.cover_file_id);
     update(id, { status: 'done', progress: 1, file_id: copy.id, error: null });
   } else {
     const name = ext === srcExt ? null : `${base}${ext}`;
@@ -652,7 +687,7 @@ function toAv1(jobId, src, duration) {
 
 // Jobs that were running when the server stopped start over
 function resume() {
-  db.prepare(`UPDATE downloads SET status = 'queued', progress = 0, speed = NULL WHERE status IN (${ACTIVE.filter(s => s !== 'queued').map(s => `'${s}'`).join(', ')})`).run();
+  db.prepare(`UPDATE downloads SET status = 'queued', progress = 0, speed = NULL WHERE status IN (${ACTIVE_SQL}) AND status != 'queued'`).run();
   try { for (const n of fs.readdirSync(config.tempDir)) if (n.startsWith('dl-')) fs.rmSync(path.join(config.tempDir, n), { recursive: true, force: true }); } catch (e) { /* ignore */ }
   pump();
 }

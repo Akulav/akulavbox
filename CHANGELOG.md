@@ -2,6 +2,20 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 2.7.0 (2026-11-08)
+
+### Changed
+- **Big libraries are much faster.** Videos, Books, Music, Photos and Files now build the first screenful of cards or rows and add more as you scroll, so a section with thousands of items opens, searches, sorts and filters right away. Measured on 3,000 videos: about 0.1 s to show the grid and well under 0.1 s per search keystroke.
+  - **Select all** stays instant on thousands of items, and shift-click ranges are quicker.
+  - **Search** prepares each item’s searchable text once instead of on every keystroke.
+  - **Creators and Artists** are worked out in one pass over the library.
+  - **Less network:** large lists are sent gzip-compressed (a 3,000-video library went from 5.5 MB to 255 KB).
+  - **Lighter pages:** thumbnails share one visibility watcher, and only the first cards play the rise-in animation.
+- **No duplicate count on tiles.** Video collections, creators and music artists no longer show the item count in the top-left corner too. It stays in the caption at the bottom.
+
+### Fixed
+- **Downloads now keep all their tags.** Tags were cut to 8 per video, and only the site’s hidden keyword list was read. Now a download also gets the description’s #hashtags (what YouTube shows above the title) and the site’s categories, up to 60 tags. Pasting the link of a video you already have fills in tags it’s missing.
+
 ## 2.6.0 (2026-11-08)
 
 ### Changed
