@@ -41,7 +41,12 @@ module.exports = async function (fastify) {
       SELECT p.*,
         (SELECT COUNT(*) FROM playlist_songs ps JOIN files f ON f.id = ps.file_id WHERE ps.playlist_id = p.id AND f.trashed_at IS NULL) AS song_count,
         (SELECT COALESCE(SUM(m.duration), 0) FROM playlist_songs ps JOIN files f ON f.id = ps.file_id LEFT JOIN media_meta m ON m.file_id = f.id
-          WHERE ps.playlist_id = p.id AND f.trashed_at IS NULL) AS total_duration
+          WHERE ps.playlist_id = p.id AND f.trashed_at IS NULL) AS total_duration,
+        -- like video collections: the playlist's own artwork, else that of its first song that has some
+        COALESCE(p.cover_file_id, (SELECT sc.cover_file_id FROM playlist_songs ps JOIN files f ON f.id = ps.file_id
+          JOIN song_covers sc ON sc.file_id = ps.file_id JOIN files c ON c.id = sc.cover_file_id AND c.trashed_at IS NULL
+          WHERE ps.playlist_id = p.id AND f.trashed_at IS NULL
+          ORDER BY ps.position IS NULL, ps.position, ps.added_at, ps.rowid LIMIT 1)) AS display_cover_id
       FROM playlists p WHERE p.owner_id = ?
       ORDER BY p.is_favorite DESC, p.title COLLATE NOCASE
     `).all(request.user.id);

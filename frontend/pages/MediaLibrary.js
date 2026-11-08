@@ -75,8 +75,8 @@ export default {
 
         <div v-if="C.collections && !openCol" class="seg self-start" role="tablist" aria-label="View">
           <a :href="'#/' + kind" :class="{ on: view === 'creators' }" role="tab"><Icon name="users" :size="14" />Creators<span v-if="f.people.value.length" class="text-faint tabular-nums">{{ f.people.value.length }}</span></a>
-          <a :href="allHref" :class="{ on: view === 'all' }" role="tab"><Icon :name="C.icon" :size="14" />All {{ kind }}</a>
           <a :href="'#/' + kind + '/collections'" :class="{ on: view === 'collections' }" role="tab"><Icon name="list-music" :size="14" />Collections<span v-if="collections.length" class="text-faint tabular-nums">{{ collections.length }}</span></a>
+          <a :href="allHref" :class="{ on: view === 'all' }" role="tab"><Icon :name="C.icon" :size="14" />All {{ kind }}</a>
         </div>
         <LibraryFilters v-if="view === 'all' && items.length" :f="f" :kind="kind" :sorts="C.sorts" />
       </div>

@@ -2,6 +2,12 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 2.7.6 (2026-11-08)
+
+### Changed
+- **Tabs in a consistent order.** Videos: Creators, Collections, All videos. Music: Artists, Playlists, All songs. All songs is now a tab instead of a tile among the playlists.
+- **Playlists get artwork automatically.** A playlist without its own artwork shows the artwork of its first song, the way video collections show their first video. Artwork you choose still wins.
+
 ## 2.7.5 (2026-11-08)
 
 ### Changed

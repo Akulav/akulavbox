@@ -74,7 +74,7 @@ All endpoints are JSON unless noted. Authenticate with `Authorization: Bearer <t
 `/api/albums/:id` (DELETE), `/:id/title`, `/:id/notes`, `/:id/favorite`, `/:id/cover` (PATCH), `/:id/images` (GET, POST `{ file_id }`), `/:id/images/bulk` and `/:id/images/remove` (POST `{ file_ids }`), `/:id/images/:fileId` (DELETE), `/:id/download`, `/api/albums/migrate` (POST).
 
 ## Music
-`/api/music/songs` (GET), `/api/music/playlists` (GET, POST `{ title }`), `/api/music/playlists/:id` (DELETE), `/:id/title`, `/:id/favorite`, `/:id/cover` (PATCH), `/:id/songs` (GET, POST `{ file_id }`), `/:id/songs/bulk` and `/:id/songs/remove` (POST `{ file_ids }`), `/:id/order` (PUT `{ file_ids }`), `/:id/songs/:file_id` (DELETE), `/api/music/songs/:id/cover` (POST `{ cover_file_id }`).
+`/api/music/songs` (GET), `/api/music/playlists` (GET: with `song_count`, `total_duration`, `display_cover_id`; POST `{ title }`), `/api/music/playlists/:id` (DELETE), `/:id/title`, `/:id/favorite`, `/:id/cover` (PATCH), `/:id/songs` (GET, POST `{ file_id }`), `/:id/songs/bulk` and `/:id/songs/remove` (POST `{ file_ids }`), `/:id/order` (PUT `{ file_ids }`), `/:id/songs/:file_id` (DELETE), `/api/music/songs/:id/cover` (POST `{ cover_file_id }`).
 
 ## Chat
 `/api/chat/users`, `/api/chat/friends` (includes `unread` and `online`), `/api/chat/friends/add | accept | remove` (POST `{ friend_id }`), `/api/chat/messages/:friendId` (GET), `/api/chat/messages/:id` (DELETE, own messages), `/api/chat/read/:friendId` (POST), `/api/chat/upload` (multipart `receiver_id, file`, ≤ 50 MB), `/api/chat/download/:msgId`, `/api/rtc/config`.

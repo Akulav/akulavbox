@@ -249,6 +249,8 @@ async function main() {
       const rm = await api(`/api/music/playlists/${myList.id}/songs/remove`, { method: 'POST', body: { file_ids: [converted.id] } });
       ok(rm.data.removed === 1 && (await api(`/api/music/playlists/${myList.id}/songs`)).data.length === 1, 'remove several songs from a playlist at once');
       await api(`/api/music/playlists/${myList.id}/songs/bulk`, { method: 'POST', body: { file_ids: [converted.id] } });
+      const shownList = (await api('/api/music/playlists')).data.find(p => p.id === myList.id);
+      ok(shownList && !shownList.cover_file_id && shownList.display_cover_id === song.cover_file_id, 'a playlist without artwork shows its first song’s', JSON.stringify(shownList));
       await api('/api/downloads/from-videos', { method: 'POST', body: { file_ids: [second.id] } });
       jobs = await waitJobs('audio');
       ok(jobs[0].error === 'Already in your music', 'converting the same video twice is skipped');

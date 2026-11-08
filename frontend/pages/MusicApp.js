@@ -18,10 +18,10 @@ export default {
       <!-- Header -->
       <div class="flex flex-col gap-4 mb-6">
         <div>
-          <nav v-if="view !== 'home'" class="flex items-center gap-1 text-[13px] text-muted mb-1.5"><button class="hover:text-fg" @click="goHome">Music</button></nav>
+          <nav v-if="view === 'playlist'" class="flex items-center gap-1 text-[13px] text-muted mb-1.5"><button class="hover:text-fg" @click="goHome">Music</button></nav>
           <div class="flex items-center gap-3">
-            <button v-if="view !== 'home'" class="icon-btn -ml-2" @click="goHome" title="Back"><Icon name="arrow-left" :size="19" /></button>
-            <h1 class="title text-[28px] md:text-[32px] leading-tight truncate">{{ view === 'home' ? 'Music' : view === 'all' ? 'All songs' : playlist?.title }}</h1>
+            <button v-if="view === 'playlist'" class="icon-btn -ml-2" @click="goHome" title="Back"><Icon name="arrow-left" :size="19" /></button>
+            <h1 class="title text-[28px] md:text-[32px] leading-tight truncate">{{ view === 'playlist' ? playlist?.title : 'Music' }}</h1>
           </div>
           <p v-if="view !== 'home' && songs.length" class="text-muted text-[13.5px] mt-1">{{ songs.length }} song{{ songs.length === 1 ? '' : 's' }}<template v-if="listDuration">, {{ listDuration }}</template><template v-if="canReorder"> · drag songs to reorder</template></p>
         </div>
@@ -44,9 +44,11 @@ export default {
       </div>
 
       <input ref="coverInput" type="file" accept="image/*" class="hidden" @change="onPickCover">
-      <div v-if="view === 'home'" class="seg self-start mb-5" role="tablist" aria-label="Show">
-        <button :class="{ on: homeTab === 'artists' }" @click="homeTab = 'artists'" role="tab"><Icon name="users" :size="14" />Artists<span v-if="artists.length" class="text-faint tabular-nums">{{ artists.length }}</span></button>
-        <button :class="{ on: homeTab === 'playlists' }" @click="homeTab = 'playlists'" role="tab"><Icon name="list-music" :size="14" />Playlists<span v-if="playlists.length" class="text-faint tabular-nums">{{ playlists.length }}</span></button>
+      <!-- Artists, Playlists and All songs; an open playlist has its own page with a back button -->
+      <div v-if="view !== 'playlist'" class="seg self-start mb-5" role="tablist" aria-label="Show">
+        <button :class="{ on: view === 'home' && homeTab === 'artists' }" @click="showTab('artists')" role="tab"><Icon name="users" :size="14" />Artists<span v-if="artists.length" class="text-faint tabular-nums">{{ artists.length }}</span></button>
+        <button :class="{ on: view === 'home' && homeTab === 'playlists' }" @click="showTab('playlists')" role="tab"><Icon name="list-music" :size="14" />Playlists<span v-if="playlists.length" class="text-faint tabular-nums">{{ playlists.length }}</span></button>
+        <button :class="{ on: view === 'all' }" @click="view !== 'all' && openAll()" role="tab"><Icon name="music" :size="14" />All songs<span v-if="allSongs.length" class="text-faint tabular-nums">{{ allSongs.length }}</span></button>
       </div>
       <Downloads v-if="view !== 'playlist' || dlKey > 0" :key="dlKey" kind="audio" @finished="onDownloaded" @open="playById" />
       <LibraryFilters v-if="view !== 'home' && songs.length" :f="f" kind="music" :sorts="view === 'playlist' ? [['order', 'Playlist order'], ...SORTS] : SORTS" placeholder="Search titles, artists, tags" class="-mt-2 mb-5" />
@@ -80,18 +82,10 @@ export default {
 
       <!-- HOME: playlists -->
       <template v-else-if="view === 'home'">
-        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-x-4 gap-y-6 stagger">
-          <button class="group text-left" @click="openAll">
-            <div class="aspect-square rounded-xl text-accent-fg grid place-items-center relative overflow-hidden lift" style="background: linear-gradient(135deg, rgb(var(--accent-hi)), rgb(var(--accent)) 55%, #b9621a)">
-              <Icon name="list-music" :size="44" :stroke="1.5" class="transition-transform duration-500 group-hover:scale-110 group-hover:-rotate-6" />
-              <span class="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,.35),transparent_55%)]"></span>
-            </div>
-            <p class="mt-2.5 font-medium text-[14px]">All songs</p>
-            <p class="text-xs text-muted">{{ allSongs.length }} song{{ allSongs.length === 1 ? '' : 's' }}</p>
-          </button>
+        <div v-if="filteredPlaylists.length" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-x-4 gap-y-6 stagger">
           <div v-for="p in filteredPlaylists" :key="p.id" class="group cursor-pointer" @click="openPlaylist(p)">
             <div class="relative aspect-square rounded-xl overflow-hidden bg-elevated lift zoom-media">
-              <img v-if="p.cover_file_id" :src="thumbUrl(p.cover_file_id, 480)" loading="lazy" alt="" class="w-full h-full object-cover">
+              <img v-if="p.display_cover_id" :src="thumbUrl(p.display_cover_id, 480)" loading="lazy" alt="" class="w-full h-full object-cover">
               <div v-else class="w-full h-full grid place-items-center text-faint"><Icon name="disc" :size="44" :stroke="1.25" /></div>
               <div class="absolute bottom-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 translate-y-1 group-hover:translate-y-0 transition">
                 <button class="w-10 h-10 rounded-full bg-black/55 backdrop-blur text-white grid place-items-center shadow-lg hover:bg-black/70"
@@ -363,6 +357,7 @@ export default {
 
     // ---------- artists (like Creators in Videos) ----------
     const homeTab = ref('artists'); // Music opens on Artists; playlists are the user's own
+    const showTab = (tab) => { if (view.value !== 'home') goHome(); homeTab.value = tab; };
     // one tile per artist, with the artwork of their newest song that has some
     const artists = computed(() => groupByPerson(allSongs.value, s => s.cover_file_id)
       .map(a => ({ name: a.value, count: a.count, duration: a.duration, cover: a.newest ? a.newest.cover_file_id : null, tint: a.tint })));
@@ -515,7 +510,7 @@ export default {
       view, playlists, allSongs, songs, playlist, loading, search, musicInput, coverInput, menu, adder,
       f, SORTS, editors, selecting, selected, isSel, toggleSel, toggleSelecting, onMetaSaved, addManyTo, addManyToNew, openAddMany, formatDuration,
       playSelected, deleteSelected, removeSelectedFromPlaylist, shuffleEverything,
-      homeTab, artists, filteredArtists, openArtist, shownArtists, moreArtists, artistsEnd, shownSongs, moreSongs, songsEnd, shownAddable, moreAddable, addableEnd, playArtist, canTrim, trimSong, dlKey, onTrimStarted, positionOf, previewRange,
+      homeTab, showTab, artists, filteredArtists, openArtist, shownArtists, moreArtists, artistsEnd, shownSongs, moreSongs, songsEnd, shownAddable, moreAddable, addableEnd, playArtist, canTrim, trimSong, dlKey, onTrimStarted, positionOf, previewRange,
       filteredPlaylists, filteredSongs, addable, goHome, openAll, openPlaylist, play, playAll, playPlaylist, isCurrent, onRowClick,
       createPlaylist, renamePlaylist, deletePlaylist, toggleFavorite, addToPlaylist, addToNewPlaylist, removeFromPlaylist, deleteSong,
       openAddSongs, confirmAdd, onPickMusic, pickCover, onPickCover, openMenu, run, onDownloaded, playById,
