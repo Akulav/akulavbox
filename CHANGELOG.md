@@ -2,6 +2,11 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 2.7.3 (2026-11-08)
+
+### Changed
+- **Videos opens on Creators and Music opens on Artists.** Their tab comes first, and Videos → Creators has the Upload and Shuffle buttons and the link box. The full list of videos is now at All videos (`#/videos/all`). Clicking a creator still shows their videos.
+
 ## 2.7.2 (2026-11-08)
 
 ### Changed

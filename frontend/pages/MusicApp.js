@@ -45,8 +45,8 @@ export default {
 
       <input ref="coverInput" type="file" accept="image/*" class="hidden" @change="onPickCover">
       <div v-if="view === 'home'" class="seg self-start mb-5" role="tablist" aria-label="Show">
-        <button :class="{ on: homeTab === 'playlists' }" @click="homeTab = 'playlists'" role="tab"><Icon name="list-music" :size="14" />Playlists<span v-if="playlists.length" class="text-faint tabular-nums">{{ playlists.length }}</span></button>
         <button :class="{ on: homeTab === 'artists' }" @click="homeTab = 'artists'" role="tab"><Icon name="users" :size="14" />Artists<span v-if="artists.length" class="text-faint tabular-nums">{{ artists.length }}</span></button>
+        <button :class="{ on: homeTab === 'playlists' }" @click="homeTab = 'playlists'" role="tab"><Icon name="list-music" :size="14" />Playlists<span v-if="playlists.length" class="text-faint tabular-nums">{{ playlists.length }}</span></button>
       </div>
       <Downloads v-if="view !== 'playlist' || dlKey > 0" :key="dlKey" kind="audio" @finished="onDownloaded" @open="playById" />
       <LibraryFilters v-if="view !== 'home' && songs.length" :f="f" kind="music" :sorts="view === 'playlist' ? [['order', 'Playlist order'], ...SORTS] : SORTS" placeholder="Search titles, artists, tags" class="-mt-2 mb-3" />
@@ -367,7 +367,7 @@ export default {
     }
 
     // ---------- artists (like Creators in Videos) ----------
-    const homeTab = ref('playlists');
+    const homeTab = ref('artists'); // Music opens on Artists; playlists are the user's own
     // one tile per artist, with the artwork of their newest song that has some
     const artists = computed(() => groupByPerson(allSongs.value, s => s.cover_file_id)
       .map(a => ({ name: a.value, count: a.count, duration: a.duration, cover: a.newest ? a.newest.cover_file_id : null, tint: a.tint })));

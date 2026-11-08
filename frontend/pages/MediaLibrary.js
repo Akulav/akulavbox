@@ -64,19 +64,24 @@ export default {
               <button v-if="items.length" class="btn" :class="selecting ? '!border-accent text-accent' : ''" @click="toggleSelecting"><Icon name="check" :size="16" />{{ selecting ? 'Done' : 'Select' }}</button>
               <button class="btn btn-primary" @click="fileInput.click()"><Icon name="upload" :size="16" />{{ C.uploadLabel }}</button>
             </template>
+            <!-- Creators is where Videos opens, so uploading starts here too -->
+            <template v-else-if="view === 'creators'">
+              <button v-if="items.length > 1" class="btn" @click="shuffleList" title="Play every video, shuffled"><Icon name="shuffle" :size="16" /><span class="hidden sm:inline">Shuffle</span></button>
+              <button class="btn btn-primary" @click="fileInput.click()"><Icon name="upload" :size="16" />{{ C.uploadLabel }}</button>
+            </template>
             <input ref="fileInput" type="file" multiple :accept="C.accept" class="hidden" @change="onPick">
           </div>
         </div>
 
         <div v-if="C.collections && !openCol" class="seg self-start" role="tablist" aria-label="View">
-          <a :href="'#/' + kind" :class="{ on: view === 'all' }" role="tab"><Icon :name="C.icon" :size="14" />All {{ kind }}</a>
+          <a :href="'#/' + kind" :class="{ on: view === 'creators' }" role="tab"><Icon name="users" :size="14" />Creators<span v-if="f.people.value.length" class="text-faint tabular-nums">{{ f.people.value.length }}</span></a>
+          <a :href="allHref" :class="{ on: view === 'all' }" role="tab"><Icon :name="C.icon" :size="14" />All {{ kind }}</a>
           <a :href="'#/' + kind + '/collections'" :class="{ on: view === 'collections' }" role="tab"><Icon name="list-music" :size="14" />Collections<span v-if="collections.length" class="text-faint tabular-nums">{{ collections.length }}</span></a>
-          <a :href="'#/' + kind + '/creators'" :class="{ on: view === 'creators' }" role="tab"><Icon name="users" :size="14" />Creators<span v-if="f.people.value.length" class="text-faint tabular-nums">{{ f.people.value.length }}</span></a>
         </div>
         <LibraryFilters v-if="view === 'all' && items.length" :f="f" :kind="kind" :sorts="C.sorts" />
       </div>
 
-      <Downloads v-if="C.downloads && !openCol && view !== 'creators'" :key="dlKey" :kind="C.downloads" @finished="onDownloaded" @open="openById" />
+      <Downloads v-if="C.downloads && !openCol" :key="dlKey" :kind="C.downloads" @finished="onDownloaded" @open="openById" />
 
       <!-- ===== Collections ===== -->
       <template v-if="view === 'collections' && !openCol">
@@ -117,7 +122,7 @@ export default {
           <p class="text-muted text-[13.5px] max-w-md mx-auto">Creators come from the {{ L.people.toLowerCase() }} on your {{ kind }}. Downloads from a link fill this in for you.</p>
         </div>
         <div v-else :class="TILE_GRID">
-          <a v-for="p in shownCreators" :key="p.value" :href="'#/' + kind" class="group tile lift" :class="p.cover ? 'tile-media tile-cap-on' : ''" :style="p.cover ? '' : { '--tint': p.tint }" :title="p.value" @click="showCreator(p.value)">
+          <a v-for="p in shownCreators" :key="p.value" :href="allHref" class="group tile lift" :class="p.cover ? 'tile-media tile-cap-on' : ''" :style="p.cover ? '' : { '--tint': p.tint }" :title="p.value" @click="showCreator(p.value)">
             <div v-if="p.cover" class="absolute inset-0 zoom-media"><Thumb :file-id="p.cover" :w="480" :icon="C.icon" /></div>
             <template v-else>
               <Icon name="user" size="100%" :stroke="1.25" class="tile-mark" />
@@ -147,7 +152,7 @@ export default {
         <div v-else-if="openCol && !colItems.length" class="panel py-16 px-6 text-center rise">
           <span class="w-14 h-14 rounded-2xl bg-accent/10 text-accent grid place-items-center mx-auto mb-4"><Icon name="list-music" :size="24" /></span>
           <p class="title text-lg mb-1">This collection is empty</p>
-          <p class="text-muted text-[13.5px] max-w-md mx-auto">Add videos from <a :href="'#/' + kind" class="text-accent hover:underline">All {{ kind }}</a> with “Add to collection”.</p>
+          <p class="text-muted text-[13.5px] max-w-md mx-auto">Add videos from <a :href="allHref" class="text-accent hover:underline">All {{ kind }}</a> with “Add to collection”.</p>
         </div>
 
         <div v-else-if="!openCol && !items.length" class="panel py-16 px-6 text-center">
@@ -329,7 +334,9 @@ export default {
     const f = useLibraryFilter(items, props.kind, props.kind === 'books' ? 'recent' : 'added');
 
     // ---------- view (from the route: #/videos[/collections[/id]|/creators]) ----------
-    const view = computed(() => (C.value.collections && ['collections', 'creators'].includes(props.args[0]) ? props.args[0] : 'all'));
+    // Videos open on Creators; All is #/videos/all (Books has only the one list)
+    const view = computed(() => (!C.value.collections ? 'all' : ['collections', 'creators', 'all'].includes(props.args[0]) ? props.args[0] : 'creators'));
+    const allHref = computed(() => (C.value.collections ? `#/${props.kind}/all` : `#/${props.kind}`));
     const openColId = computed(() => (view.value === 'collections' ? props.args[1] || null : null));
     const collections = ref([]);
     const collectionsLoaded = ref(false);
@@ -418,7 +425,7 @@ export default {
     }
     function filterBy(which, value) {
       viewer.value = null;
-      if (props.args.length) location.hash = `#/${props.kind}`;
+      if (view.value !== 'all' || openColId.value) location.hash = allHref.value;
       f.reset();
       if (which === 'person') f.person.value = value; else f.tag.value = value;
     }
@@ -628,7 +635,7 @@ export default {
 
     return {
       C, L, TILE_GRID, items, loaded, folderId, fileInput, f, selecting, selected, menu, editors, viewer, dragOver, totalDuration,
-      view, openCol, collections, collectionsLoaded, colItems, colLoaded, colDuration, list, creators,
+      view, allHref, openCol, collections, collectionsLoaded, colItems, colLoaded, colDuration, list, creators,
       shownList, moreList, listEnd, shownCreators, moreCreators, creatorsEnd, shownCollections, moreCollections, collectionsEnd,
       isSel, toggleSel, toggleSelecting, selectAll, editSelected, onCardClick, open, openById, filterBy, showCreator, openMenu, run, remove, deleteSelected, onSaved, onDownloaded,
       trim, dlKey, currentTime, videoDuration, openTrim, previewTrim, onTrimStarted,
