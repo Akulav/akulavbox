@@ -10,6 +10,11 @@ const args = process.argv.slice(2);
 const url = args[args.indexOf('--') + 1] || args[args.length - 1];
 if (args.includes('--version')) { console.log('2099.01.01-fake'); process.exit(0); }
 if (/fail/.test(url)) { console.error('ERROR: [generic] This video is unavailable'); process.exit(1); }
+// a video with unusual formats: only "best available" (-f bv*+ba/b, or no -f) works
+if (/noformat/.test(url) && !args.includes('-J')) {
+  const f = args.indexOf('-f');
+  if (f !== -1 && args[f + 1] !== 'bv*+ba/b') { console.error(`ERROR: [youtube] ${url.split('=').pop()}: Requested format is not available. Use --list-formats for a list of available formats`); process.exit(1); }
+}
 // an age-restricted video works only with a cookie file that has youtube.com in it
 if (/agegate/.test(url)) {
   const c = args.indexOf('--cookies');

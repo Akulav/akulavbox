@@ -6,7 +6,7 @@
 
 **Your files, your cloud.** A self-hosted personal cloud for encrypted files, photos, music, videos, books, and chat with voice calls. It's one Node.js server with a no-build browser frontend.
 
-![Version](https://img.shields.io/badge/version-2.4.0-E8A33D)
+![Version](https://img.shields.io/badge/version-2.5.0-E8A33D)
 ![Node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-5fb3a1)
 ![License](https://img.shields.io/badge/license-source--available-8ea1a4)
 
@@ -24,7 +24,7 @@ Made with ♥ by **Akulav**
 | **Trash** | Deleted files and folders go to the trash with **Undo**. Restore whole folder trees. Items are deleted for good after 30 days (configurable) |
 | **Encryption at rest** | AES-256-CTR. Each chunk is encrypted as it arrives, and range requests (video seeking) decrypt from any offset |
 | **Photos** | Collections and albums, justified "natural shape" grids, slideshow, server-side thumbnails via `sharp` (the browser makes them if `sharp` is missing) |
-| **Music** | Library, playlists you can reorder by dragging, favorites, artwork, shuffle everywhere, multi-select (shift-click ranges) to play, file, remove or delete songs, a player that keeps playing while you browse, and media-key support |
+| **Music** | Library, playlists you can reorder by dragging, an Artists view, tag filters, trimming, favorites, artwork, shuffle everywhere, multi-select (shift-click ranges) to play, file, remove or delete songs, a player that keeps playing while you browse, and media-key support |
 | **Download from a link** | Paste a YouTube, Vimeo, SoundCloud or other link (playlists and channels too). Title, creator, date, cover and length are filled in, videos are filed into a collection per channel and songs into a playlist per artist, and video is kept as space-efficient AV1. Age-restricted videos work with your saved sign-in cookies. yt-dlp and ffmpeg install themselves |
 | **Videos and books** | Video collections with play-all and shuffle, a Creators view, **save any video as a song** (same details and artwork), **trim** (fast lossless or frame-exact, in place or as a copy), covers generated automatically, participants, tags, series, and ratings. The EPUB reader remembers your page |
 | **Chat and calls** | Real-time messaging between friends, unread counts that survive reloads, deleting your own messages, files that disappear after 10 minutes, and WebRTC voice calls with optional TURN relay |

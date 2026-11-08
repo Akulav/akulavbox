@@ -23,19 +23,19 @@ function cleanList(v) {
 function currentMeta(fileId, ownerId) {
   const row = db.prepare('SELECT * FROM media_meta WHERE file_id = ?').get(fileId);
   if (row) return lib.withMeta(row);
-  return { file_id: fileId, owner_id: ownerId, title: null, participants: [], tags: [], details: null, date: null, series: null, rating: null, duration: null, thumb_file_id: null, progress: null };
+  return { file_id: fileId, owner_id: ownerId, title: null, participants: [], tags: [], details: null, date: null, series: null, rating: null, duration: null, thumb_file_id: null, progress: null, width: null, height: null };
 }
 
 function saveMeta(m) {
   db.prepare(`
-    INSERT INTO media_meta (file_id, owner_id, title, participants, tags, details, date, series, rating, duration, thumb_file_id, progress, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    INSERT INTO media_meta (file_id, owner_id, title, participants, tags, details, date, series, rating, duration, thumb_file_id, progress, width, height, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     ON CONFLICT(file_id) DO UPDATE SET
       title = excluded.title, participants = excluded.participants, tags = excluded.tags, details = excluded.details,
       date = excluded.date, series = excluded.series, rating = excluded.rating, duration = excluded.duration,
-      thumb_file_id = excluded.thumb_file_id, progress = excluded.progress, updated_at = excluded.updated_at
+      thumb_file_id = excluded.thumb_file_id, progress = excluded.progress, width = excluded.width, height = excluded.height, updated_at = excluded.updated_at
   `).run(m.file_id, m.owner_id, m.title, JSON.stringify(m.participants || []), JSON.stringify(m.tags || []), m.details, m.date, m.series,
-    m.rating, m.duration, m.thumb_file_id, m.progress);
+    m.rating, m.duration, m.thumb_file_id, m.progress, m.width ?? null, m.height ?? null);
 }
 
 /** Apply a patch object to a meta record; returns an error string or null */
@@ -53,6 +53,12 @@ function applyPatch(m, body, userId) {
   if (body.duration !== undefined) {
     const d = Number(body.duration);
     m.duration = isFinite(d) && d > 0 ? d : null;
+  }
+  // natural size of a video (the browser reads it while playing or making a cover)
+  for (const k of ['width', 'height']) {
+    if (body[k] === undefined) continue;
+    const n = Math.round(Number(body[k]));
+    m[k] = n >= 1 && n <= 20000 ? n : null;
   }
   if (body.progress !== undefined) m.progress = body.progress === null ? null : String(body.progress).slice(0, 4000);
   if (body.thumb_file_id !== undefined) {

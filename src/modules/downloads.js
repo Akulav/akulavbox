@@ -44,7 +44,7 @@ module.exports = async function (fastify) {
     return { success: true, ids };
   });
 
-  // Trim one of my videos: { file_id, start, end (seconds), exact?, copy? }. Runs in the queue.
+  // Trim one of my videos or songs: { file_id, start, end (seconds), exact?, copy? }. Runs in the queue.
   fastify.post('/api/downloads/trim', { preHandler: verifyUser }, async (request, reply) => {
     const s = dl.status();
     if (!s.convert) return reply.code(503).send({ error: s.installing ? 'ffmpeg is still being set up. Try again in a minute.' : 'Trimming needs ffmpeg, which isn’t available on this server.' });

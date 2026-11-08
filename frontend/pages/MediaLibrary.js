@@ -2,11 +2,12 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import Icon from '../components/Icon.js';
 import FileViewer from '../components/FileViewer.js';
 import Downloads from '../components/Downloads.js';
+import TrimPanel from '../components/Trim.js';
 import { Thumb, Stars, MetaEditor, LibraryFilters, labelsFor } from '../components/Library.js';
 import { api, fileUrl, formatBytes, formatDate, downloadUrl, refreshAccount } from '../lib/api.js';
 import { toast, confirmDialog, promptDialog, attempt } from '../lib/ui.js';
 import { uploadMany } from '../lib/upload.js';
-import { useLibraryFilter, displayTitle, formatDuration, autoCover, backfillCovers, setCover, thumbUrl, preload } from '../lib/library.js';
+import { useLibraryFilter, displayTitle, formatDuration, autoCover, backfillCovers, backfillSizes, resolutionLabel, setCover, thumbUrl, preload } from '../lib/library.js';
 import { kindOf } from '../lib/filetypes.js';
 import { moveToTrash } from '../lib/trash.js';
 
@@ -16,7 +17,7 @@ const CONFIG = {
     accept: 'video/*,.mkv,.avi,.mov,.wmv,.flv,.m4v,.3gp,.ts',
     grid: 'grid-cols-1 min-[480px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5',
     empty: 'Upload videos or paste a link above, then add participants, tags and details so you can sort and find them later.',
-    sorts: [['added', 'Recently added'], ['oldest', 'Oldest added'], ['title', 'Title'], ['date', 'Date recorded'], ['people', 'Participants'], ['series', 'Series'], ['rating', 'Rating'], ['longest', 'Longest'], ['shortest', 'Shortest'], ['size', 'Largest file']],
+    sorts: [['added', 'Recently added'], ['oldest', 'Oldest added'], ['title', 'Title'], ['date', 'Date recorded'], ['people', 'Participants'], ['series', 'Series'], ['rating', 'Rating'], ['longest', 'Longest'], ['shortest', 'Shortest'], ['resolution', 'Highest resolution'], ['size', 'Largest file']],
   },
   books: {
     title: 'Books', icon: 'file-text', aspect: 'aspect-[2/3]', coverKind: 'book', uploadLabel: 'Add books', collections: false, downloads: null,
@@ -29,7 +30,7 @@ const CONFIG = {
 const TILE_GRID = 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3 stagger';
 
 export default {
-  components: { Icon, FileViewer, Thumb, Stars, MetaEditor, LibraryFilters, Downloads },
+  components: { Icon, FileViewer, Thumb, Stars, MetaEditor, LibraryFilters, Downloads, TrimPanel },
   // args: [] = everything, ['collections'] / ['collections', id], ['creators']
   props: { kind: { type: String, required: true }, args: { type: Array, default: () => [] } },
   template: /*html*/`
@@ -168,7 +169,13 @@ export default {
             <div class="relative rounded-xl overflow-hidden ring-2 lift zoom-media" :class="[C.aspect, isSel(it.id) ? 'ring-accent' : 'ring-transparent']">
               <Thumb :file-id="it.id" :w="480" :version="it.thumb_file_id || 'none'" :icon="C.icon" />
               <span v-if="openCol" class="absolute top-2 left-2 min-w-[22px] h-[22px] px-1.5 rounded-full bg-black/65 text-white text-[11px] font-semibold grid place-items-center tabular-nums">{{ i + 1 }}</span>
-              <span v-if="kind === 'videos' && it.duration" class="absolute bottom-2 right-2 px-1.5 h-5 rounded bg-black/75 text-white text-[11px] font-medium tabular-nums grid place-items-center">{{ formatDuration(it.duration) }}</span>
+              <!-- small watermark, resolution and length along the bottom edge -->
+              <span v-if="kind === 'videos'" class="absolute bottom-2 left-2 w-5 h-5 grid place-items-center text-white/70 drop-shadow pointer-events-none" aria-hidden="true"><Icon name="film" :size="14" :stroke="2" /></span>
+              <span v-if="kind === 'videos'" class="absolute bottom-2 right-2 flex gap-1">
+                <span v-if="resolutionLabel(it.width, it.height)" class="px-1.5 h-5 rounded text-[10.5px] font-bold tracking-wide grid place-items-center"
+                      :class="Math.min(it.width, it.height) >= 2000 ? 'bg-accent text-accent-fg' : 'bg-black/75 text-white'" :title="it.width + ' × ' + it.height">{{ resolutionLabel(it.width, it.height) }}</span>
+                <span v-if="it.duration" class="px-1.5 h-5 rounded bg-black/75 text-white text-[11px] font-medium tabular-nums grid place-items-center">{{ formatDuration(it.duration) }}</span>
+              </span>
               <span v-if="kind === 'videos'" class="absolute inset-0 grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                 <span class="w-12 h-12 rounded-full bg-black/55 backdrop-blur grid place-items-center text-white"><Icon name="play" :size="18" class="translate-x-[1px]" /></span>
               </span>
@@ -285,6 +292,7 @@ export default {
               <template v-if="file.series"><dt class="text-muted">{{ L.series }}</dt><dd>{{ file.series }}</dd></template>
               <template v-if="file.date"><dt class="text-muted">{{ L.date }}</dt><dd>{{ file.date }}</dd></template>
               <template v-if="file.duration"><dt class="text-muted">Length</dt><dd class="tabular-nums">{{ formatDuration(file.duration) }}</dd></template>
+              <template v-if="file.width && kind === 'videos'"><dt class="text-muted">Resolution</dt><dd class="tabular-nums">{{ file.width }} × {{ file.height }} <span class="text-muted">({{ resolutionLabel(file.width, file.height) }})</span></dd></template>
               <template v-if="file.rating"><dt class="text-muted">Rating</dt><dd><Stars :model-value="file.rating" :size="14" readonly /></dd></template>
             </dl>
             <p v-if="file.details" class="text-[13.5px] whitespace-pre-line leading-relaxed">{{ file.details }}</p>
@@ -293,31 +301,8 @@ export default {
             <button v-if="kind === 'videos' && canConvert && !(trim && trim.id === file.id)" class="btn btn-sm w-full" @click="openTrim(file)"><Icon name="zoom-out" :size="14" />Trim</button>
 
             <!-- Trim: keep start..end -->
-            <div v-if="trim && trim.id === file.id" class="rounded-xl border border-line p-3.5 space-y-3">
-              <div class="flex items-center gap-2"><p class="font-medium text-[13.5px] flex-1">Trim</p><button class="icon-btn icon-btn-sm" @click="trim = null" title="Close"><Icon name="x" :size="14" /></button></div>
-              <div class="grid grid-cols-2 gap-2">
-                <div>
-                  <label class="label !mb-1" for="trim-start">Start</label>
-                  <input id="trim-start" v-model="trim.start" class="input h-9 tabular-nums" placeholder="0:00" inputmode="decimal">
-                  <button class="text-[11.5px] text-accent hover:underline mt-1" @click="trim.start = fmtTime(currentTime())">Use current time</button>
-                </div>
-                <div>
-                  <label class="label !mb-1" for="trim-end">End</label>
-                  <input id="trim-end" v-model="trim.end" class="input h-9 tabular-nums" placeholder="1:23" inputmode="decimal">
-                  <button class="text-[11.5px] text-accent hover:underline mt-1" @click="trim.end = fmtTime(currentTime())">Use current time</button>
-                </div>
-              </div>
-              <p class="text-[12px]" :class="trimError ? 'text-danger' : 'text-muted'">{{ trimError || 'Keeps ' + fmtTime(trimRange.end - trimRange.start) + ' of ' + fmtTime(trimRange.total) + '.' }}</p>
-              <button class="btn btn-sm w-full" :disabled="!!trimError" @click="previewTrim"><Icon name="play" :size="13" />Preview the cut</button>
-              <label class="flex items-start gap-2 text-[12.5px] cursor-pointer"><input type="checkbox" class="checkbox mt-0.5" v-model="trim.exact">
-                <span>Exact cut <span class="text-muted">(re-encodes: slower, frame-accurate). Otherwise the cut is instant and lossless but may start up to a few seconds early.</span></span></label>
-              <div class="seg w-full" role="radiogroup" aria-label="Save as">
-                <button class="flex-1" :class="{ on: !trim.copy }" @click="trim.copy = false" role="radio" :aria-checked="!trim.copy">Replace</button>
-                <button class="flex-1" :class="{ on: trim.copy }" @click="trim.copy = true" role="radio" :aria-checked="trim.copy">Save as new</button>
-              </div>
-              <p v-if="!trim.copy" class="text-[11.5px] text-muted">The video keeps its details, cover and collections. The cut-off parts are gone for good.</p>
-              <button class="btn btn-primary btn-sm w-full" :disabled="!!trimError || trim.busy" @click="startTrim(file)"><Icon :name="trim.busy ? 'loader' : 'check'" :size="14" />{{ trim.copy ? 'Save trimmed copy' : 'Trim video' }}</button>
-            </div>
+            <TrimPanel v-if="trim && trim.id === file.id" :item="{ id: file.id, duration: file.duration || videoDuration() }" kind="video"
+                       :get-time="currentTime" :preview="previewTrim" @close="trim = null" @started="onTrimStarted" />
           </div>
         </template>
       </FileViewer>
@@ -387,14 +372,21 @@ export default {
     watch(view, () => { selected.value = []; selecting.value = false; });
 
     // Generate missing covers quietly in the background
+    let stopSizes = null;
     function startBackfill() {
       if (stopBackfill) stopBackfill();
+      if (stopSizes) { stopSizes(); stopSizes = null; }
       const missing = items.value.filter(it => !it.thumb_file_id && (props.kind === 'videos' || /\.(pdf|epub)$/i.test(it.filename)));
-      if (!missing.length) return;
-      stopBackfill = backfillCovers(missing, C.value.coverKind, (it, meta) => {
-        it.thumb_file_id = meta.thumb_file_id;
-        if (meta.duration && !it.duration) it.duration = meta.duration;
-      });
+      if (missing.length) {
+        stopBackfill = backfillCovers(missing, C.value.coverKind, (it, meta) => {
+          it.thumb_file_id = meta.thumb_file_id;
+          if (meta.duration && !it.duration) it.duration = meta.duration;
+          if (meta.width && !it.width) Object.assign(it, { width: meta.width, height: meta.height });
+        });
+      }
+      // videos that have a cover but no resolution yet (uploaded before resolutions were kept)
+      const noSize = props.kind === 'videos' ? items.value.filter(it => it.thumb_file_id && !it.width) : [];
+      if (noSize.length) stopSizes = backfillSizes(noSize, (it, patch) => Object.assign(it, patch));
     }
 
     // Warm thumbnails for everything after the first screenful
@@ -463,54 +455,20 @@ export default {
     const trim = ref(null);
     const dlKey = ref(0); // remount the downloads list so it shows (and follows) a new job
     const viewerVideo = () => document.querySelector('[role=dialog] video');
-    const currentTime = () => viewerVideo()?.currentTime || 0;
-    const fmtTime = (s) => {
-      if (!isFinite(s) || s < 0) s = 0;
-      const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
-      const ss = sec.toFixed(1).padStart(4, '0').replace(/\.0$/, '');
-      return h ? `${h}:${String(m).padStart(2, '0')}:${ss.padStart(2, '0')}` : `${m}:${ss.padStart(2, '0')}`;
-    };
-    // "90", "1:30", "1:02:03.5" → seconds
-    const parseTime = (v) => {
-      const parts = String(v ?? '').trim().split(':').map(Number);
-      if (!parts.length || parts.some(n => !isFinite(n) || n < 0)) return NaN;
-      return parts.reduce((a, n) => a * 60 + n, 0);
-    };
-    function openTrim(file) {
-      const total = file.duration || viewerVideo()?.duration || 0;
-      trim.value = { id: file.id, start: '0:00', end: fmtTime(total), total, exact: false, copy: false, busy: false };
-    }
-    const trimRange = computed(() => {
-      const t = trim.value;
-      if (!t) return { start: 0, end: 0, total: 0 };
-      const total = t.total || viewerVideo()?.duration || 0;
-      return { start: parseTime(t.start), end: parseTime(t.end), total };
-    });
-    const trimError = computed(() => {
-      const { start, end, total } = trimRange.value;
-      if (!isFinite(start) || !isFinite(end)) return 'Write times like 1:30 or 90.';
-      if (end <= start + 0.2) return 'The end must come after the start.';
-      if (total && start >= total) return 'The start is past the end of the video.';
-      if (total && start <= 0.05 && end >= total - 0.05) return 'Move the start or the end to cut something.';
-      return '';
-    });
+    const currentTime = () => { const v = viewerVideo(); return v ? v.currentTime : null; };
+    const videoDuration = () => { const d = viewerVideo()?.duration; return isFinite(d) ? d : 0; };
+    const openTrim = (file) => { trim.value = { id: file.id }; };
     let previewStop = null;
-    function previewTrim() {
+    function previewTrim(start, end) {
       const v = viewerVideo();
-      if (!v) return toast('Open the video first.');
-      const { start, end } = trimRange.value;
+      if (!v) return toast('This video can’t be played here, so it can’t be previewed.');
       if (previewStop) v.removeEventListener('timeupdate', previewStop);
       previewStop = () => { if (v.currentTime >= end) { v.pause(); v.removeEventListener('timeupdate', previewStop); previewStop = null; } };
       v.currentTime = start;
       v.addEventListener('timeupdate', previewStop);
       v.play().catch(() => {});
     }
-    async function startTrim(file) {
-      const { start, end, total } = trimRange.value;
-      trim.value.busy = true;
-      const r = await attempt(() => api('/api/downloads/trim', { method: 'POST', body: { file_id: file.id, start, end: total ? Math.min(end, total) : end, exact: trim.value.exact, copy: trim.value.copy } }));
-      if (!r) { trim.value.busy = false; return; }
-      toast.success(trim.value.copy ? 'Trimming into a new video. It appears here when it’s done.' : 'Trimming. The video updates when it’s done; you can close this.');
+    function onTrimStarted() {
       trim.value = null;
       viewer.value = null; // the file is about to change under the player
       dlKey.value++;
@@ -665,17 +623,17 @@ export default {
     };
     watch(() => props.kind, () => { loaded.value = false; items.value = []; selected.value = []; f.reset(); collections.value = []; reloadAll(); });
     onMounted(() => { reloadAll(); window.addEventListener('keydown', onKey); });
-    onUnmounted(() => { if (stopBackfill) stopBackfill(); window.removeEventListener('keydown', onKey); });
+    onUnmounted(() => { if (stopBackfill) stopBackfill(); if (stopSizes) stopSizes(); window.removeEventListener('keydown', onKey); });
 
     return {
       C, L, TILE_GRID, items, loaded, folderId, fileInput, f, selecting, selected, menu, editors, viewer, dragOver, totalDuration,
       view, openCol, collections, collectionsLoaded, colItems, colLoaded, colDuration, list, creators,
       isSel, toggleSel, toggleSelecting, selectAll, editSelected, onCardClick, open, openById, filterBy, showCreator, openMenu, run, remove, deleteSelected, onSaved, onDownloaded,
-      trim, dlKey, currentTime, fmtTime, openTrim, trimRange, trimError, previewTrim, startTrim,
+      trim, dlKey, currentTime, videoDuration, openTrim, previewTrim, onTrimStarted,
       playCollection, playCollectionById, shuffleList, canConvert, toSongs, collectionToSongs, TAGS_SHOWN, allTags, newCollection, renameCollection, deleteCollection, toggleColFavorite, removeFromCol, setColCover,
       colMenu, openColMenu, runCol, picker, openPicker, pickerFromMenu, addTo, dragIndex, dragOverIndex, onCardDragStart, onCardDrop,
       frameAsCover, onPick, onDragEnter, onDragLeave, onDrop, ext, progressOf,
-      displayTitle, formatDuration, formatBytes, formatDate, fileUrl, downloadUrl,
+      displayTitle, formatDuration, resolutionLabel, formatBytes, formatDate, fileUrl, downloadUrl,
     };
   },
 };

@@ -2,6 +2,18 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 2.5.0 (2026-11-08)
+
+### New
+- **Music gets the same care as Videos.**
+  - **Artists view:** one tile per artist, with their newest artwork, song count and total length, plus play and shuffle buttons. Click a tile to see their songs.
+  - **Tag quick-filters:** song lists get the same row of tag chips as Videos.
+  - **Trim songs:** from a song’s menu, with the same controls as videos. Fast and lossless, or exact (re-encoded to AAC). Replace the song, or save a copy that keeps the artwork and playlists. The preview plays just the chosen part.
+- **Resolution on videos.** Cards show a small watermark and a resolution badge (720p, 1080p, 4K…) next to the length, and the details panel shows the exact size. Downloads and trims record it. Videos you uploaded earlier get it filled in quietly in the background. There’s also a new sort: Highest resolution.
+
+### Fixed
+- Some YouTube videos failed with “Requested format is not available”. YouTube now needs a JavaScript runtime to unlock all formats, and AkulavBox gives yt-dlp the Node.js it already runs on. If a video still doesn’t offer the preferred formats, it downloads the best one available instead of failing.
+
 ## 2.4.0 (2026-11-08)
 
 ### New

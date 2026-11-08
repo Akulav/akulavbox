@@ -50,7 +50,7 @@ All endpoints are JSON unless noted. Authenticate with `Authorization: Bearer <t
 | --- | --- | --- |
 | GET | `/api/library/folder/:key` | The id of a locked folder (`gallery`, `music`, `music_art`, `videos`, `video_covers`, `books`, `book_covers`) |
 | GET | `/api/library/:section` | `photos` / `videos` / `books` / `music` items with details |
-| PATCH | `/api/library/meta/:fileId` | Title, participants, tags, details, date, series, rating, duration, thumb_file_id, progress |
+| PATCH | `/api/library/meta/:fileId` | Title, participants, tags, details, date, series, rating, duration, thumb_file_id, progress, width, height (a video’s resolution) |
 | POST | `/api/library/meta/bulk` | `{ file_ids, add_participants, remove_participants, add_tags, remove_tags, set }` |
 
 ## Video collections
@@ -62,7 +62,7 @@ All endpoints are JSON unless noted. Authenticate with `Authorization: Bearer <t
 | GET | `/api/downloads/status` | `{ enabled, available, ytdlp, ffmpeg, av1, convert, installing, step, error }` |
 | GET | `/api/downloads?kind=video\|audio` | My recent jobs: `status` is `queued`, `probing`, `downloading`, `converting`, `processing`, `done`, `error`, `cancelled` or `expanded` (a playlist that became one job per entry) |
 | POST | `/api/downloads` | `{ url, kind }`. Several links can be separated by spaces. `akulavbox:video/<fileId>` re-queues a conversion |
-| POST | `/api/downloads/trim` | `{ file_id, start, end, exact?, copy? }` (seconds): keep start..end of my video. `exact` re-encodes for a frame-accurate cut; `copy` saves a new video instead of replacing. Queued as `akulavbox:trim/<id>?…` |
+| POST | `/api/downloads/trim` | `{ file_id, start, end, exact?, copy? }` (seconds): keep start..end of my video or song. `exact` re-encodes for a frame-accurate cut; `copy` saves a new video instead of replacing. Queued as `akulavbox:trim/<id>?…` |
 | POST | `/api/downloads/from-videos` | `{ file_ids }`: save my videos' sound as songs (same details and artwork). Needs ffmpeg (`status.convert`) |
 | GET / PUT / DELETE | `/api/downloads/cookies` | My sign-in cookies for downloads. GET → `{ saved, sites, updated_at }` (never the values). PUT `{ text }`: a Netscape cookies.txt or a JSON export |
 | DELETE | `/api/downloads/:id` | Cancel, or remove a finished job from the list |

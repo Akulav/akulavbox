@@ -53,6 +53,8 @@ function detect(force = false) {
   if (tools && !force) return tools;
   const { ytdlp, ffmpeg } = installer.paths();
   const ytVersion = execText(ytdlp, ['--version']).split('\n')[0] || null;
+  // yt-dlp 2025.11+ can use Node as its JavaScript runtime; older builds don't know the option
+  const jsRuntime = !!ytVersion && execText(ytdlp, ['--help'], 30000).includes('--js-runtimes');
   const ffVersion = execText(ffmpeg, ['-version']).split('\n')[0] || null;
   let av1 = null;
   if (ffVersion) {
@@ -61,7 +63,7 @@ function detect(force = false) {
   }
   // ffprobe sits next to ffmpeg (a .js stand-in answers for both)
   const ffprobe = /\.(c?js|mjs)$/i.test(ffmpeg) ? ffmpeg : /ffmpeg(\.exe)?$/i.test(ffmpeg) ? ffmpeg.replace(/ffmpeg(\.exe)?$/i, (m, x) => `ffprobe${x || ''}`) : 'ffprobe';
-  tools = { ytdlp, ffmpeg, ffprobe, ytVersion, ffVersion: ffVersion ? ffVersion.replace(/^ffmpeg version\s*/, '').split(' ')[0] : null, av1 };
+  tools = { ytdlp, ffmpeg, ffprobe, ytVersion, jsRuntime, ffVersion: ffVersion ? ffVersion.replace(/^ffmpeg version\s*/, '').split(' ')[0] : null, av1 };
   return tools;
 }
 const status = () => {
@@ -118,20 +120,22 @@ function addConversions(ownerId, fileIds) {
 }
 
 /**
- * Queue a trim of one of my videos: keep start..end (seconds). `exact` re-encodes so
- * the cut lands on the exact frame; otherwise it cuts at the nearest keyframe before
- * `start`, which is instant and lossless. `copy` keeps the original and saves a new video.
- * Returns the job id, or an error sentence.
+ * Queue a trim of one of my videos or songs: keep start..end (seconds). `exact`
+ * re-encodes so the cut lands exactly; otherwise it cuts at the nearest keyframe
+ * before `start` (for audio, within a fraction of a second), instant and lossless.
+ * `copy` keeps the original and saves a new item. Returns { id } or { error }.
  */
 function addTrim(ownerId, fileId, { start, end, exact, copy }) {
   const s = Math.max(0, Number(start) || 0), e = Number(end);
   if (!(e > s + 0.2)) return { error: 'Choose an end after the start (at least a fraction of a second).' };
-  const v = db.prepare(`SELECT f.id, f.filename, m.title, m.duration FROM files f LEFT JOIN media_meta m ON m.file_id = f.id
-    WHERE f.id = ? AND f.owner_id = ? AND f.folder_id = ? AND f.trashed_at IS NULL`).get(String(fileId), ownerId, lib.ensureSystemFolder(ownerId, 'videos'));
-  if (!v) return { error: 'That video is no longer in your library.' };
-  if (v.duration && s >= v.duration) return { error: 'The start is after the end of the video.' };
+  const sections = { [lib.ensureSystemFolder(ownerId, 'videos')]: 'video', [lib.ensureSystemFolder(ownerId, 'music')]: 'audio' };
+  const v = db.prepare(`SELECT f.id, f.filename, f.folder_id, m.title, m.duration FROM files f LEFT JOIN media_meta m ON m.file_id = f.id
+    WHERE f.id = ? AND f.owner_id = ? AND f.trashed_at IS NULL`).get(String(fileId), ownerId);
+  const kind = v && sections[v.folder_id];
+  if (!kind) return { error: 'That video or song is no longer in your library.' };
+  if (v.duration && s >= v.duration) return { error: `The start is after the end of the ${kind === 'audio' ? 'song' : 'video'}.` };
   const url = `akulavbox:trim/${v.id}?s=${s.toFixed(3)}&e=${e.toFixed(3)}&exact=${exact ? 1 : 0}&copy=${copy ? 1 : 0}`;
-  return { id: addJob(ownerId, url, 'video', v.title || v.filename.replace(/\.[^.]+$/, '')) };
+  return { id: addJob(ownerId, url, kind, v.title || v.filename.replace(/\.[^.]+$/, '')) };
 }
 
 /** Re-queue an internal job (a retry from the downloads list) after checking ownership */
@@ -251,6 +255,14 @@ async function storeCover(ownerId, key, srcPath, title) {
   } catch (e) { return null; }
 }
 
+/** Width and height of a video file's first video stream, or {} */
+function videoSize(file) {
+  const t = detect();
+  if (!t.ffVersion) return {};
+  const m = /^(\d+)x(\d+)/.exec(execText(t.ffprobe, ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0:s=x', file], 30000));
+  return m ? { width: Number(m[1]), height: Number(m[2]) } : {};
+}
+
 const insertMeta = (fields) => {
   const keys = Object.keys(fields);
   db.prepare(`INSERT INTO media_meta (${keys.join(', ')}, updated_at) VALUES (${keys.map(() => '?').join(', ')}, datetime('now'))`).run(...keys.map(k => fields[k]));
@@ -270,7 +282,7 @@ async function run(id) {
   fs.mkdirSync(work, { recursive: true });
   try {
     if (CONVERT_RE.test(job.url)) await convertVideo(job, work);
-    else if (TRIM_RE.test(job.url)) await trimVideo(job, work);
+    else if (TRIM_RE.test(job.url)) await trimMedia(job, work);
     else await download(job, work);
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
@@ -283,7 +295,9 @@ async function download(job, work) {
   const t = detect();
   if (!t.ytVersion) throw new Error('The downloader isn’t ready yet.');
   const cookieFile = cookies.writeFor(ownerId, work);
-  const common = ['--no-warnings', ...(cookieFile ? ['--cookies', cookieFile] : []), ...(PROXY ? ['--proxy', PROXY] : [])];
+  const common = ['--no-warnings', ...(cookieFile ? ['--cookies', cookieFile] : []), ...(PROXY ? ['--proxy', PROXY] : []),
+    // YouTube needs a JavaScript runtime to unlock all formats; Node (running this server) is one
+    ...(t.jsRuntime ? ['--js-runtimes', `node:${process.execPath}`] : [])];
   const yt = (args, onLine) => spawnFor(id, t.ytdlp, [...common, ...args], { onLine, name: 'yt-dlp' }).catch((e) => { throw explain(e, !!cookieFile); });
 
   // 1. read the link's details (playlists only list their entries)
@@ -327,18 +341,27 @@ async function download(job, work) {
   // Sites that only offer combined streams (HLS, e.g. most adult and news sites) fall through to `b`.
   const VIDEO_FORMAT = (AV1 ? 'bv*[vcodec^=av01][height<=1080]+ba[ext=m4a]/bv*[vcodec^=av01][height<=1080]+ba/' : '')
     + 'bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/bv*[height<=1080]+ba/b[height<=1080]/b';
-  if (kind === 'video') args.push(...(ff ? ['-f', VIDEO_FORMAT, '--merge-output-format', 'mp4'] : ['-f', 'b[ext=mp4]/b']));
-  else args.push(...(ff ? ['-x', '--audio-format', 'm4a', '--audio-quality', '0'] : ['-f', 'ba[ext=m4a]/ba[ext=mp3]/ba/b']));
-  args.push('--', job.url);
+  // Format choices, best first. When a video offers none of the preferred ones
+  // ("Requested format is not available"), fall back to whatever it does have.
+  const attempts = kind === 'video'
+    ? (ff ? [['-f', VIDEO_FORMAT], ['-f', 'bv*+ba/b'], []].map(f => [...f, '--merge-output-format', 'mp4']) : [['-f', 'b[ext=mp4]/b'], []])
+    : (ff ? [['-f', 'ba/b'], []].map(f => [...f, '-x', '--audio-format', 'm4a', '--audio-quality', '0']) : [['-f', 'ba[ext=m4a]/ba[ext=mp3]/ba/b'], []]);
 
   let lastWrite = 0;
-  await yt(args, (line) => {
+  const onProgress = (line) => {
     const m = /^AKP (\S+) (\S+) (\S+) (\S+)/.exec(line);
     if (!m || Date.now() - lastWrite < 700) return; // don't hammer the database
     lastWrite = Date.now();
     const done = Number(m[1]) || 0, total = Number(m[2]) || Number(m[3]) || 0;
     update(id, { progress: total ? Math.min(0.99, done / total) : 0, speed: Number(m[4]) || null });
-  });
+  };
+  for (let i = 0; ; i++) {
+    try { await yt([...args, ...attempts[i], '--', job.url], onProgress); break; }
+    catch (e) {
+      if (i === attempts.length - 1 || !/Requested format is not available/i.test(e.message)) throw e;
+      for (const n of fs.readdirSync(work)) if (n.startsWith('media.')) fs.rmSync(path.join(work, n), { force: true });
+    }
+  }
 
   // 3. store it
   update(id, { status: 'processing', progress: 0.99, speed: null });
@@ -365,6 +388,7 @@ async function download(job, work) {
     series: kind === 'audio' && info.album ? String(info.album).slice(0, 300) : null,
     duration: Number(info.duration) > 0 ? Number(info.duration) : null,
     thumb_file_id: kind === 'video' ? coverId : null, source_url: info.webpage_url || job.url, source_id: sourceId,
+    ...(kind === 'video' ? videoSize(media.p) : {}),
   });
   if (kind === 'video') col.addToCollection(col.collectionByTitle(ownerId, 'videos', creator), ownerId, [file.id]);
   else fileSong(ownerId, file.id, coverId, creator);
@@ -455,8 +479,10 @@ function ffmpegWithProgress(jobId, args, seconds, from = 0.1, to = 0.95) {
   });
 }
 
-async function trimVideo(job, work) {
+async function trimMedia(job, work) {
   const { id, owner_id: ownerId } = job;
+  const audio = job.kind === 'audio';
+  const noun = audio ? 'song' : 'video';
   const t = detect();
   if (!t.ffVersion) throw new Error('Trimming needs ffmpeg, which isn’t installed on the server yet.');
   const [, fileId, query] = TRIM_RE.exec(job.url);
@@ -464,33 +490,35 @@ async function trimVideo(job, work) {
   const start = Number(q.get('s')), end = Number(q.get('e'));
   const exact = q.get('exact') === '1', keepOriginal = q.get('copy') === '1';
   const video = db.prepare('SELECT * FROM files WHERE id = ? AND owner_id = ? AND trashed_at IS NULL').get(fileId, ownerId);
-  if (!video) throw new Error('The video is no longer in your library.');
+  if (!video) throw new Error(`The ${noun} is no longer in your library.`);
   const meta = lib.withMeta(db.prepare('SELECT * FROM media_meta WHERE file_id = ?').get(fileId));
   update(id, { status: 'processing', progress: 0.02, creator: meta?.participants?.[0] || null });
 
-  if (!store.hasRoomFor(video.size_bytes * 2)) throw new Error('The server’s disk is too full to trim this video');
-  const srcExt = path.extname(video.filename).toLowerCase() || '.mp4';
-  const src = path.join(work, `video${srcExt}`);
+  if (!store.hasRoomFor(video.size_bytes * 2)) throw new Error(`The server’s disk is too full to trim this ${noun}`);
+  const srcExt = path.extname(video.filename).toLowerCase() || (audio ? '.m4a' : '.mp4');
+  const src = path.join(work, `source${srcExt}`);
   const input = store.readAll(video);
-  if (!input) throw new Error('The video file is missing on the server.');
+  if (!input) throw new Error(`The ${noun} file is missing on the server.`);
   await pipeline(input, fs.createWriteStream(src));
   throwIfCancelled(id);
 
   const length = end - start;
-  // a fast cut keeps the container; an exact cut is re-encoded to MP4 (AV1 when available, so it stays small)
-  const ext = exact ? '.mp4' : srcExt;
+  // a fast cut keeps the container; an exact cut is re-encoded: video to MP4 (AV1 when
+  // available, so it stays small), audio to AAC in M4A
+  const ext = exact ? (audio ? '.m4a' : '.mp4') : srcExt;
   const out = path.join(work, `trimmed${ext}`);
-  const video_enc = t.av1 === 'libsvtav1' ? ['-c:v', 'libsvtav1', '-preset', '8', '-crf', '35']
+  const videoEnc = t.av1 === 'libsvtav1' ? ['-c:v', 'libsvtav1', '-preset', '8', '-crf', '35']
     : t.av1 === 'libaom-av1' ? ['-c:v', 'libaom-av1', '-crf', '34', '-b:v', '0', '-cpu-used', '8', '-row-mt', '1']
     : ['-c:v', 'libx264', '-preset', 'medium', '-crf', '20'];
-  const args = exact
-    ? ['-ss', String(start), '-i', src, '-t', String(length), '-map', '0:v:0', '-map', '0:a?', ...video_enc, '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', out]
-    : ['-ss', String(start), '-i', src, '-t', String(length), '-map', '0', '-c', 'copy', '-avoid_negative_ts', 'make_zero',
-      ...(['.mp4', '.m4v', '.mov'].includes(ext) ? ['-movflags', '+faststart'] : []), out];
+  const faststart = ['.mp4', '.m4v', '.mov', '.m4a'].includes(ext) ? ['-movflags', '+faststart'] : [];
+  const cut = ['-ss', String(start), '-i', src, '-t', String(length)];
+  const args = !exact ? [...cut, '-map', '0', '-c', 'copy', '-avoid_negative_ts', 'make_zero', ...faststart, out]
+    : audio ? [...cut, '-map', '0:a:0', '-vn', '-c:a', 'aac', '-b:a', '192k', ...faststart, out]
+    : [...cut, '-map', '0:v:0', '-map', '0:a?', ...videoEnc, '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '160k', ...faststart, out];
   update(id, { status: 'converting', progress: 0.1 });
   await ffmpegWithProgress(id, args, length);
   throwIfCancelled(id);
-  if (!fs.existsSync(out) || !fs.statSync(out).size) throw new Error('ffmpeg didn’t produce a video. Try an exact cut.');
+  if (!fs.existsSync(out) || !fs.statSync(out).size) throw new Error(`ffmpeg didn’t produce a ${noun}. Try an exact cut.`);
   const realLength = Number(execText(t.ffprobe, ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', out], 30000)) || length;
 
   update(id, { status: 'processing', progress: 0.97 });
@@ -504,15 +532,21 @@ async function trimVideo(job, work) {
         participants: JSON.stringify(meta.participants), tags: JSON.stringify(meta.tags), details: meta.details || null,
         date: meta.date || null, series: meta.series || null, rating: meta.rating || null, duration: realLength,
         thumb_file_id: meta.thumb_file_id || null, source_url: meta.source_url || null,
+        ...(audio ? {} : videoSize(out)),
       });
     }
-    // next to the original in every collection it's in
+    // next to the original: same collections (videos) or same playlists and artwork (songs)
     for (const c of db.prepare('SELECT collection_id FROM media_collection_items WHERE file_id = ?').all(video.id)) col.addToCollection(c.collection_id, ownerId, [copy.id]);
+    for (const p of db.prepare('SELECT playlist_id FROM playlist_songs WHERE file_id = ?').all(video.id)) col.addToPlaylist(p.playlist_id, copy.id);
+    const art = db.prepare('SELECT cover_file_id FROM song_covers WHERE file_id = ?').get(video.id);
+    if (art) db.prepare('INSERT OR REPLACE INTO song_covers (file_id, cover_file_id) VALUES (?, ?)').run(copy.id, art.cover_file_id);
     update(id, { status: 'done', progress: 1, file_id: copy.id, error: null });
   } else {
     const name = ext === srcExt ? null : `${base}${ext}`;
     await store.replaceFile(video, out, { filename: name, mime: name ? guessMime(name) : null });
-    if (meta) db.prepare("UPDATE media_meta SET duration = ?, progress = NULL, updated_at = datetime('now') WHERE file_id = ?").run(realLength, video.id);
+    const size = audio ? {} : videoSize(out);
+    if (meta) db.prepare("UPDATE media_meta SET duration = ?, width = COALESCE(?, width), height = COALESCE(?, height), progress = NULL, updated_at = datetime('now') WHERE file_id = ?")
+      .run(realLength, size.width ?? null, size.height ?? null, video.id);
     else insertMeta({ file_id: video.id, owner_id: ownerId, duration: realLength });
     update(id, { status: 'done', progress: 1, file_id: video.id, error: null });
   }

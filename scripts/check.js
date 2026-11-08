@@ -264,6 +264,24 @@ async function main() {
       const back = await api(`/api/files/${second.id}/view`, { raw: true });
       ok(back.status === 200 && Buffer.from(await back.arrayBuffer()).equals(Buffer.alloc(8192, 3)), 'the trimmed video decrypts');
 
+      const songToTrim = (await api('/api/music/songs')).data.songs.find(s => s.id === converted.id);
+      const ts = await api('/api/downloads/trim', { method: 'POST', body: { file_id: songToTrim.id, start: 1, end: 9, copy: true, exact: true } });
+      jobs = await waitJobs('audio');
+      const trimmedSong = (await api('/api/music/songs')).data.songs.find(s => s.id === jobs.find(j => j.id === ts.data?.id)?.file_id);
+      ok(trimmedSong && trimmedSong.id !== songToTrim.id && /\.m4a$/.test(trimmedSong.filename) && trimmedSong.duration === 8 && trimmedSong.cover_file_id === songToTrim.cover_file_id && trimmedSong.participants[0] === 'Test Creator',
+        'trim a song into a copy (same artist and artwork)', JSON.stringify(trimmedSong));
+      const inList = (await api(`/api/music/playlists/${creatorList.id}/songs`)).data;
+      ok(inList.some(s => s.id === trimmedSong?.id), 'the trimmed song joins the original’s playlists');
+
+      const sized = await api(`/api/library/meta/${second.id}`, { method: 'PATCH', body: { width: 1920, height: 1080 } });
+      ok(sized.status === 200 && sized.data.width === 1920 && sized.data.height === 1080 && sized.data.duration === 20, 'store a video’s resolution (keeps the other details)');
+      ok((await api('/api/library/videos')).data.items.find(x => x.id === second.id)?.height === 1080, 'the library lists the resolution');
+
+      console.log('\nYouTube format fallback');
+      await api('/api/downloads', { method: 'POST', body: { url: 'https://www.youtube.com/watch?v=noformat', kind: 'video' } });
+      jobs = await waitJobs('video');
+      ok(jobs[0].status === 'done', 'a video without the preferred formats downloads in the best available one', jobs[0].error);
+
       console.log('\nSign-in cookies');
       await api('/api/downloads', { method: 'POST', body: { url: 'https://www.youtube.com/watch?v=agegate', kind: 'video' } });
       jobs = await waitJobs('video');

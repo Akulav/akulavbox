@@ -78,6 +78,19 @@ export function prev() {
 
 export function seek(t) { if (isFinite(t)) audio.currentTime = t; }
 
+/** Playback position of this song if it's the one loaded in the player, else null */
+export const positionOf = (id) => (player.current && player.current.id === id ? audio.currentTime : null);
+
+/** Play just start..end of a song (the trim preview), then pause */
+let previewStop = null;
+export function previewRange(song, start, end) {
+  if (previewStop) audio.removeEventListener('timeupdate', previewStop);
+  previewStop = () => { if (audio.currentTime >= end) { audio.pause(); audio.removeEventListener('timeupdate', previewStop); previewStop = null; } };
+  const go = () => { audio.currentTime = start; audio.play().catch(() => {}); audio.addEventListener('timeupdate', previewStop); };
+  if (player.current && player.current.id === song.id) go();
+  else { playQueue([song], 0, 'Trim preview'); audio.addEventListener('loadedmetadata', go, { once: true }); }
+}
+
 export function setVolume(v) {
   player.volume = Math.max(0, Math.min(1, v));
   audio.volume = player.volume;

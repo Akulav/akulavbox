@@ -110,6 +110,7 @@ export function useLibraryFilter(itemsRef, storeKey, defaultSort = 'added') {
       longest: (a, b) => (b.duration || 0) - (a.duration || 0),
       shortest: (a, b) => ((!a.duration) - (!b.duration)) || (a.duration || 0) - (b.duration || 0),
       size: (a, b) => (b.size_bytes || 0) - (a.size_bytes || 0),
+      resolution: (a, b) => (Math.min(b.width || 0, b.height || 0) - Math.min(a.width || 0, a.height || 0)) || byTitle(a, b),
       recent: (a, b) => cmp(b.meta_updated_at && b.progress ? b.meta_updated_at : '', a.meta_updated_at && a.progress ? a.meta_updated_at : '') || byTitle(a, b),
     };
     return list.sort(sorters[s] || sorters.added);
@@ -149,7 +150,7 @@ export function captureVideoFrame(source) {
         c.width = Math.round((v.videoWidth || 960) * scale); c.height = Math.round((v.videoHeight || 540) * scale);
         if (!c.width || !c.height) return finish(null);
         c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
-        c.toBlob((blob) => finish(blob ? { blob, duration: isFinite(v.duration) ? v.duration : null } : null), 'image/jpeg', 0.82);
+        c.toBlob((blob) => finish(blob ? { blob, duration: isFinite(v.duration) ? v.duration : null, width: v.videoWidth || null, height: v.videoHeight || null } : null), 'image/jpeg', 0.82);
       } catch (e) { finish(null); }
     };
     v.onerror = () => finish(null);
@@ -218,7 +219,8 @@ export async function autoCover(item, source, kind) {
   if (kind === 'video') {
     const frame = await captureVideoFrame(source || fileUrl(item.id));
     if (!frame) return null;
-    return setCover(item.id, frame.blob, frame.duration ? { duration: frame.duration } : {}, 'video');
+    const extra = { ...(frame.duration ? { duration: frame.duration } : {}), ...(frame.width ? { width: frame.width, height: frame.height } : {}) };
+    return setCover(item.id, frame.blob, extra, 'video');
   }
   if (kind === 'book') {
     if (!source && item.size_bytes > 60 * 1024 * 1024) return null;
@@ -226,6 +228,45 @@ export async function autoCover(item, source, kind) {
     return blob ? setCover(item.id, blob, {}, 'book') : null;
   }
   return null;
+}
+
+/** A video's natural size, read from its header only (no download of the whole file). Resolves { width, height, duration } or null. */
+export function readVideoSize(url) {
+  return new Promise((resolve) => {
+    const v = document.createElement('video');
+    const done = (val) => { clearTimeout(timer); v.removeAttribute('src'); v.load(); resolve(val); };
+    const timer = setTimeout(() => done(null), 15000);
+    v.preload = 'metadata'; v.muted = true;
+    v.onloadedmetadata = () => done(v.videoWidth ? { width: v.videoWidth, height: v.videoHeight, duration: isFinite(v.duration) ? v.duration : null } : null);
+    v.onerror = () => done(null);
+    v.src = url;
+  });
+}
+
+/** Label for a resolution: 4K, 1440p, 1080p, 720p… (the short side, so portrait videos read right) */
+export function resolutionLabel(w, h) {
+  const s = Math.min(w || 0, h || 0);
+  if (!s) return '';
+  if (s >= 2000) return s >= 4000 ? '8K' : '4K';
+  for (const p of [1440, 1080, 720, 480, 360]) if (s >= p * 0.94) return `${p}p`;
+  return `${s}p`;
+}
+
+/** Fill in the resolution of videos that don't have one yet, a couple at a time. Returns a stop function. */
+export function backfillSizes(items, onDone) {
+  let stopped = false;
+  const queue = [...items];
+  const worker = async () => {
+    while (!stopped && queue.length) {
+      const it = queue.shift();
+      const size = await readVideoSize(fileUrl(it.id));
+      if (stopped || !size) continue;
+      const patch = { width: size.width, height: size.height, ...(!it.duration && size.duration ? { duration: size.duration } : {}) };
+      try { await saveMeta(it.id, patch); onDone(it, patch); } catch (e) { /* try again next visit */ }
+    }
+  };
+  worker(); worker();
+  return () => { stopped = true; };
 }
 
 /** Process items missing a cover one by one in the background. Returns a stop function. */
