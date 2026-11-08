@@ -21,8 +21,8 @@ const { guessMime } = require('./mime');
 //   queued → probing → downloading → converting (AV1) → processing → done | error | cancelled
 // A playlist or channel link turns into one job per entry. Finished media is
 // encrypted into the Videos or Music folder, gets its title, creator, date,
-// length and cover, and is filed by creator: a video collection or a playlist
-// named after the channel / artist.
+// length and cover. A song is filed into a playlist named after its artist; a
+// video isn't put in any collection (Videos → Creators already groups by channel).
 //
 // A conversion job has the url `akulavbox:video/<fileId>`: it takes the audio
 // out of a video already in the library and saves it to Music with the same details.
@@ -478,8 +478,8 @@ async function download(job, work) {
     thumb_file_id: kind === 'video' ? coverId : null, source_url: info.webpage_url || job.url, source_id: sourceId,
     ...(kind === 'video' ? videoSize(media.p) : {}),
   });
-  if (kind === 'video') col.addToCollection(col.collectionByTitle(ownerId, 'videos', creator), ownerId, [file.id]);
-  else fileSong(ownerId, file.id, coverId, creator);
+  // videos are grouped by creator in the Creators view; Collections are left to the user
+  if (kind === 'audio') fileSong(ownerId, file.id, coverId, creator);
   update(id, { status: 'done', progress: 1, file_id: file.id, error: null });
 }
 

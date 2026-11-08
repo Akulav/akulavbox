@@ -3,8 +3,8 @@ const db = require('./db');
 
 // ---------------------------------------------------------------------------
 // Collections group library items (videos, and later books) the way playlists
-// group songs. Link downloads file each item into a collection named after
-// its creator; for music that is a playlist with the creator's name.
+// group songs. Collections are made by the user; downloaded songs are filed
+// into a playlist with the artist's name.
 // ---------------------------------------------------------------------------
 
 const KINDS = ['videos', 'books'];
@@ -17,11 +17,6 @@ function createCollection(ownerId, kind, title) {
   return id;
 }
 
-/** Collection with this title (any case), created if missing */
-function collectionByTitle(ownerId, kind, title) {
-  const hit = db.prepare('SELECT id FROM media_collections WHERE owner_id = ? AND kind = ? AND title = ? COLLATE NOCASE LIMIT 1').get(ownerId, kind, title);
-  return hit ? hit.id : createCollection(ownerId, kind, title);
-}
 
 /** Append files (owned, not trashed) to a collection; returns how many were new */
 function addToCollection(collectionId, ownerId, fileIds) {
@@ -51,4 +46,4 @@ function addToPlaylist(playlistId, fileId) {
   db.prepare('INSERT OR IGNORE INTO playlist_songs (playlist_id, file_id, position) VALUES (?, ?, ?)').run(playlistId, fileId, pos + 1);
 }
 
-module.exports = { KINDS, TITLE_MAX, createCollection, collectionByTitle, addToCollection, playlistByTitle, addToPlaylist };
+module.exports = { KINDS, TITLE_MAX, createCollection, addToCollection, playlistByTitle, addToPlaylist };

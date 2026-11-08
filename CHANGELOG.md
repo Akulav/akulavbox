@@ -2,6 +2,11 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 2.7.1 (2026-11-08)
+
+### Changed
+- **Collections are yours alone.** Downloaded videos are no longer filed into a collection named after their creator: Videos → Creators already groups them by channel, so Collections only holds the ones you make. Collections made this way earlier stay until you delete them. Downloaded songs still go into their artist’s playlist.
+
 ## 2.7.0 (2026-11-08)
 
 ### Changed

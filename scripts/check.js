@@ -202,9 +202,7 @@ async function main() {
       ok(v && v.title === 'Test video clip1' && v.participants[0] === 'Test Creator' && v.duration === 42 && v.thumb_file_id && v.date === '2026-01-02', 'title, creator, date, length and cover filled in');
       ok(v && ['demo', 'test', 'Cooking', 'Education'].every(t => v.tags.includes(t)) && !v.tags.includes('2026') && !v.tags.includes('anchor'),
         'tags come from the site, the description’s #hashtags and its categories', JSON.stringify(v?.tags));
-      let cols = (await api('/api/media-collections?kind=videos')).data;
-      const byCreator = cols.find(c => c.title === 'Test Creator');
-      ok(byCreator && byCreator.item_count === 1, 'filed into a collection named after the creator');
+      ok(!(await api('/api/media-collections?kind=videos')).data.length, 'downloads don’t create collections (Creators groups them)');
       await api('/api/downloads', { method: 'POST', body: { url: 'https://example.com/v/clip1', kind: 'video' } });
       jobs = await waitJobs('video');
       ok(jobs[0].error === 'Already in your library' && jobs[0].file_id === v.id, 'the same link twice isn’t downloaded again');
@@ -259,6 +257,7 @@ async function main() {
       console.log('\nTrim');
       ok((await api('/api/downloads/trim', { method: 'POST', body: { file_id: second.id, start: 10, end: 5 } })).status === 400, 'an end before the start is refused');
       ok((await api('/api/downloads/trim', { method: 'POST', body: { file_id: 'not-mine', start: 0, end: 5 } })).status === 400, 'only your own videos can be trimmed');
+      const clips = await api('/api/media-collections', { method: 'POST', body: { kind: 'videos', title: 'Clips', file_ids: [second.id] } });
       const tc = await api('/api/downloads/trim', { method: 'POST', body: { file_id: second.id, start: 2, end: 12, copy: true } });
       ok(tc.status === 200, 'trim into a copy');
       jobs = await waitJobs('video');
@@ -268,8 +267,7 @@ async function main() {
       ok(tcJob?.status === 'done' && trimmedCopy && trimmedCopy.id !== second.id && trimmedCopy.title === 'Test video second (trimmed)' && trimmedCopy.duration === 10 && trimmedCopy.participants[0] === 'Test Creator',
         'the copy keeps the details, with the new length', JSON.stringify(tcJob));
       ok(allV.some(x => x.id === second.id && x.duration === 42), 'the original is untouched');
-      const creatorCol = (await api('/api/media-collections?kind=videos')).data.find(c => c.title === 'Test Creator');
-      ok((await api(`/api/media-collections/${creatorCol.id}/items`)).data.some(x => x.id === trimmedCopy?.id), 'the copy joins the original’s collections');
+      ok((await api(`/api/media-collections/${clips.data.id}/items`)).data.some(x => x.id === trimmedCopy?.id), 'the copy joins the original’s collections');
       const usedBefore = (await api('/api/user/profile')).data.used_bytes;
       const tr = await api('/api/downloads/trim', { method: 'POST', body: { file_id: second.id, start: 0, end: 20, exact: true } });
       jobs = await waitJobs('video');

@@ -84,7 +84,7 @@ export default {
         <div v-else-if="!collections.length" class="panel py-16 px-6 text-center rise">
           <span class="w-14 h-14 rounded-2xl bg-accent/10 text-accent grid place-items-center mx-auto mb-4"><Icon name="list-music" :size="24" /></span>
           <p class="title text-lg mb-1">No collections yet</p>
-          <p class="text-muted text-[13.5px] mb-5 max-w-md mx-auto">Group videos like a playlist: a series, a trip, a course. Downloads from a link are filed into a collection named after their creator automatically.</p>
+          <p class="text-muted text-[13.5px] mb-5 max-w-md mx-auto">Group videos like a playlist: a series, a trip, a course. Videos are grouped by channel in Creators on their own.</p>
           <button class="btn btn-primary" @click="newCollection()"><Icon name="plus" :size="16" />New collection</button>
         </div>
         <div v-else :class="TILE_GRID">
