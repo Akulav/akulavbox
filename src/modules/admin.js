@@ -8,6 +8,11 @@ const config = require('../core/config');
 const { verifyAdmin } = require('../core/auth');
 const thumbs = require('../core/thumbs');
 const store = require('../core/storage');
+const cookies = require('../core/cookies');
+const maintenance = require('../core/maintenance');
+const backup = require('../core/backup');
+const downloader = require('../core/downloader');
+const { LATEST } = require('../core/migrations');
 
 const USERNAME_RE = /^[\p{L}\p{N}._ -]{1,32}$/u;
 const startedAt = Date.now();
@@ -70,6 +75,7 @@ module.exports = async function (fastify) {
     const userDir = store.userDirOf(id);
     if (fs.existsSync(userDir)) fs.rmSync(userDir, { recursive: true, force: true });
     thumbs.purgeUser(id);
+    cookies.remove(id);
     return { success: true };
   });
 
@@ -155,9 +161,86 @@ module.exports = async function (fastify) {
       memory_rss: process.memoryUsage().rss,
       thumbnails: thumbs.available() ? 'server (sharp)' : 'browser',
       // Refresh re-checks, so installing yt-dlp / ffmpeg needs no restart
-      downloader: (request.query.fresh === '1' && require('../core/downloader').detect(true), require('../core/downloader').status()),
+      downloader: (request.query.fresh === '1' && downloader.detect(true), downloader.status()),
       trash_days: config.trashDays,
       measured_at: new Date(breakdownCache.at).toISOString(),
     };
+  });
+
+  // --- Storage check: files on disk vs. the database ---
+  fastify.get('/api/admin/storage-check', { preHandler: verifyAdmin }, async () => maintenance.scan());
+  fastify.post('/api/admin/storage-check/clean', { preHandler: verifyAdmin }, async (request) => {
+    const b = request.body || {};
+    const done = maintenance.clean({ orphans: b.orphans !== false, missing: b.missing !== false, usage: b.usage !== false });
+    breakdownCache = null;
+    return { success: true, ...done };
+  });
+
+  // --- Full backup and restore ---
+  // Export is a form post (token, passphrase) so the browser streams the file straight to disk.
+  fastify.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string', bodyLimit: 64 * 1024 },
+    (req, body, done) => done(null, Object.fromEntries(new URLSearchParams(body))));
+  const formAdmin = async (request, reply) => {
+    if (!request.headers.authorization && request.body?.token) request.headers.authorization = `Bearer ${request.body.token}`;
+    return verifyAdmin(request, reply);
+  };
+
+  fastify.get('/api/admin/backup', { preHandler: verifyAdmin }, async () => ({
+    estimate: backup.estimate(db), import: { ...backup.state, pending: backup.pending() }, restored: db.restored || null,
+  }));
+
+  fastify.post('/api/admin/backup/export', { preHandler: formAdmin }, async (request, reply) => {
+    let stream;
+    try { stream = backup.exportStream(db, request.body?.passphrase); }
+    catch (e) { return reply.code(400).type('text/plain; charset=utf-8').send(e.message); }
+    const name = `akulavbox-backup-${new Date().toISOString().slice(0, 10)}.akbx`;
+    stream.on('error', (e) => fastify.log.error(e, 'backup export failed'));
+    reply.header('Content-Type', 'application/octet-stream');
+    reply.header('Content-Disposition', `attachment; filename="${name}"`);
+    reply.header('Cache-Control', 'no-store');
+    return reply.send(stream);
+  });
+
+  // Upload a backup in raw chunks (proxies often cap request size): PUT ?id=&offset=
+  const IMPORT_ID = /^[\w-]{8,64}$/;
+  const importPath = (id) => path.join(config.tempDir, `import-${id}.akbx`);
+  fastify.addContentTypeParser('application/octet-stream', { parseAs: 'buffer', bodyLimit: 32 * 1024 * 1024 }, (req, body, done) => done(null, body));
+  fastify.put('/api/admin/backup/upload', { preHandler: verifyAdmin, bodyLimit: 32 * 1024 * 1024 }, async (request, reply) => {
+    const id = String(request.query.id || '');
+    const offset = Number(request.query.offset);
+    if (!IMPORT_ID.test(id) || !(offset >= 0)) return reply.code(400).send({ error: 'Bad upload id or offset' });
+    const p = importPath(id);
+    const current = fs.existsSync(p) ? fs.statSync(p).size : 0;
+    if (offset > current) return reply.code(409).send({ error: 'Upload chunk out of order, start again' });
+    const body = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
+    if (!store.hasRoomFor(body.length * 2)) return reply.code(507).send({ error: 'The server’s disk is full.' });
+    if (offset === 0) fs.writeFileSync(p, body);
+    else { if (offset < current) fs.truncateSync(p, offset); fs.appendFileSync(p, body); }
+    return { success: true, size: offset + body.length };
+  });
+
+  // Unpack and verify an uploaded backup ({ id }) or one already on the server ({ server_path }).
+  // Runs in the background; poll GET /api/admin/backup. The swap happens on the next restart.
+  fastify.post('/api/admin/backup/import', { preHandler: verifyAdmin }, async (request, reply) => {
+    const { id, server_path: serverPath, passphrase } = request.body || {};
+    const file = serverPath ? path.resolve(String(serverPath)) : (IMPORT_ID.test(String(id || '')) ? importPath(id) : null);
+    if (!file || !fs.existsSync(file) || !fs.statSync(file).isFile()) return reply.code(400).send({ error: serverPath ? 'No file at that path on the server.' : 'Upload the backup first.' });
+    if (backup.state.running) return reply.code(409).send({ error: 'An import is already running.' });
+    try { await backup.openHeader(file, passphrase || ''); } // fail fast on a wrong passphrase or a wrong file
+    catch (e) { return reply.code(400).send({ error: e.message }); }
+    backup.stageImport(file, passphrase, { currentSchema: LATEST })
+      .catch((e) => fastify.log.warn(`backup import failed: ${e.message}`))
+      .finally(() => { if (!serverPath) fs.rmSync(file, { force: true }); });
+    return { success: true, started: true };
+  });
+
+  fastify.delete('/api/admin/backup/import', { preHandler: verifyAdmin }, async (request, reply) => (
+    backup.cancelPending() ? { success: true } : reply.code(409).send({ error: 'The import is still running.' })));
+
+  // Restart so a staged restore is applied. Needs a service manager (systemd, pm2, Docker) to start
+  // the process again; the page says so before offering it.
+  fastify.post('/api/admin/restart', { preHandler: verifyAdmin }, async () => {
+    setTimeout(() => process.exit(0), 300).unref();
+    return { success: true };
   });
 };

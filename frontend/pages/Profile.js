@@ -65,6 +65,31 @@ export default {
         </form>
       </section>
 
+      <section id="link-downloads" class="panel p-5 md:p-6">
+        <h2 class="title text-lg mb-1 flex items-center gap-2">Link downloads<span v-if="ck.saved" class="chip chip-ok">Cookies saved</span></h2>
+        <p class="text-muted text-[13.5px] mb-4">Age-restricted, members-only or sign-in videos (YouTube “Sign in to confirm your age”, and sites that check your age) need your browser’s sign-in cookies.
+          They’re stored encrypted, used only for your own downloads, and never shown again.</p>
+        <div v-if="ck.saved" class="rounded-xl bg-elevated/60 px-4 py-3 mb-4 text-[13px]">
+          <p class="font-medium mb-1">Signed in for {{ ck.sites.length }} site{{ ck.sites.length === 1 ? '' : 's' }}<span v-if="ck.updated_at" class="text-muted font-normal"> · saved {{ since(ck.updated_at) }}</span></p>
+          <p class="text-muted break-words">{{ ck.sites.slice(0, 12).join(', ') }}<template v-if="ck.sites.length > 12">, +{{ ck.sites.length - 12 }} more</template></p>
+        </div>
+        <details class="mb-4 text-[13px]" :open="!ck.saved">
+          <summary class="cursor-pointer font-medium">How to get a cookies.txt</summary>
+          <ol class="list-decimal pl-5 mt-2 space-y-1 text-muted">
+            <li>On your computer, sign in to the site (for YouTube, one account that has confirmed its age) in a normal browser window.</li>
+            <li>Install an extension that exports cookies in “Netscape” format, such as <span class="text-fg">Get cookies.txt LOCALLY</span>.</li>
+            <li>Open the site, export its cookies, then paste the text below or pick the file. Cookies expire after a while; export fresh ones if downloads start asking again.</li>
+          </ol>
+        </details>
+        <textarea v-model="ck.text" rows="4" class="input !h-auto py-2 font-mono text-[12px]" placeholder="# Netscape HTTP Cookie File&#10;.youtube.com&#9;TRUE&#9;/&#9;TRUE&#9;…" spellcheck="false" autocomplete="off" aria-label="Cookies"></textarea>
+        <input ref="cookieFile" type="file" accept=".txt,.json,text/plain,application/json" class="hidden" @change="onCookieFile">
+        <div class="flex flex-wrap gap-2 mt-3">
+          <button class="btn btn-primary btn-sm" :disabled="!ck.text.trim() || ck.busy" @click="saveCookies"><Icon :name="ck.busy ? 'loader' : 'check'" :size="15" />Save cookies</button>
+          <button class="btn btn-sm" @click="cookieFile.click()"><Icon name="upload" :size="15" />Pick a file</button>
+          <button v-if="ck.saved" class="btn btn-ghost btn-sm !text-danger" @click="removeCookies"><Icon name="trash" :size="15" />Remove</button>
+        </div>
+      </section>
+
       <section class="panel p-5 md:p-6">
         <h2 class="title text-lg mb-1">Appearance</h2>
         <p class="text-muted text-[13.5px] mb-5">Saved in this browser.</p>
@@ -185,8 +210,33 @@ export default {
 
     const since = (s) => { const d = parseDbDate(s); return d ? d.toLocaleDateString([], { year: 'numeric', month: 'long', day: 'numeric' }) : ''; };
 
-    onMounted(refreshAccount);
+    // ---------- sign-in cookies for link downloads ----------
+    const ck = reactive({ saved: false, sites: [], updated_at: null, text: '', busy: false });
+    const cookieFile = ref(null);
+    const loadCookies = async () => { try { Object.assign(ck, await api('/api/downloads/cookies')); } catch (e) { /* downloads may be off */ } };
+    async function saveCookies() {
+      ck.busy = true;
+      const r = await attempt(() => api('/api/downloads/cookies', { method: 'PUT', body: { text: ck.text } }), 'Cookies saved. Try the download again.');
+      ck.busy = false;
+      if (r) Object.assign(ck, r, { text: '' });
+    }
+    async function onCookieFile(e) {
+      const f = e.target.files && e.target.files[0];
+      e.target.value = '';
+      if (!f) return;
+      if (f.size > 1024 * 1024) return toast.error('That file is larger than 1 MB.');
+      ck.text = await f.text();
+      await saveCookies();
+    }
+    async function removeCookies() {
+      await attempt(async () => { await api('/api/downloads/cookies', { method: 'DELETE' }); Object.assign(ck, { saved: false, sites: [], updated_at: null }); }, 'Cookies removed');
+    }
+
+    onMounted(() => {
+      refreshAccount();
+      loadCookies().then(() => { if (location.hash.includes('cookies')) document.getElementById('link-downloads')?.scrollIntoView({ behavior: 'smooth' }); });
+    });
     return { account, session, app, pct, pw, strength, themes, theme, setTheme, motion, setMotion, fileInputRef, cropImageSrc, cropperImageRef,
-      onFileSelected, cancelCrop, confirmCrop, removeAvatar, changePassword, formatBytes, since };
+      onFileSelected, cancelCrop, confirmCrop, removeAvatar, changePassword, formatBytes, since, ck, cookieFile, saveCookies, onCookieFile, removeCookies };
   },
 };

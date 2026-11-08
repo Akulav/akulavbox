@@ -1,6 +1,7 @@
 const { verifyUser, verifyAdmin } = require('../core/auth');
 const dl = require('../core/downloader');
 const tools = require('../core/tools');
+const cookies = require('../core/cookies');
 
 module.exports = async function (fastify) {
   // Is the downloader ready? (yt-dlp, ffmpeg, AV1, and whether they're being installed right now)
@@ -13,15 +14,32 @@ module.exports = async function (fastify) {
   });
 
   // { url, kind: 'video' | 'audio' }. Playlist and channel links become one download per entry.
+  // `akulavbox:video/<id>` links (a retried "save as song") are conversions of my own videos.
   fastify.post('/api/downloads', { preHandler: verifyUser }, async (request, reply) => {
     const s = dl.status();
     if (!s.enabled) return reply.code(403).send({ error: 'Link downloads are turned off on this server.' });
-    if (!s.available) return reply.code(503).send({ error: s.installing ? 'The downloader is still being set up. Try again in a minute.' : 'The downloader isn’t available on this server.' });
     const urls = String(request.body?.url || '').split(/\s+/).map(x => x.trim()).filter(Boolean).slice(0, 50);
     const kind = request.body?.kind === 'audio' ? 'audio' : 'video';
     if (!urls.length) return reply.code(400).send({ error: 'Paste a link first.' });
-    for (const u of urls) { const problem = dl.checkUrl(u); if (problem) return reply.code(400).send({ error: problem }); }
-    const ids = urls.map(u => dl.addJob(request.user.id, u, kind));
+    const conversions = urls.filter(u => dl.CONVERT_RE.test(u));
+    const links = urls.filter(u => !dl.CONVERT_RE.test(u));
+    if (links.length && !s.available) return reply.code(503).send({ error: s.installing ? 'The downloader is still being set up. Try again in a minute.' : 'The downloader isn’t available on this server.' });
+    for (const u of links) { const problem = dl.checkUrl(u); if (problem) return reply.code(400).send({ error: problem }); }
+    const ids = [
+      ...links.map(u => dl.addJob(request.user.id, u, kind)),
+      ...dl.addConversions(request.user.id, conversions.map(u => dl.CONVERT_RE.exec(u)[1])),
+    ];
+    if (!ids.length) return reply.code(404).send({ error: 'That video is no longer in your library.' });
+    dl.pump();
+    return { success: true, ids };
+  });
+
+  // Save videos as songs in Music: { file_ids }. Same title, creator, tags and artwork.
+  fastify.post('/api/downloads/from-videos', { preHandler: verifyUser }, async (request, reply) => {
+    const s = dl.status();
+    if (!s.convert) return reply.code(503).send({ error: s.installing ? 'ffmpeg is still being set up. Try again in a minute.' : 'Converting needs ffmpeg, which isn’t available on this server.' });
+    const ids = dl.addConversions(request.user.id, [].concat(request.body?.file_ids || []).map(String));
+    if (!ids.length) return reply.code(400).send({ error: 'Pick one or more videos from your library.' });
     dl.pump();
     return { success: true, ids };
   });
@@ -32,6 +50,14 @@ module.exports = async function (fastify) {
   });
 
   fastify.post('/api/downloads/clear', { preHandler: verifyUser }, async (request) => ({ success: true, removed: dl.clearFinished(request.user.id) }));
+
+  // My sign-in cookies for age-restricted / members-only videos. The values never leave the server.
+  fastify.get('/api/downloads/cookies', { preHandler: verifyUser }, async (request) => cookies.info(request.user.id));
+  fastify.put('/api/downloads/cookies', { preHandler: verifyUser, bodyLimit: 2 * 1024 * 1024 }, async (request, reply) => {
+    try { return { success: true, ...cookies.save(request.user.id, request.body?.text) }; }
+    catch (e) { return reply.code(400).send({ error: e.message }); }
+  });
+  fastify.delete('/api/downloads/cookies', { preHandler: verifyUser }, async (request) => ({ success: cookies.remove(request.user.id) }));
 
   // Admin: reinstall the tools, or update yt-dlp now. Runs in the background; poll /status.
   fastify.post('/api/downloads/tools', { preHandler: verifyAdmin }, async (request) => {

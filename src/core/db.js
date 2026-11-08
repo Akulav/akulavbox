@@ -2,8 +2,14 @@ const { DatabaseSync } = require('node:sqlite');
 const bcrypt = require('./hash');
 const config = require('./config');
 const { migrate } = require('./migrations');
+const backup = require('./backup');
+
+// A restore staged from the Admin page is swapped in before anything opens the database
+let restored = null;
+try { restored = backup.applyPending(); } catch (e) { console.error('[backup] Couldn’t apply the staged restore:', e.message); }
 
 const db = new DatabaseSync(config.dbPath);
+db.restored = restored;
 
 // Bring older databases up to date before any module prepares statements
 const result = migrate(db, { backupsDir: config.backupsDir, version: config.version });

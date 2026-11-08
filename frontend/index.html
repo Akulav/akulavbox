@@ -214,6 +214,9 @@
 
     .chip { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; border-radius: 99px; font-size: 11.5px; font-weight: 500; background: rgb(var(--elevated)); color: rgb(var(--muted)); }
     .chip-accent { background: rgb(var(--accent-soft) / .16); color: rgb(var(--accent)); }
+    /* tags can be long (downloads bring the site's own): cut them off instead of overflowing */
+    .chip-tag { display: inline-block; line-height: 22px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .chip-tag.\!h-5 { line-height: 20px; } .chip-tag.\!h-7 { line-height: 28px; }
     .chip-ok { background: rgb(var(--ok) / .14); color: rgb(var(--ok)); }
 
     .menu { background: rgb(var(--surface)); border: 1px solid rgb(var(--line)); border-radius: 12px; box-shadow: 0 18px 40px -12px rgb(0 0 0 / .45); padding: 4px; min-width: 190px; }

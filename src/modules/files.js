@@ -407,6 +407,11 @@ module.exports = async function (fastify) {
         db.prepare('UPDATE files SET is_encrypted = 1, public_hash = NULL, iv_hex = ? WHERE id = ?').run(iv, file.id);
         try { fs.unlinkSync(plainPath); } catch (e) { /* ignore */ }
         return { success: true };
+      } else if (is_shared && !file.public_hash) {
+        // already stored plain (e.g. recovered by the storage check): only the link is missing
+        const publicHash = crypto.randomBytes(12).toString('hex');
+        db.prepare('UPDATE files SET public_hash = ? WHERE id = ?').run(publicHash, file.id);
+        return { success: true, public_hash: publicHash };
       }
     } catch (err) {
       try { fs.unlinkSync(tmp); } catch (e) { /* ignore */ }

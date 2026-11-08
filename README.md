@@ -6,11 +6,11 @@
 
 **Your files, your cloud.** A self-hosted personal cloud for encrypted files, photos, music, videos, books, and chat with voice calls. It's one Node.js server with a no-build browser frontend.
 
-![Version](https://img.shields.io/badge/version-2.1.0-E8A33D)
+![Version](https://img.shields.io/badge/version-2.2.0-E8A33D)
 ![Node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-5fb3a1)
 ![License](https://img.shields.io/badge/license-source--available-8ea1a4)
 
-Made with â™¥ by **Akulav**
+Made with ♥ by **Akulav**
 
 </div>
 
@@ -24,11 +24,12 @@ Made with â™¥ by **Akulav**
 | **Trash** | Deleted files and folders go to the trash with **Undo**. Restore whole folder trees. Items are deleted for good after 30 days (configurable) |
 | **Encryption at rest** | AES-256-CTR. Each chunk is encrypted as it arrives, and range requests (video seeking) decrypt from any offset |
 | **Photos** | Collections and albums, justified "natural shape" grids, slideshow, server-side thumbnails via `sharp` (the browser makes them if `sharp` is missing) |
-| **Music** | Library, playlists you can reorder by dragging, favorites, artwork, a player that keeps playing while you browse, and media-key support |
-| **Download from a link** | Paste a YouTube, Vimeo, SoundCloud or other link (playlists and channels too). Title, creator, date, cover and length are filled in, videos are filed into a collection per channel and songs into a playlist per artist, and video is kept as space-efficient AV1. yt-dlp and ffmpeg install themselves |
-| **Videos and books** | Video collections with play-all, a Creators view, covers generated automatically, participants, tags, series, and ratings. The EPUB reader remembers your page |
+| **Music** | Library, playlists you can reorder by dragging, favorites, artwork, shuffle everywhere, multi-select (shift-click ranges) to play, file, remove or delete songs, a player that keeps playing while you browse, and media-key support |
+| **Download from a link** | Paste a YouTube, Vimeo, SoundCloud or other link (playlists and channels too). Title, creator, date, cover and length are filled in, videos are filed into a collection per channel and songs into a playlist per artist, and video is kept as space-efficient AV1. Age-restricted videos work with your saved sign-in cookies. yt-dlp and ffmpeg install themselves |
+| **Videos and books** | Video collections with play-all and shuffle, a Creators view, **save any video as a song** (same details and artwork), covers generated automatically, participants, tags, series, and ratings. The EPUB reader remembers your page |
 | **Chat and calls** | Real-time messaging between friends, unread counts that survive reloads, deleting your own messages, files that disappear after 10 minutes, and WebRTC voice calls with optional TURN relay |
 | **Multi-user** | Per-user storage quotas. The admin panel shows **free disk space on the server**, a storage breakdown, a warning when quotas promise more than the disk can hold, roles, password resets, and "sign out everywhere" |
+| **Backup and upkeep** | **Full backup and restore** of every account, password and file in one passphrase-protected file (restores onto a new server, even with a different key), and a **storage check** that finds and cleans files on disk that belong to nothing |
 | **Security** | Revocable sessions (a password change signs out other devices), sign-in rate limiting, timing-safe login, tokens kept out of logs and `Referer` headers, and a sandbox for uploaded HTML and SVG |
 | **Polish** | Light, dark, and system themes, a subtle animated background (can be turned off), keyboard shortcuts (press `?`), installable as an app (PWA manifest), offline and update banners |
 
@@ -81,6 +82,7 @@ All settings live in `.env` (see [.env.example](.env.example)).
 | `VIDEO_AV1` | on | `off` keeps downloaded video in whatever format the site serves |
 | `DOWNLOAD_PARALLEL` | `2` | Downloads running at the same time |
 | `DOWNLOAD_PLAYLIST_MAX` | `200` | Most entries taken from one playlist or channel link |
+| `DOWNLOAD_PROXY` | | Send link downloads through a proxy (`http://…` or `socks5://…`), for sites blocked where the server is |
 
 The server refuses to start if `MASTER_KEY` or `JWT_SECRET` is missing or invalid, and warns you if they are still the example values.
 
@@ -107,11 +109,22 @@ storage/
   thumbs/                       encrypted thumbnail cache (safe to delete)
   temp/                         unfinished uploads (cleared after 24 h)
   chat_temp/                    chat files (deleted after 10 minutes)
+  private/cookies/              users' saved sign-in cookies for downloads (encrypted)
   tools/                        yt-dlp and ffmpeg, installed automatically (safe to delete)
-  backups/                      database snapshots taken before upgrades
+  backups/                      database snapshots taken before upgrades, and data replaced by a restore
 ```
 
-To back up, stop the server and copy `storage/` **together with your `MASTER_KEY`**. Files can't be decrypted without the key.
+**Full backups:** Admin → Backup and restore downloads one `.akbx` file with everything, protected by a passphrase you choose. It carries the encryption key inside, so it restores on any AkulavBox server. Restore it from the same panel; it is checked first and swapped in at the next restart. From the command line:
+
+```bash
+AKB_PASSPHRASE='your passphrase' node scripts/backup.js export backup.akbx
+AKB_PASSPHRASE='your passphrase' node scripts/backup.js import backup.akbx   # applied on the next start
+node scripts/backup.js check --fix                                           # the storage check
+```
+
+You can also stop the server and copy `storage/` **together with your `MASTER_KEY`**. Files can't be decrypted without the key.
+
+**Age-restricted downloads:** each person can save their browser's sign-in cookies in Profile → Link downloads (export them with an extension such as "Get cookies.txt LOCALLY").
 
 ## Documentation
 
@@ -127,4 +140,4 @@ To back up, stop the server and copy `storage/` **together with your `MASTER_KEY
 
 ## License
 
-Source-available. See [LICENSE](LICENSE). Â© 2026 Akulav.
+Source-available. See [LICENSE](LICENSE). © 2026 Akulav.

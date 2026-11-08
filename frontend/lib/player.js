@@ -87,10 +87,19 @@ export function setVolume(v) {
 
 export function toggleMute() { player.muted = !player.muted; audio.muted = player.muted; }
 
-export function toggleShuffle() {
-  player.shuffle = !player.shuffle;
+export function setShuffle(on) {
+  player.shuffle = !!on;
   storage.write('akulavShuffle', player.shuffle ? '1' : '0');
   if (player.current) { const cur = player.order[player.pos]; buildOrder(cur); }
+}
+export const toggleShuffle = () => setShuffle(!player.shuffle);
+
+/** Play a list from the top, or shuffled from a random song (and remember the choice) */
+export function playList(songs, shuffled, source = '') {
+  if (!songs.length) return;
+  player.shuffle = !!shuffled;
+  storage.write('akulavShuffle', shuffled ? '1' : '0');
+  playQueue(songs, shuffled ? Math.floor(Math.random() * songs.length) : 0, source);
 }
 
 export function cycleRepeat() {

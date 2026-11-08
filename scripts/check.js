@@ -15,7 +15,7 @@ const crypto = require('crypto');
 const root = path.join(__dirname, '..');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'akulavbox-check-'));
 const port = 4100 + Math.floor(Math.random() * 800);
-const base = `http://127.0.0.1:${port}`;
+let base = `http://127.0.0.1:${port}`;
 const env = {
   ...process.env,
   STORAGE_DIR: tmp, PORT: String(port), HOST: '127.0.0.1', LOG_LEVEL: 'error',
@@ -23,7 +23,8 @@ const env = {
   JWT_SECRET: crypto.randomBytes(32).toString('hex'),
   DISK_RESERVE_MB: '0',
   YTDLP_PATH: path.join(__dirname, 'test', 'fake-yt-dlp.js'),   // no network: a stand-in answers like yt-dlp
-  FFMPEG_PATH: path.join(tmp, 'no-ffmpeg'),
+  FFMPEG_PATH: path.join(__dirname, 'test', 'fake-ffmpeg.js'),  // and ffprobe
+  AUTO_INSTALL_TOOLS: '0',
 };
 const dbArg = process.argv.indexOf('--db');
 if (dbArg !== -1) fs.copyFileSync(process.argv[dbArg + 1], path.join(tmp, 'akulavbox.db'));
@@ -216,6 +217,47 @@ async function main() {
       ok(song && song.cover_file_id && song.series === 'Test Album' && song.participants[0] === 'Test Artist', 'song gets artist, album and artwork');
       const pls = (await api('/api/music/playlists')).data;
       ok(pls.some(p => p.title === 'Test Artist' && p.song_count === 1), 'filed into a playlist named after the artist');
+      await api('/api/downloads', { method: 'POST', body: { url: 'https://example.com/v/clip1', kind: 'audio' } });
+      jobs = await waitJobs('audio');
+      ok(jobs[0].status === 'done' && !jobs[0].error && jobs[0].file_id !== v.id, 'the audio of a link already saved as video still downloads', JSON.stringify(jobs[0]));
+
+      const second = (await api('/api/library/videos')).data.items.find(x => x.title === 'Test video second');
+      const conv = await api('/api/downloads/from-videos', { method: 'POST', body: { file_ids: [second.id] } });
+      ok(conv.status === 200 && conv.data.ids.length === 1, 'save a video as a song');
+      jobs = await waitJobs('audio');
+      const convJob = jobs.find(j => j.id === conv.data.ids[0]);
+      ok(convJob && convJob.status === 'done', 'conversion finished', JSON.stringify(convJob));
+      const converted = (await api('/api/music/songs')).data.songs.find(s => s.id === convJob?.file_id);
+      ok(converted && converted.title === 'Test video second' && converted.participants[0] === 'Test Creator' && converted.tags.includes('demo') && converted.cover_file_id && /\.m4a$/.test(converted.filename),
+        'the song keeps the title, creator, tags and artwork', JSON.stringify(converted));
+      const creatorList = (await api('/api/music/playlists')).data.find(p => p.title === 'Test Creator' && p.song_count >= 1);
+      ok(creatorList, 'and is filed under the creator');
+      const rm = await api(`/api/music/playlists/${creatorList.id}/songs/remove`, { method: 'POST', body: { file_ids: [converted.id] } });
+      ok(rm.data.removed === 1 && (await api(`/api/music/playlists/${creatorList.id}/songs`)).data.length === creatorList.song_count - 1, 'remove several songs from a playlist at once');
+      await api(`/api/music/playlists/${creatorList.id}/songs/bulk`, { method: 'POST', body: { file_ids: [converted.id] } });
+      await api('/api/downloads/from-videos', { method: 'POST', body: { file_ids: [second.id] } });
+      jobs = await waitJobs('audio');
+      ok(jobs[0].error === 'Already in your music', 'converting the same video twice is skipped');
+      ok((await api('/api/downloads/from-videos', { method: 'POST', body: { file_ids: ['not-mine'] } })).status === 400, 'only your own videos can be converted');
+
+      console.log('\nSign-in cookies');
+      await api('/api/downloads', { method: 'POST', body: { url: 'https://www.youtube.com/watch?v=agegate', kind: 'video' } });
+      jobs = await waitJobs('video');
+      ok(jobs[0].status === 'error' && /Profile → Link downloads/.test(jobs[0].error) && !/--cookies/.test(jobs[0].error), 'age-restricted videos explain how to add cookies', jobs[0].error);
+      ok((await api('/api/downloads/cookies', { method: 'PUT', body: { text: 'not a cookie file' } })).status === 400, 'a non-cookie file is refused');
+      const cookieText = '# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t1893456000\tSID\tsecret-value\n';
+      const saved = await api('/api/downloads/cookies', { method: 'PUT', body: { text: cookieText } });
+      ok(saved.status === 200 && saved.data.sites.includes('youtube.com'), 'save cookies (only the sites are shown back)');
+      const onDisk = fs.readdirSync(path.join(tmp, 'private', 'cookies')).map(n => fs.readFileSync(path.join(tmp, 'private', 'cookies', n), 'latin1')).join('');
+      ok(onDisk.length > 0 && !onDisk.includes('secret-value'), 'cookies are encrypted at rest');
+      await api('/api/downloads', { method: 'POST', body: { url: 'https://www.youtube.com/watch?v=agegate', kind: 'video' } });
+      jobs = await waitJobs('video');
+      ok(jobs[0].status === 'done', 'with cookies the age-restricted video downloads', jobs[0].error);
+      ok(!fs.readdirSync(path.join(tmp, 'temp')).some(n => n.startsWith('dl-')), 'no plain cookie copy is left behind');
+      const json = await api('/api/downloads/cookies', { method: 'PUT', body: { text: JSON.stringify([{ domain: '.example.org', name: 'a', value: 'b', path: '/', secure: true, expirationDate: 1893456000 }]) } });
+      ok(json.status === 200 && json.data.sites.includes('example.org'), 'JSON cookie exports are accepted too');
+      await api('/api/downloads/cookies', { method: 'DELETE' });
+      ok((await api('/api/downloads/cookies')).data.saved === false, 'remove saved cookies');
       ok((await api('/api/downloads/clear', { method: 'POST' })).data.removed > 0, 'clear finished downloads');
       const videosFolder = (await api('/api/library/folder/videos')).data.id;
       const inFiles = await api(`/api/directory/${videosFolder}`);
@@ -266,6 +308,89 @@ async function main() {
       let fails = 0;
       for (let i = 0; i < 11; i++) { const r = await api('/api/login', { method: 'POST', body: { username: 'ghost', password: 'x' }, auth: false }); if (r.status === 429) fails++; }
       ok(fails > 0, 'repeated failed sign-ins are rate limited');
+
+      console.log('\nStorage check');
+      const adminDir = path.join(tmp, 'users', 'admin-uuid-0000');
+      const old = new Date(Date.now() - 2 * 3600 * 1000);
+      const orphanEnc = path.join(adminDir, `${crypto.randomUUID()}.enc`);
+      const orphanPlain = path.join(adminDir, `${crypto.randomUUID()}.plain`);
+      fs.writeFileSync(orphanEnc, crypto.randomBytes(5000));
+      fs.writeFileSync(orphanPlain, Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(100)]));
+      fs.mkdirSync(path.join(tmp, 'users', 'gone-user'), { recursive: true });
+      fs.writeFileSync(path.join(tmp, 'users', 'gone-user', 'x.enc'), Buffer.alloc(3000));
+      for (const p of [orphanEnc, orphanPlain, path.join(tmp, 'users', 'gone-user', 'x.enc')]) fs.utimesSync(p, old, old);
+      const lost = await upload(Buffer.from('soon gone'), 'lost.txt', null);
+      const lostRow = fs.readdirSync(adminDir).find(n => n.startsWith(lost.data.fileId));
+      fs.unlinkSync(path.join(adminDir, lostRow));
+      const sdb = new (require('node:sqlite').DatabaseSync)(path.join(tmp, 'akulavbox.db'));
+      sdb.prepare("UPDATE users SET used_bytes = used_bytes + 999999 WHERE id = 'admin-uuid-0000'").run();
+      sdb.close();
+      const scan = (await api('/api/admin/storage-check')).data;
+      ok(scan.orphans.length === 3 && scan.orphan_bytes === 5000 + 109 + 3000 && scan.recoverable === 1, 'finds files the database doesn’t know', JSON.stringify(scan.orphans));
+      ok(scan.missing.length === 1 && scan.missing[0].id === lost.data.fileId, 'finds files missing on disk');
+      ok(scan.usage.some(u => u.id === 'admin-uuid-0000' && u.recorded - u.actual === 999999), 'finds drifted usage counters');
+      const cleaned = (await api('/api/admin/storage-check/clean', { method: 'POST', body: {} })).data;
+      ok(cleaned.deleted === 2 && cleaned.recovered === 1 && cleaned.removed_rows === 1 && cleaned.usage_fixed >= 1, 'clean up', JSON.stringify(cleaned));
+      const after = (await api('/api/admin/storage-check')).data;
+      ok(!after.orphans.length && !after.missing.length && !after.usage.length, 'nothing left to fix', JSON.stringify(after).slice(0, 300));
+      const recFolder = (await api('/api/directory')).data.folders.find(d => d.name === 'Recovered files');
+      const rec = recFolder && (await api(`/api/directory/${recFolder.id}`)).data.files;
+      ok(rec && rec.length === 1 && /\.pdf$/.test(rec[0].filename), 'a readable lost file is recovered with its type');
+      ok(!fs.existsSync(path.join(tmp, 'users', 'gone-user')), 'leftovers of deleted accounts are removed');
+
+      console.log('\nBackup and restore');
+      const marker = crypto.randomBytes(300 * 1024);
+      const kept = await upload(marker, 'keep-me.bin', null);
+      const form = new URLSearchParams({ token, passphrase: 'correct horse battery' });
+      ok((await api('/api/admin/backup/export', { method: 'POST', body: new URLSearchParams({ token, passphrase: 'short' }).toString(), headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })).status === 400, 'export needs a real passphrase');
+      const exp = await api('/api/admin/backup/export', { method: 'POST', body: form.toString(), headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, raw: true });
+      const archive = Buffer.from(await exp.arrayBuffer());
+      const backupFile = path.join(tmp, 'temp', 'test-backup.akbx');
+      fs.writeFileSync(backupFile, archive);
+      ok(exp.status === 200 && archive.subarray(0, 4).toString() === 'AKBX', `export a full backup (${Math.round(archive.length / 1024)} KB)`);
+      ok(!archive.includes(marker.subarray(0, 64)) && !archive.includes(Buffer.from('admin-uuid-0000')), 'the backup is encrypted');
+
+      // restore into a second, empty server that uses a different MASTER_KEY
+      const tmp2 = fs.mkdtempSync(path.join(os.tmpdir(), 'akulavbox-check2-'));
+      const env2 = { ...env, STORAGE_DIR: tmp2, PORT: String(port + 1), MASTER_KEY: crypto.randomBytes(16).toString('hex') };
+      const base1 = base;
+      const boot2 = async () => {
+        const s = spawn(process.execPath, ['src/server.js'], { cwd: root, env: env2, stdio: ['ignore', 'pipe', 'pipe'] });
+        s.stdout.on('data', d => { log += d; }); s.stderr.on('data', d => { log += d; });
+        base = `http://127.0.0.1:${port + 1}`;
+        for (let i = 0; i < 60; i++) { try { if ((await fetch(`${base}/api/health`)).ok) break; } catch (e) { /* not yet */ } await new Promise(r => setTimeout(r, 250)); }
+        return s;
+      };
+      let s2 = await boot2();
+      try {
+        token = (await api('/api/login', { method: 'POST', body: { username: 'admin', password: 'admin' } })).data.token;
+        const uploadId = crypto.randomUUID();
+        const half = Math.floor(archive.length / 2);
+        await api(`/api/admin/backup/upload?id=${uploadId}&offset=0`, { method: 'PUT', body: archive.subarray(0, half), headers: { 'Content-Type': 'application/octet-stream' } });
+        const up2 = await api(`/api/admin/backup/upload?id=${uploadId}&offset=${half}`, { method: 'PUT', body: archive.subarray(half), headers: { 'Content-Type': 'application/octet-stream' } });
+        ok(up2.status === 200 && up2.data.size === archive.length, 'upload a backup in chunks');
+        ok((await api('/api/admin/backup/import', { method: 'POST', body: { id: uploadId, passphrase: 'wrong passphrase' } })).status === 400, 'a wrong passphrase is refused at once');
+        const imp = await api('/api/admin/backup/import', { method: 'POST', body: { id: uploadId, passphrase: 'correct horse battery' } });
+        let st2;
+        for (let i = 0; i < 80; i++) { st2 = (await api('/api/admin/backup')).data; if (!st2.import.running) break; await new Promise(r => setTimeout(r, 250)); }
+        ok(imp.status === 200 && st2.import.pending && st2.import.pending.rekeyed, 'the backup is verified and staged', JSON.stringify(st2.import));
+        const restart = await api('/api/admin/restart', { method: 'POST' });
+        await new Promise(r => s2.once('exit', r));
+        ok(restart.status === 200, 'restart to apply it');
+        s2 = await boot2();
+        token = (await api('/api/login', { method: 'POST', body: { username: 'admin', password: 'admin' } })).data.token;
+        const st3 = (await api('/api/admin/backup')).data;
+        ok(st3.restored && st3.restored.files > 0 && !st3.import.pending, 'restored on start');
+        const back = await api(`/api/files/${kept.data.fileId}/view`, { raw: true });
+        ok(back.status === 200 && Buffer.from(await back.arrayBuffer()).equals(marker), 'files open on a server with a different key');
+        ok((await api('/api/music/playlists')).data.some(p => p.title === 'Test Artist'), 'playlists and library details came along');
+        ok(fs.readdirSync(path.join(tmp2, 'backups')).some(n => n.startsWith('pre-import-')), 'the replaced data is kept in backups/');
+      } finally {
+        s2.kill();
+        base = base1;
+        await new Promise(r => setTimeout(r, 300));
+        try { fs.rmSync(tmp2, { recursive: true, force: true }); } catch (e) { /* Windows may still hold files */ }
+      }
     }
   } catch (e) {
     failed++;

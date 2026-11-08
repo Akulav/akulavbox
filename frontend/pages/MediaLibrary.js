@@ -58,6 +58,7 @@ export default {
               <button class="btn btn-primary" @click="newCollection()"><Icon name="plus" :size="16" />New collection</button>
             </template>
             <template v-else-if="view === 'all'">
+              <button v-if="kind === 'videos' && list.length > 1" class="btn" @click="shuffleList" title="Play everything shown, shuffled"><Icon name="shuffle" :size="16" /><span class="hidden sm:inline">Shuffle</span></button>
               <button v-if="items.length" class="btn" :class="selecting ? '!border-accent text-accent' : ''" @click="toggleSelecting"><Icon name="check" :size="16" />{{ selecting ? 'Done' : 'Select' }}</button>
               <button class="btn btn-primary" @click="fileInput.click()"><Icon name="upload" :size="16" />{{ C.uploadLabel }}</button>
             </template>
@@ -133,7 +134,7 @@ export default {
       <template v-else>
         <!-- quick filter chips for the most used tags -->
         <div v-if="!openCol && items.length && f.tags.value.length" class="flex gap-1.5 overflow-x-auto no-scrollbar -mt-2 mb-5">
-          <button v-for="t in f.tags.value.slice(0, 14)" :key="t.value" class="chip !h-7 !px-3 shrink-0 hover:text-fg" :class="f.tag.value === t.value ? 'chip-accent' : ''"
+          <button v-for="t in f.tags.value.slice(0, 14)" :key="t.value" class="chip chip-tag !h-7 !px-3 shrink-0 max-w-[180px] hover:text-fg" :class="f.tag.value === t.value ? 'chip-accent' : ''" :title="'#' + t.value"
                   @click="f.tag.value = f.tag.value === t.value ? '' : t.value">#{{ t.value }}</button>
         </div>
 
@@ -186,9 +187,10 @@ export default {
                 <span v-if="kind === 'books' && progressOf(it) > 0" class="text-accent">{{ Math.round(progressOf(it) * 100) }}% read</span>
                 <Stars v-if="it.rating" :model-value="it.rating" :size="11" readonly class="ml-auto" />
               </p>
-              <div v-if="it.tags.length" class="flex flex-wrap gap-1 mt-1.5">
-                <span v-for="t in it.tags.slice(0, 3)" :key="t" class="chip !h-5 !text-[11px]">#{{ t }}</span>
-                <span v-if="it.tags.length > 3" class="text-[11px] text-faint">+{{ it.tags.length - 3 }}</span>
+              <!-- one line of tags that never pushes the card wider: long tags shrink with an ellipsis -->
+              <div v-if="it.tags.length" class="flex items-center gap-1 mt-1.5 min-w-0 overflow-hidden" :title="it.tags.map(t => '#' + t).join(' ')">
+                <span v-for="t in it.tags.slice(0, 2)" :key="t" class="chip chip-tag !h-5 !text-[11px] min-w-0 shrink">#{{ t }}</span>
+                <span v-if="it.tags.length > 2" class="text-[11px] text-faint shrink-0">+{{ it.tags.length - 2 }}</span>
               </div>
             </div>
           </div>
@@ -201,6 +203,7 @@ export default {
           <span class="text-[13.5px] font-medium mr-2 whitespace-nowrap">{{ selected.length }} selected</span>
           <button class="btn btn-ghost btn-sm" @click="selectAll">All</button>
           <button v-if="C.collections" class="btn btn-ghost btn-sm" @click="openPicker($event, selected)"><Icon name="list-music" :size="15" /><span class="whitespace-nowrap">Add to collection</span></button>
+          <button v-if="canConvert" class="btn btn-ghost btn-sm" @click="toSongs(selected)" title="Save the sound as songs in Music"><Icon name="music" :size="15" /><span class="whitespace-nowrap">Save as songs</span></button>
           <button class="btn btn-ghost btn-sm" @click="editSelected"><Icon name="pencil" :size="15" /><span class="hidden sm:inline">Edit details</span></button>
           <button class="btn btn-ghost btn-sm !text-danger" @click="deleteSelected"><Icon name="trash" :size="15" /><span class="hidden sm:inline">Delete</span></button>
           <button class="icon-btn icon-btn-sm shrink-0" @click="selected = []; selecting = false" title="Clear"><Icon name="x" :size="15" /></button>
@@ -213,6 +216,7 @@ export default {
           <button class="menu-item" @click="run(open)"><Icon :name="kind === 'videos' ? 'play' : 'eye'" :size="kind === 'videos' ? 14 : 16" />{{ kind === 'videos' ? 'Play' : 'Read' }}</button>
           <button class="menu-item" @click="run(it => editors = [it])"><Icon name="pencil" :size="16" />Edit details</button>
           <button v-if="C.collections" class="menu-item" @click="pickerFromMenu($event)"><Icon name="list-music" :size="16" />Add to collection<Icon name="chevron-right" :size="15" class="ml-auto text-faint" /></button>
+          <button v-if="canConvert" class="menu-item" @click="run(it => toSongs([it.id]))"><Icon name="music" :size="16" />Save as song</button>
           <template v-if="openCol">
             <button class="menu-item" @click="run(setColCover)"><Icon name="image" :size="16" />Use as collection cover</button>
             <button class="menu-item" @click="run(removeFromCol)"><Icon name="x" :size="16" />Remove from collection</button>
@@ -238,6 +242,8 @@ export default {
       <div v-if="colMenu" class="fixed inset-0 z-[230]" @click="colMenu = null">
         <div class="menu fixed" :style="{ left: colMenu.x + 'px', top: colMenu.y + 'px' }" @click.stop>
           <button v-if="colMenu.c.item_count || openCol" class="menu-item" @click="runCol(c => playCollectionById(c))"><Icon name="play" :size="14" />Play</button>
+          <button v-if="colMenu.c.item_count > 1 || (openCol && colItems.length > 1)" class="menu-item" @click="runCol(c => playCollectionById(c, true))"><Icon name="shuffle" :size="16" />Shuffle</button>
+          <button v-if="canConvert && (colMenu.c.item_count || openCol)" class="menu-item" @click="runCol(collectionToSongs)"><Icon name="music" :size="16" />Save all as songs</button>
           <button class="menu-item" @click="runCol(toggleColFavorite)"><Icon :name="colMenu.c.is_favorite ? 'star-fill' : 'star'" :size="16" />{{ colMenu.c.is_favorite ? 'Remove from favorites' : 'Add to favorites' }}</button>
           <button class="menu-item" @click="runCol(renameCollection)"><Icon name="pencil" :size="16" />Rename</button>
           <div class="menu-sep"></div>
@@ -268,9 +274,12 @@ export default {
               <p class="label !mb-1.5">{{ L.people }}</p>
               <div class="flex flex-wrap gap-1.5"><button v-for="p in file.participants" :key="p" class="chip chip-accent hover:brightness-110" @click="filterBy('person', p)">{{ p }}</button></div>
             </div>
-            <div v-if="file.tags && file.tags.length">
-              <p class="label !mb-1.5">Tags</p>
-              <div class="flex flex-wrap gap-1.5"><button v-for="t in file.tags" :key="t" class="chip hover:text-fg" @click="filterBy('tag', t)">#{{ t }}</button></div>
+            <div v-if="file.tags && file.tags.length" class="min-w-0">
+              <p class="label !mb-1.5">Tags<span v-if="file.tags.length > TAGS_SHOWN" class="text-faint font-normal"> · {{ file.tags.length }}</span></p>
+              <div class="flex flex-wrap gap-1.5 min-w-0">
+                <button v-for="t in (allTags ? file.tags : file.tags.slice(0, TAGS_SHOWN))" :key="t" class="chip chip-tag hover:text-fg max-w-full" :title="'#' + t" @click="filterBy('tag', t)">#{{ t }}</button>
+                <button v-if="file.tags.length > TAGS_SHOWN" class="chip !bg-transparent text-accent hover:underline" @click="allTags = !allTags">{{ allTags ? 'Show fewer' : '+' + (file.tags.length - TAGS_SHOWN) + ' more' }}</button>
+              </div>
             </div>
             <dl class="grid grid-cols-[100px_1fr] gap-y-2 text-[13px]">
               <template v-if="file.series"><dt class="text-muted">{{ L.series }}</dt><dd>{{ file.series }}</dd></template>
@@ -395,16 +404,36 @@ export default {
     const showCreator = (name) => { f.reset(); f.person.value = name; };
 
     // ---------- collections ----------
-    function playCollection(shuffle) {
-      let l = [...colItems.value];
-      if (shuffle) for (let i = l.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [l[i], l[j]] = [l[j], l[i]]; }
-      if (l.length) viewer.value = { files: l, index: 0, autoplay: true, label: openCol.value.title };
+    const shuffled = (list) => { const l = [...list]; for (let i = l.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [l[i], l[j]] = [l[j], l[i]]; } return l; };
+    function playList(l, label, shuffle) {
+      if (!l.length) return;
+      viewer.value = { files: shuffle ? shuffled(l) : [...l], index: 0, autoplay: true, label: shuffle ? `${label}, shuffled` : label };
     }
-    async function playCollectionById(c) {
+    const playCollection = (shuffle) => playList(colItems.value, openCol.value.title, shuffle);
+    const shuffleList = () => playList(list.value, f.active.value ? 'the videos shown' : 'all videos', true);
+    async function playCollectionById(c, shuffle = false) {
       const l = await attempt(() => api(`/api/media-collections/${c.id}/items`));
-      if (l && l.length) viewer.value = { files: l, index: 0, autoplay: true, label: c.title };
+      if (l && l.length) playList(l, c.title, shuffle);
       else if (l) toast('This collection is empty');
     }
+
+    // ---------- save as song (the sound goes to Music with the same details) ----------
+    const canConvert = ref(false);
+    if (props.kind === 'videos') api('/api/downloads/status').then(s => { canConvert.value = !!s.convert; }).catch(() => {});
+    async function toSongs(ids) {
+      const list = [...ids];
+      const r = await attempt(() => api('/api/downloads/from-videos', { method: 'POST', body: { file_ids: list } }));
+      if (!r) return;
+      selected.value = []; selecting.value = false;
+      toast.success(`Saving ${r.ids.length === 1 ? 'the sound as a song' : r.ids.length + ' songs'}. ${r.ids.length === 1 ? 'It' : 'They'}’ll appear in Music, filed under the creator.`);
+    }
+    async function collectionToSongs(c) {
+      const l = await attempt(() => api(`/api/media-collections/${c.id}/items`));
+      if (l && l.length) await toSongs(l.map(x => x.id));
+    }
+    const TAGS_SHOWN = 12;
+    const allTags = ref(false);
+    watch(viewer, () => { allTags.value = false; });
     async function newCollection(ids = []) {
       picker.value = null;
       const title = await promptDialog({ title: 'New collection', placeholder: 'e.g. Cooking series', confirmText: ids.length ? 'Create and add' : 'Create' });
@@ -557,7 +586,7 @@ export default {
       C, L, TILE_GRID, items, loaded, folderId, fileInput, f, selecting, selected, menu, editors, viewer, dragOver, totalDuration,
       view, openCol, collections, collectionsLoaded, colItems, colLoaded, colDuration, list, creators,
       isSel, toggleSel, toggleSelecting, selectAll, editSelected, onCardClick, open, openById, filterBy, showCreator, openMenu, run, remove, deleteSelected, onSaved, onDownloaded,
-      playCollection, playCollectionById, newCollection, renameCollection, deleteCollection, toggleColFavorite, removeFromCol, setColCover,
+      playCollection, playCollectionById, shuffleList, canConvert, toSongs, collectionToSongs, TAGS_SHOWN, allTags, newCollection, renameCollection, deleteCollection, toggleColFavorite, removeFromCol, setColCover,
       colMenu, openColMenu, runCol, picker, openPicker, pickerFromMenu, addTo, dragIndex, dragOverIndex, onCardDragStart, onCardDrop,
       frameAsCover, onPick, onDragEnter, onDragLeave, onDrop, ext, progressOf,
       displayTitle, formatDuration, formatBytes, formatDate, fileUrl, downloadUrl,

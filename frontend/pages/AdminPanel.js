@@ -104,6 +104,86 @@ export default {
         </div>
       </section>
 
+      <!-- ===== Maintenance ===== -->
+      <section class="grid lg:grid-cols-2 gap-5 mb-5">
+        <div class="panel p-5 md:p-6 min-w-0">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="w-10 h-10 rounded-xl bg-ok/15 text-ok grid place-items-center"><Icon name="activity" :size="20" /></span>
+            <div class="flex-1 min-w-0"><h2 class="font-semibold">Storage check</h2><p class="text-xs text-muted">Compares the files on disk with the database</p></div>
+            <button class="btn btn-sm" :disabled="check.busy" @click="runCheck"><Icon :name="check.busy ? 'loader' : 'search'" :size="14" />{{ check.report ? 'Check again' : 'Check now' }}</button>
+          </div>
+          <p v-if="!check.report" class="text-[13px] text-muted">If “Files” above is much bigger than what accounts use, some files on disk may belong to nothing: left over from crashes, older versions or deleted accounts. A check finds them; nothing changes until you clean up.</p>
+          <template v-else>
+            <dl class="grid grid-cols-2 gap-3 text-[13px]">
+              <div class="rounded-xl bg-elevated/60 px-3.5 py-3"><dt class="text-[11.5px] text-muted">On disk</dt><dd class="font-semibold tabular-nums">{{ formatBytes(check.report.disk_bytes) }}<span class="text-muted font-normal"> · {{ check.report.disk_files.toLocaleString() }} files</span></dd></div>
+              <div class="rounded-xl bg-elevated/60 px-3.5 py-3"><dt class="text-[11.5px] text-muted">In the database</dt><dd class="font-semibold tabular-nums">{{ formatBytes(check.report.db_bytes) }}<span class="text-muted font-normal"> · {{ check.report.db_files.toLocaleString() }} files</span></dd></div>
+            </dl>
+            <ul class="mt-4 space-y-2 text-[13px]">
+              <li class="flex items-start gap-2"><Icon :name="check.report.orphans.length ? 'alert' : 'check'" :size="15" :class="check.report.orphans.length ? 'text-accent mt-0.5' : 'text-ok mt-0.5'" />
+                <span v-if="check.report.orphans.length"><b>{{ check.report.orphans.length.toLocaleString() }}</b> file{{ check.report.orphans.length === 1 ? '' : 's' }} ({{ formatBytes(check.report.orphan_bytes) }}) {{ check.report.orphans.length === 1 ? 'belongs' : 'belong' }} to nothing.
+                  <template v-if="check.report.recoverable"> {{ check.report.recoverable }} can still be opened and will be put back in a “Recovered files” folder; the rest are encrypted without a key record and will be deleted.</template>
+                  <template v-else> They’re encrypted without a key record, so they can’t be opened and will be deleted.</template>
+                  <button class="text-accent hover:underline ml-1" @click="check.details = !check.details">{{ check.details ? 'Hide' : 'Details' }}</button></span>
+                <span v-else>Every file on disk belongs to an account.</span></li>
+              <li class="flex items-start gap-2"><Icon :name="check.report.missing.length ? 'alert' : 'check'" :size="15" :class="check.report.missing.length ? 'text-accent mt-0.5' : 'text-ok mt-0.5'" />
+                <span v-if="check.report.missing.length"><b>{{ check.report.missing.length }}</b> file{{ check.report.missing.length === 1 ? ' is' : 's are' }} listed but missing on disk ({{ check.report.missing.slice(0, 3).map(m => m.filename).join(', ') }}<template v-if="check.report.missing.length > 3">…</template>). They’ll be repaired if possible, otherwise removed from the lists.</span>
+                <span v-else>Every listed file is on disk.</span></li>
+              <li class="flex items-start gap-2"><Icon :name="check.report.usage.length ? 'alert' : 'check'" :size="15" :class="check.report.usage.length ? 'text-accent mt-0.5' : 'text-ok mt-0.5'" />
+                <span v-if="check.report.usage.length">Storage used is off for {{ check.report.usage.map(u => u.username + ' (' + formatBytes(u.recorded) + ' → ' + formatBytes(u.actual) + ')').join(', ') }}.</span>
+                <span v-else>Storage used is right for every account.</span></li>
+            </ul>
+            <ul v-if="check.details && check.report.orphans.length" class="mt-3 max-h-48 overflow-y-auto rounded-lg border border-line divide-y divide-line text-[12px]">
+              <li v-for="o in check.report.orphans.slice(0, 200)" :key="(o.owner || '') + o.name" class="px-3 py-1.5 flex gap-3"><span class="truncate flex-1 font-mono" :title="o.name">{{ o.username || o.owner || '—' }}/{{ o.name }}</span><span class="text-muted shrink-0">{{ o.reason }}</span><span class="tabular-nums shrink-0">{{ formatBytes(o.bytes) }}</span></li>
+            </ul>
+            <div v-if="checkIssues" class="flex items-center gap-2 mt-4">
+              <button class="btn btn-primary btn-sm" :disabled="check.busy" @click="cleanUp"><Icon name="sparkles" :size="14" />Clean up<template v-if="check.report.orphan_bytes"> and free {{ formatBytes(check.report.orphan_bytes) }}</template></button>
+            </div>
+          </template>
+        </div>
+
+        <div class="panel p-5 md:p-6 min-w-0">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="w-10 h-10 rounded-xl bg-info/15 text-info grid place-items-center"><Icon name="database" :size="20" /></span>
+            <div class="flex-1 min-w-0"><h2 class="font-semibold">Backup and restore</h2><p class="text-xs text-muted">Everything in one encrypted file: accounts, passwords, files, albums, playlists, chat</p></div>
+          </div>
+          <p v-if="bk.restored" class="rounded-xl bg-ok/10 text-[13px] px-3.5 py-2.5 mb-3"><Icon name="check" :size="14" class="inline text-ok mr-1" />Restored the backup from {{ formatRelative(bk.restored.created_at) }}. The data it replaced is in <span class="font-mono text-[12px] break-all">{{ bk.restored.previous }}</span>.</p>
+
+          <form class="space-y-2" @submit.prevent="exportBackup">
+            <p class="text-[13px] font-medium">Export<span v-if="bk.estimate" class="text-muted font-normal"> · about {{ formatBytes(bk.estimate.bytes) }}</span></p>
+            <div class="flex flex-col sm:flex-row gap-2">
+              <input v-model="bk.pass" type="password" class="input flex-1" placeholder="Passphrase (8+ characters)" autocomplete="new-password" minlength="8" required aria-label="Backup passphrase">
+              <button class="btn shrink-0" :disabled="bk.pass.length < 8"><Icon name="download" :size="15" />Download backup</button>
+            </div>
+            <p class="text-[11.5px] text-faint">Keep the passphrase safe: without it the backup can’t be opened. Stored files are already encrypted, so they’re copied as-is; the database is compressed. It restores on any AkulavBox server, even one with a different MASTER_KEY.</p>
+          </form>
+
+          <div class="border-t border-line mt-4 pt-4 space-y-2">
+            <p class="text-[13px] font-medium">Restore</p>
+            <template v-if="bk.import.pending">
+              <p class="text-[13px]">Ready to restore the backup from {{ formatRelative(bk.import.pending.created_at) }}: {{ bk.import.pending.users }} account{{ bk.import.pending.users === 1 ? '' : 's' }}, {{ (bk.import.pending.files || 0).toLocaleString() }} files. It replaces <b>everything</b> on this server when AkulavBox restarts. Anything changed before then is lost.</p>
+              <div class="flex flex-wrap gap-2">
+                <button class="btn btn-primary btn-sm" @click="restartNow"><Icon name="rotate" :size="14" />Restart now</button>
+                <button class="btn btn-ghost btn-sm" @click="cancelImport">Cancel restore</button>
+              </div>
+              <p class="text-[11.5px] text-faint">“Restart now” stops the server. It starts again on its own under systemd, pm2, Docker or a similar service manager; otherwise start it again yourself.</p>
+            </template>
+            <template v-else-if="bk.import.running || bk.uploading">
+              <p class="text-[13px] flex items-center gap-2"><Icon name="loader" :size="14" class="text-accent" />{{ bk.uploading ? 'Uploading' : bk.import.step }} {{ Math.round(importPct) }}%</p>
+              <div class="meter"><span :style="{ width: importPct + '%' }"></span></div>
+            </template>
+            <form v-else class="space-y-2" @submit.prevent="importBackup">
+              <input ref="bkFile" type="file" accept=".akbx" class="input !h-auto py-1.5 text-[13px]" @change="e => bk.file = e.target.files[0] || null" aria-label="Backup file">
+              <div class="flex flex-col sm:flex-row gap-2">
+                <input v-model="bk.importPass" type="password" class="input flex-1" placeholder="The backup’s passphrase" autocomplete="off" required aria-label="Passphrase of the backup">
+                <button class="btn shrink-0" :disabled="!bk.file || !bk.importPass"><Icon name="upload" :size="15" />Restore</button>
+              </div>
+              <p v-if="bk.import.error" class="text-danger text-[12.5px]">{{ bk.import.error }}</p>
+              <p class="text-[11.5px] text-faint">Very large backups: copy the file to the server and run <span class="font-mono">node scripts/backup.js import &lt;file&gt;</span> instead.</p>
+            </form>
+          </div>
+        </div>
+      </section>
+
       <!-- ===== New account ===== -->
       <section class="panel p-5 mb-5">
         <h2 class="font-semibold mb-4 flex items-center gap-2"><Icon name="user-plus" :size="17" class="text-accent" />Create an account</h2>
@@ -250,8 +330,71 @@ export default {
       await attempt(async () => { await api(`/api/admin/users/${u.id}`, { method: 'DELETE' }); await refresh(true); }, 'Account deleted');
     }
 
-    onMounted(() => refresh(false));
+    // ---------- storage check ----------
+    const check = reactive({ report: null, busy: false, details: false });
+    const checkIssues = computed(() => check.report && (check.report.orphans.length || check.report.missing.length || check.report.usage.length));
+    async function runCheck() {
+      check.busy = true;
+      try { check.report = await api('/api/admin/storage-check'); } catch (e) { toast.error(e.message); }
+      finally { check.busy = false; }
+    }
+    async function cleanUp() {
+      const r = check.report;
+      if (!await confirmDialog({ title: 'Clean up storage?', danger: true, confirmText: 'Clean up',
+        message: [r.orphans.length - r.recoverable > 0 && `${r.orphans.length - r.recoverable} unreadable file(s) are deleted for good.`, r.recoverable && `${r.recoverable} readable file(s) go to “Recovered files”.`,
+          r.missing.length && `${r.missing.length} missing file(s) are repaired or removed from lists.`, r.usage.length && 'Storage used is recalculated.'].filter(Boolean).join(' ') })) return;
+      check.busy = true;
+      const done = await attempt(() => api('/api/admin/storage-check/clean', { method: 'POST', body: {} }));
+      check.busy = false;
+      if (!done) return;
+      toast.success([done.freed_bytes && `Freed ${formatBytes(done.freed_bytes)}`, done.recovered && `recovered ${done.recovered}`, (done.repaired + done.removed_rows) && `fixed ${done.repaired + done.removed_rows} listing(s)`, done.usage_fixed && `corrected ${done.usage_fixed} account(s)`].filter(Boolean).join(', ') || 'Nothing needed fixing');
+      await Promise.all([runCheck(), refresh(true)]);
+    }
+
+    // ---------- backup and restore ----------
+    const bk = reactive({ pass: '', importPass: '', file: null, uploading: false, sent: 0, estimate: null, restored: null, import: { running: false, pending: null, error: null, done: 0, total: 0, step: '' } });
+    const bkFile = ref(null);
+    const importPct = computed(() => bk.uploading ? (bk.file ? (bk.sent / bk.file.size) * 100 : 0) : (bk.import.total ? (bk.import.done / bk.import.total) * 100 : 0));
+    const loadBackup = async () => { try { Object.assign(bk, await api('/api/admin/backup')); } catch (e) { /* older server */ } };
+    function exportBackup() {
+      // a real form post, so the browser streams the (possibly huge) file straight to disk
+      const f = document.createElement('form');
+      f.method = 'POST'; f.action = '/api/admin/backup/export'; f.style.display = 'none';
+      for (const [k, v] of Object.entries({ token: session.token, passphrase: bk.pass })) { const i = document.createElement('input'); i.type = 'hidden'; i.name = k; i.value = v; f.appendChild(i); }
+      document.body.appendChild(f); f.submit(); f.remove();
+      bk.pass = '';
+      toast('Preparing the backup. The download starts in a moment.');
+    }
+    async function importBackup() {
+      if (!await confirmDialog({ title: 'Restore this backup?', danger: true, confirmText: 'Upload and check',
+        message: 'After it is uploaded and checked, AkulavBox replaces ALL accounts and files on this server with the backup’s at the next restart. The current data is moved to storage/backups/.' })) return;
+      const id = crypto.randomUUID();
+      const CHUNK = 16 * 1024 * 1024;
+      bk.uploading = true; bk.sent = 0; bk.import.error = null;
+      try {
+        for (let off = 0; off < bk.file.size; off += CHUNK) {
+          const res = await fetch(`/api/admin/backup/upload?id=${id}&offset=${off}`, { method: 'PUT', headers: { Authorization: `Bearer ${session.token}`, 'Content-Type': 'application/octet-stream' }, body: bk.file.slice(off, off + CHUNK) });
+          if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Upload failed (${res.status})`);
+          bk.sent = Math.min(bk.file.size, off + CHUNK);
+        }
+        bk.uploading = false;
+        await api('/api/admin/backup/import', { method: 'POST', body: { id, passphrase: bk.importPass } });
+        bk.importPass = '';
+        const poll = async () => { await loadBackup(); if (bk.import.running) setTimeout(poll, 1500); else if (bk.import.pending) toast.success('Backup checked. Restart to restore it.'); };
+        await poll();
+      } catch (e) { bk.uploading = false; bk.import.error = e.message; toast.error(e.message); }
+    }
+    async function cancelImport() { await attempt(async () => { await api('/api/admin/backup/import', { method: 'DELETE' }); await loadBackup(); }, 'Restore cancelled'); }
+    async function restartNow() {
+      if (!await confirmDialog({ title: 'Restart AkulavBox now?', confirmText: 'Restart', danger: true, message: 'Everyone is disconnected for a moment. If no service manager restarts it, start the server again by hand.' })) return;
+      await attempt(() => api('/api/admin/restart', { method: 'POST' }));
+      toast('Restarting… sign in again in a moment.');
+      setTimeout(() => location.reload(), 6000);
+    }
+
+    onMounted(() => { refresh(false); loadBackup(); });
     return { users, sys, sysBusy, busy, form, search, filtered, totalUsed, totalQuota, pctOf, otherBytes, pct, freePct, parts, stats, GB,
-      refresh, toolAction, createUser, editQuota, resetPassword, toggleRole, signOut, deleteUser, formatBytes, formatRelative, session };
+      refresh, toolAction, createUser, editQuota, resetPassword, toggleRole, signOut, deleteUser, formatBytes, formatRelative, session,
+      check, checkIssues, runCheck, cleanUp, bk, bkFile, importPct, exportBackup, importBackup, cancelImport, restartNow };
   },
 };

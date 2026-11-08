@@ -10,6 +10,14 @@ const args = process.argv.slice(2);
 const url = args[args.indexOf('--') + 1] || args[args.length - 1];
 if (args.includes('--version')) { console.log('2099.01.01-fake'); process.exit(0); }
 if (/fail/.test(url)) { console.error('ERROR: [generic] This video is unavailable'); process.exit(1); }
+// an age-restricted video works only with a cookie file that has youtube.com in it
+if (/agegate/.test(url)) {
+  const c = args.indexOf('--cookies');
+  if (c === -1 || !/youtube\.com/.test(fs.readFileSync(args[c + 1], 'utf-8'))) {
+    console.error('ERROR: [youtube] agegate: Sign in to confirm your age. This video may be inappropriate for some users. Use --cookies-from-browser or --cookies for the authentication. See  https://github.com/yt-dlp/yt-dlp/wiki/FAQ for how to manually pass cookies');
+    process.exit(1);
+  }
+}
 const id = (url.split('/').pop() || 'x').replace(/[^\w-]/g, '') || 'x';
 
 if (args.includes('-J')) {

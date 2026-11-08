@@ -24,6 +24,10 @@ const config = {
   chatDir: path.join(STORAGE_DIR, 'chat_temp'),
   thumbsDir: path.join(STORAGE_DIR, 'thumbs'),
   backupsDir: path.join(STORAGE_DIR, 'backups'),
+  // per-user secrets for link downloads (sign-in cookies), encrypted with MASTER_KEY
+  privateDir: path.join(STORAGE_DIR, 'private'),
+  // a restore waiting to be applied on the next start (see core/backup.js)
+  importDir: path.join(STORAGE_DIR, 'import-staging'),
   // Days a deleted item stays in the trash before it is removed for good
   trashDays: Math.max(1, Number(process.env.TRASH_DAYS) || 30),
   // Uploads are refused when they would leave less than this much free disk

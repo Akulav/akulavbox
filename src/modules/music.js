@@ -138,6 +138,16 @@ module.exports = async function (fastify) {
     return { success: true };
   });
 
+  // Take several songs out of a playlist at once: { file_ids } (the songs stay in the library)
+  fastify.post('/api/music/playlists/:id/songs/remove', { preHandler: verifyUser }, async (request, reply) => {
+    if (!ownsPlaylist(request.params.id, request.user.id)) return notFound(reply);
+    const ids = Array.isArray(request.body?.file_ids) ? request.body.file_ids.map(String).slice(0, 5000) : [];
+    const del = db.prepare('DELETE FROM playlist_songs WHERE playlist_id = ? AND file_id = ?');
+    let removed = 0;
+    db.tx(() => { for (const id of ids) removed += del.run(request.params.id, id).changes; });
+    return { success: true, removed };
+  });
+
   fastify.post('/api/music/songs/:id/cover', { preHandler: verifyUser }, async (request, reply) => {
     if (!ownsFile(request.params.id, request.user.id) || !ownsFile(request.body?.cover_file_id, request.user.id)) {
       return reply.code(404).send({ error: 'File not found' });

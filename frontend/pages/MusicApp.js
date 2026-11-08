@@ -3,7 +3,7 @@ import Icon from '../components/Icon.js';
 import { api, fileUrl, formatBytes, refreshAccount } from '../lib/api.js';
 import { toast, confirmDialog, promptDialog, attempt } from '../lib/ui.js';
 import { uploadMany, uploadFile } from '../lib/upload.js';
-import { player, playQueue, toggle, songTitle, forget } from '../lib/player.js';
+import { player, playQueue, playList, toggle, songTitle, forget } from '../lib/player.js';
 import { MetaEditor, LibraryFilters, Stars } from '../components/Library.js';
 import Downloads from '../components/Downloads.js';
 import { useLibraryFilter, systemFolder, formatDuration, thumbUrl } from '../lib/library.js';
@@ -28,10 +28,11 @@ export default {
             <Icon name="search" :size="16" class="absolute left-3 top-1/2 -translate-y-1/2 text-faint pointer-events-none" />
             <input v-model="search" type="search" placeholder="Search playlists" class="input pl-9">
           </div>
-          <div class="flex gap-2 ml-auto">
-            <button v-if="view === 'all' && songs.length" class="btn" :class="selecting ? '!border-accent text-accent' : ''" @click="toggleSelecting"><Icon name="check" :size="16" />{{ selecting ? 'Done' : 'Select' }}</button>
+          <div class="flex flex-wrap gap-2 ml-auto">
+            <button v-if="view !== 'home' && songs.length" class="btn" :class="selecting ? '!border-accent text-accent' : ''" @click="toggleSelecting"><Icon name="check" :size="16" />{{ selecting ? 'Done' : 'Select' }}</button>
             <button v-if="view !== 'home' && filteredSongs.length" class="btn" @click="playAll(true)"><Icon name="shuffle" :size="16" /><span class="hidden sm:inline">Shuffle</span></button>
             <button v-if="view !== 'home' && filteredSongs.length" class="btn" @click="playAll(false)"><Icon name="play" :size="14" />Play</button>
+            <button v-if="view === 'home' && allSongs.length" class="btn" @click="shuffleEverything"><Icon name="shuffle" :size="16" />Shuffle all</button>
             <button v-if="view === 'home'" class="btn" @click="createPlaylist"><Icon name="plus" :size="16" />New playlist</button>
             <button v-if="view === 'playlist'" class="btn btn-primary" @click="openAddSongs"><Icon name="plus" :size="16" />Add songs</button>
             <input ref="musicInput" type="file" multiple accept="audio/*,.flac,.m4a,.opus" class="hidden" @change="onPickMusic">
@@ -59,8 +60,12 @@ export default {
             <div class="relative aspect-square rounded-xl overflow-hidden bg-elevated lift zoom-media">
               <img v-if="p.cover_file_id" :src="thumbUrl(p.cover_file_id, 480)" loading="lazy" alt="" class="w-full h-full object-cover">
               <div v-else class="w-full h-full grid place-items-center text-faint"><Icon name="disc" :size="44" :stroke="1.25" /></div>
-              <button class="absolute bottom-2 right-2 w-10 h-10 rounded-full bg-accent text-accent-fg grid place-items-center shadow-lg opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 transition"
-                      @click.stop="playPlaylist(p)" :title="'Play ' + p.title"><Icon name="play" :size="16" class="translate-x-[1px]" /></button>
+              <div class="absolute bottom-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 translate-y-1 group-hover:translate-y-0 transition">
+                <button class="w-10 h-10 rounded-full bg-black/55 backdrop-blur text-white grid place-items-center shadow-lg hover:bg-black/70"
+                        @click.stop="playPlaylist(p, true)" :title="'Shuffle ' + p.title" :aria-label="'Shuffle ' + p.title"><Icon name="shuffle" :size="16" /></button>
+                <button class="w-10 h-10 rounded-full bg-accent text-accent-fg grid place-items-center shadow-lg"
+                        @click.stop="playPlaylist(p)" :title="'Play ' + p.title" :aria-label="'Play ' + p.title"><Icon name="play" :size="16" class="translate-x-[1px]" /></button>
+              </div>
               <button class="absolute top-2 right-2 w-8 h-8 rounded-full grid place-items-center bg-black/45 backdrop-blur text-white opacity-0 group-hover:opacity-100 focus:opacity-100"
                       @click.stop="openMenu($event, { type: 'playlist', item: p })"><Icon name="more" :size="17" /></button>
               <span v-if="p.is_favorite" class="absolute top-2 left-2 w-8 h-8 rounded-full grid place-items-center bg-black/45 text-accent"><Icon name="star-fill" :size="15" /></span>
@@ -88,8 +93,8 @@ export default {
               :class="[isCurrent(s) || isSel(s.id) ? 'bg-accent/[0.07]' : '', dragOverIndex === i ? 'shadow-[inset_0_2px_0_rgb(var(--accent))]' : '', dragIndex === i ? 'opacity-40' : '']"
               :draggable="canReorder" @dragstart="onSongDragStart($event, i)" @dragover.prevent="canReorder && (dragOverIndex = i)" @dragleave="dragOverIndex = null"
               @drop.prevent="onSongDrop(i)" @dragend="dragIndex = dragOverIndex = null"
-              @dblclick="!selecting && play(i)" @click="selecting ? toggleSel(s.id) : onRowClick(i)">
-            <input v-if="selecting" type="checkbox" class="checkbox mx-2" :checked="isSel(s.id)" @click.stop="toggleSel(s.id)" :aria-label="'Select ' + songTitle(s)">
+              @dblclick="!selecting && play(i)" @click="selecting ? toggleSel(s.id, $event, i) : onRowClick(i)">
+            <input v-if="selecting" type="checkbox" class="checkbox mx-2" :checked="isSel(s.id)" @click.stop="toggleSel(s.id, $event, i)" :aria-label="'Select ' + songTitle(s)">
             <button v-else class="w-8 h-8 grid place-items-center rounded-full text-muted" @click.stop="isCurrent(s) ? toggle() : play(i)" :aria-label="'Play ' + songTitle(s)">
               <template v-if="isCurrent(s)">
                 <Icon :name="player.playing ? 'pause' : 'play'" :size="14" class="text-accent" />
@@ -121,6 +126,7 @@ export default {
         <div class="menu fixed max-h-[70vh] overflow-y-auto" :style="{ left: menu.x + 'px', top: menu.y + 'px' }" @click.stop>
           <template v-if="menu.type === 'playlist'">
             <button class="menu-item" @click="run(p => playPlaylist(p))"><Icon name="play" :size="14" />Play</button>
+            <button class="menu-item" @click="run(p => playPlaylist(p, true))"><Icon name="shuffle" :size="16" />Shuffle</button>
             <button class="menu-item" @click="run(toggleFavorite)"><Icon :name="menu.item.is_favorite ? 'star-fill' : 'star'" :size="16" />{{ menu.item.is_favorite ? 'Remove from favorites' : 'Add to favorites' }}</button>
             <button class="menu-item" @click="run(p => pickCover('playlist', p))"><Icon name="image" :size="16" />Change cover</button>
             <button class="menu-item" @click="run(renamePlaylist)"><Icon name="pencil" :size="16" />Rename</button>
@@ -136,9 +142,10 @@ export default {
             <button v-else class="menu-item danger" @click="run(deleteSong)"><Icon name="trash" :size="16" />Move to trash</button>
           </template>
           <template v-else-if="menu.type === 'add-many'">
-            <p class="px-2.5 py-1.5 text-xs text-muted">Add {{ selected.length }} songs to</p>
-            <button v-for="p in playlists" :key="p.id" class="menu-item" @click="addManyTo(p)"><Icon name="disc" :size="16" /><span class="truncate">{{ p.title }}</span></button>
-            <p v-if="!playlists.length" class="px-2.5 py-2 text-[13px] text-muted">Create a playlist first.</p>
+            <p class="px-2.5 py-1.5 text-xs text-muted">Add {{ selected.length }} song{{ selected.length === 1 ? '' : 's' }} to</p>
+            <button v-for="p in playlists.filter(x => x.id !== playlist?.id)" :key="p.id" class="menu-item" @click="addManyTo(p)"><Icon name="disc" :size="16" /><span class="truncate">{{ p.title }}</span></button>
+            <div v-if="playlists.length" class="menu-sep"></div>
+            <button class="menu-item" @click="addManyToNew"><Icon name="plus" :size="16" />New playlist…</button>
           </template>
           <template v-else-if="menu.type === 'add'">
             <p class="px-2.5 py-1.5 text-xs text-muted">Add to playlist</p>
@@ -182,12 +189,15 @@ export default {
       </Transition>
 
       <Transition name="pop">
-        <div v-if="selected.length" class="fixed z-[170] left-1/2 -translate-x-1/2 bottom-[150px] md:bottom-[104px] panel flex items-center gap-1 p-1.5 pl-4">
+        <div v-if="selected.length" class="fixed z-[170] left-1/2 -translate-x-1/2 bottom-[150px] md:bottom-[104px] panel glass flex items-center gap-1 p-1.5 pl-4 max-w-[calc(100vw-1rem)] overflow-x-auto no-scrollbar">
           <span class="text-[13.5px] font-medium mr-2 whitespace-nowrap">{{ selected.length }} selected</span>
-          <button class="btn btn-ghost btn-sm" @click="selected = f.filtered.value.map(s => s.id)">All</button>
-          <button class="btn btn-ghost btn-sm" @click="editors = songs.filter(s => selected.includes(s.id))"><Icon name="pencil" :size="15" />Edit details</button>
-          <button class="btn btn-ghost btn-sm" @click="openAddMany"><Icon name="list-music" :size="15" /><span class="hidden sm:inline">Add to playlist</span></button>
-          <button class="icon-btn icon-btn-sm" @click="selected = []; selecting = false" title="Clear"><Icon name="x" :size="15" /></button>
+          <button class="btn btn-ghost btn-sm" @click="selected = selected.length === filteredSongs.length ? [] : filteredSongs.map(s => s.id)">{{ selected.length === filteredSongs.length ? 'None' : 'All' }}</button>
+          <button class="btn btn-ghost btn-sm" @click="playSelected" title="Play the selection"><Icon name="play" :size="14" /><span class="hidden sm:inline">Play</span></button>
+          <button class="btn btn-ghost btn-sm" @click="editors = songs.filter(s => selected.includes(s.id))"><Icon name="pencil" :size="15" /><span class="hidden sm:inline">Edit details</span></button>
+          <button class="btn btn-ghost btn-sm" @click="openAddMany"><Icon name="list-music" :size="15" /><span class="whitespace-nowrap">Add to playlist</span></button>
+          <button v-if="view === 'playlist'" class="btn btn-ghost btn-sm" @click="removeSelectedFromPlaylist"><Icon name="x" :size="15" /><span class="whitespace-nowrap">Remove</span></button>
+          <button class="btn btn-ghost btn-sm !text-danger" @click="deleteSelected" title="Move to trash"><Icon name="trash" :size="15" /><span class="hidden sm:inline">Delete</span></button>
+          <button class="icon-btn icon-btn-sm shrink-0" @click="selected = []; selecting = false" title="Clear"><Icon name="x" :size="15" /></button>
         </div>
       </Transition>
 
@@ -218,8 +228,46 @@ export default {
     const selecting = ref(false);
     const selected = ref([]);
     const isSel = (id) => selected.value.includes(id);
-    const toggleSel = (id) => { const i = selected.value.indexOf(id); if (i === -1) selected.value.push(id); else selected.value.splice(i, 1); };
-    const toggleSelecting = () => { selecting.value = !selecting.value; if (!selecting.value) selected.value = []; };
+    // shift-click selects everything between the last click and this one
+    let lastSel = null;
+    const toggleSel = (id, e, index) => {
+      if (e && e.shiftKey && lastSel !== null && index !== undefined) {
+        const [a, b] = [Math.min(lastSel, index), Math.max(lastSel, index)];
+        const ids = filteredSongs.value.slice(a, b + 1).map(s => s.id);
+        selected.value = [...new Set([...selected.value, ...ids])];
+      } else {
+        const i = selected.value.indexOf(id);
+        if (i === -1) selected.value.push(id); else selected.value.splice(i, 1);
+      }
+      if (index !== undefined) lastSel = index;
+    };
+    const toggleSelecting = () => { selecting.value = !selecting.value; lastSel = null; if (!selecting.value) selected.value = []; };
+    const endSelection = () => { selected.value = []; selecting.value = false; lastSel = null; };
+    const selectedSongs = () => filteredSongs.value.filter(s => selected.value.includes(s.id));
+    const playSelected = () => { playQueue(selectedSongs(), 0, `${selected.value.length} selected`); };
+    async function deleteSelected() {
+      const ids = [...selected.value];
+      ids.forEach(forget);
+      endSelection();
+      await moveToTrash({ files: ids }, `${ids.length} song${ids.length === 1 ? '' : 's'}`, async () => { await fetchAll(); if (view.value === 'playlist') await fetchPlaylistSongs(); });
+      if (view.value === 'playlist') songs.value = songs.value.filter(s => !ids.includes(s.id));
+    }
+    async function removeSelectedFromPlaylist() {
+      const ids = [...selected.value];
+      const pid = playlist.value.id;
+      endSelection();
+      await attempt(async () => {
+        await api(`/api/music/playlists/${pid}/songs/remove`, { method: 'POST', body: { file_ids: ids } });
+        songs.value = songs.value.filter(s => !ids.includes(s.id));
+        fetchPlaylists();
+      }, `Removed ${ids.length} song${ids.length === 1 ? '' : 's'} from ${playlist.value.title}`);
+    }
+    async function addManyToNew() {
+      menu.value = null;
+      const id = await createPlaylist();
+      const p = playlists.value.find(x => x.id === id);
+      if (p) await addManyTo(p);
+    }
     async function onMetaSaved() {
       if (editors.value && editors.value.length > 1) { selected.value = []; selecting.value = false; }
       if (view.value === 'playlist') await fetchPlaylistSongs(); else await fetchAll();
@@ -229,11 +277,12 @@ export default {
     function openAddMany() { menu.value = { type: 'add-many', x: Math.max(8, window.innerWidth / 2 - 105), y: Math.max(8, window.innerHeight - 420) }; }
     async function addManyTo(p) {
       menu.value = null;
+      const n = selected.value.length;
       await attempt(async () => {
         await api(`/api/music/playlists/${p.id}/songs/bulk`, { method: 'POST', body: { file_ids: selected.value } });
         await fetchPlaylists();
-      }, `Added ${selected.value.length} songs to ${p.title}`);
-      selected.value = []; selecting.value = false;
+      }, `Added ${n} song${n === 1 ? '' : 's'} to ${p.title}`);
+      endSelection();
     }
     const addable = computed(() => {
       const inList = new Set(songs.value.map(s => s.id));
@@ -263,14 +312,11 @@ export default {
 
     const sourceName = () => view.value === 'playlist' ? playlist.value.title : 'All songs';
     const play = (i) => playQueue(filteredSongs.value, i, sourceName());
-    const playAll = (shuffled) => {
-      if (shuffled !== player.shuffle) { player.shuffle = shuffled; }
-      const start = shuffled ? Math.floor(Math.random() * filteredSongs.value.length) : 0;
-      playQueue(filteredSongs.value, start, sourceName());
-    };
-    async function playPlaylist(p) {
+    const playAll = (shuffled) => playList(filteredSongs.value, shuffled, sourceName());
+    const shuffleEverything = () => playList(allSongs.value, true, 'All songs');
+    async function playPlaylist(p, shuffled = false) {
       const list = await attempt(() => api(`/api/music/playlists/${p.id}/songs`));
-      if (list && list.length) playQueue(list, 0, p.title);
+      if (list && list.length) playList(list, shuffled, p.title);
       else if (list) toast('This playlist is empty');
     }
     const isCurrent = (s) => player.current && player.current.id === s.id;
@@ -394,7 +440,8 @@ export default {
 
     return {
       view, playlists, allSongs, songs, playlist, loading, search, musicInput, coverInput, menu, adder,
-      f, SORTS, editors, selecting, selected, isSel, toggleSel, toggleSelecting, onMetaSaved, addManyTo, openAddMany, formatDuration,
+      f, SORTS, editors, selecting, selected, isSel, toggleSel, toggleSelecting, onMetaSaved, addManyTo, addManyToNew, openAddMany, formatDuration,
+      playSelected, deleteSelected, removeSelectedFromPlaylist, shuffleEverything,
       filteredPlaylists, filteredSongs, addable, goHome, openAll, openPlaylist, play, playAll, playPlaylist, isCurrent, onRowClick,
       createPlaylist, renamePlaylist, deletePlaylist, toggleFavorite, addToPlaylist, addToNewPlaylist, removeFromPlaylist, deleteSong,
       openAddSongs, confirmAdd, onPickMusic, pickCover, onPickCover, openMenu, run, onDownloaded, playById,

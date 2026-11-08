@@ -6,7 +6,7 @@ Notes for working on AkulavBox, a self-hosted personal cloud made by Akulav. Rea
 
 - `npm start`: the server on `PORT` (default 3000), using `./storage` and `.env`.
 - `npm run check`: **run this after backend changes.** It boots a throwaway server (temporary `STORAGE_DIR`, random port, generated keys) and exercises the API end to end. It never touches `storage/`.
-- `npm run check` tests link downloads with `scripts/test/fake-yt-dlp.js`, a stand-in that answers like yt-dlp with no network access. Real downloads use the tools auto-installed into `storage/tools/` (`src/core/tools.js`). For a real test, use a throwaway `STORAGE_DIR`, which installs a fresh copy.
+- `npm run check` tests link downloads with `scripts/test/fake-yt-dlp.js` and `scripts/test/fake-ffmpeg.js`, stand-ins that answer like yt-dlp and ffmpeg/ffprobe with no network access (`AUTO_INSTALL_TOOLS=0`). It also restores a full backup into a second throwaway server with a different `MASTER_KEY`. Real downloads use the tools auto-installed into `storage/tools/` (`src/core/tools.js`). For a real test, use a throwaway `STORAGE_DIR`, which installs a fresh copy.
 - `node scripts/check.js --db <copy-of-real.db>`: also verifies that migrations and read endpoints work against a copy of a real database. Never point it at the live file.
 - For UI testing, start a separate instance: set `STORAGE_DIR` to a temp folder, set another `PORT`, and use test values for `MASTER_KEY` (32 characters) and `JWT_SECRET`. A fresh instance signs in as `admin` / `admin`.
 - `node scripts/icons.js` regenerates the PNG and ICO icons from `frontend/favicon.svg` (needs `sharp`).
@@ -18,6 +18,7 @@ Notes for working on AkulavBox, a self-hosted personal cloud made by Akulav. Rea
 - **Never touch the user's `storage/` folder or `.env` secrets** except when the user asks. Work on copies.
 - **Schema changes go through `src/core/migrations.js` only**: append a new step and make it idempotent (`addColumn`, `IF NOT EXISTS`). Never edit a released step or add `ALTER TABLE` calls in modules.
 - **The on-disk file format is frozen**: AES-256-CTR with `MASTER_KEY` and `files.iv_hex`, `.enc` when private, `.plain` when shared. Old files must keep decrypting.
+- **New per-user data must be covered by delete-user (`admin.js`) and by full backups (`core/backup.js` `listData`)**. Anything in the database is backed up automatically; files outside `storage/users/` are not.
 - **Every query that lists files or folders must filter `trashed_at IS NULL`** (alias it, e.g. `f.trashed_at`). Permanent deletion only goes through `purgeFile()` in `src/core/storage.js`.
 - Use `verifyUser` / `verifyAdmin` from `src/core/auth.js` on every private route, and always scope queries with `owner_id = request.user.id`.
 - Bump `version` in `package.json` and add a `CHANGELOG.md` entry for anything user-facing (semver: breaking → major, feature → minor, fix → patch). Run `npm install --package-lock-only --ignore-scripts` so the lockfile matches.

@@ -59,9 +59,11 @@ All endpoints are JSON unless noted. Authenticate with `Authorization: Bearer <t
 ## Link downloads
 | Method | Path | |
 | --- | --- | --- |
-| GET | `/api/downloads/status` | `{ enabled, available, ytdlp, ffmpeg, av1, installing, step, error }` |
+| GET | `/api/downloads/status` | `{ enabled, available, ytdlp, ffmpeg, av1, convert, installing, step, error }` |
 | GET | `/api/downloads?kind=video\|audio` | My recent jobs: `status` is `queued`, `probing`, `downloading`, `converting`, `processing`, `done`, `error`, `cancelled` or `expanded` (a playlist that became one job per entry) |
-| POST | `/api/downloads` | `{ url, kind }`. Several links can be separated by spaces |
+| POST | `/api/downloads` | `{ url, kind }`. Several links can be separated by spaces. `akulavbox:video/<fileId>` re-queues a conversion |
+| POST | `/api/downloads/from-videos` | `{ file_ids }`: save my videos' sound as songs (same details and artwork). Needs ffmpeg (`status.convert`) |
+| GET / PUT / DELETE | `/api/downloads/cookies` | My sign-in cookies for downloads. GET → `{ saved, sites, updated_at }` (never the values). PUT `{ text }`: a Netscape cookies.txt or a JSON export |
 | DELETE | `/api/downloads/:id` | Cancel, or remove a finished job from the list |
 | POST | `/api/downloads/clear` | Remove finished jobs |
 | POST | `/api/downloads/tools` | Admins: `{ action: 'install' \| 'update' }` reinstalls the tools or updates yt-dlp |
@@ -71,7 +73,7 @@ All endpoints are JSON unless noted. Authenticate with `Authorization: Bearer <t
 `/api/albums/:id` (DELETE), `/:id/title`, `/:id/notes`, `/:id/favorite`, `/:id/cover` (PATCH), `/:id/images` (GET, POST `{ file_id }`), `/:id/images/bulk` and `/:id/images/remove` (POST `{ file_ids }`), `/:id/images/:fileId` (DELETE), `/:id/download`, `/api/albums/migrate` (POST).
 
 ## Music
-`/api/music/songs` (GET), `/api/music/playlists` (GET, POST `{ title }`), `/api/music/playlists/:id` (DELETE), `/:id/title`, `/:id/favorite`, `/:id/cover` (PATCH), `/:id/songs` (GET, POST `{ file_id }`), `/:id/songs/bulk` (POST `{ file_ids }`), `/:id/order` (PUT `{ file_ids }`), `/:id/songs/:file_id` (DELETE), `/api/music/songs/:id/cover` (POST `{ cover_file_id }`).
+`/api/music/songs` (GET), `/api/music/playlists` (GET, POST `{ title }`), `/api/music/playlists/:id` (DELETE), `/:id/title`, `/:id/favorite`, `/:id/cover` (PATCH), `/:id/songs` (GET, POST `{ file_id }`), `/:id/songs/bulk` and `/:id/songs/remove` (POST `{ file_ids }`), `/:id/order` (PUT `{ file_ids }`), `/:id/songs/:file_id` (DELETE), `/api/music/songs/:id/cover` (POST `{ cover_file_id }`).
 
 ## Chat
 `/api/chat/users`, `/api/chat/friends` (includes `unread` and `online`), `/api/chat/friends/add | accept | remove` (POST `{ friend_id }`), `/api/chat/messages/:friendId` (GET), `/api/chat/messages/:id` (DELETE, own messages), `/api/chat/read/:friendId` (POST), `/api/chat/upload` (multipart `receiver_id, file`, ≤ 50 MB), `/api/chat/download/:msgId`, `/api/rtc/config`.
@@ -89,3 +91,11 @@ All endpoints are JSON unless noted. Authenticate with `Authorization: Bearer <t
 | PATCH | `/api/admin/users/:id/password` · `/quota` · `/role` | `{ newPassword }` · `{ quota }` · `{ role }` |
 | POST | `/api/admin/users/:id/signout` | Revokes every session |
 | GET | `/api/admin/system` | Disk `{ total, free, used }`, storage breakdown, totals, overcommit, version, schema, Node, uptime (`?fresh=1` re-measures) |
+| GET | `/api/admin/storage-check` | Files on disk vs. the database: `orphans` (no row), `missing` (row, no data), `usage` (drifted counters), with byte totals |
+| POST | `/api/admin/storage-check/clean` | `{ orphans?, missing?, usage? }` (all on by default) → `{ deleted, freed_bytes, recovered, repaired, removed_rows, usage_fixed }` |
+| GET | `/api/admin/backup` | `{ estimate, import: { running, step, done, total, error, pending }, restored }` |
+| POST | `/api/admin/backup/export` | Form post: `token, passphrase` (8+ characters). Streams an `.akbx` file |
+| PUT | `/api/admin/backup/upload?id=&offset=` | Raw `application/octet-stream` chunk of a backup (≤ 32 MB each) |
+| POST | `/api/admin/backup/import` | `{ id \| server_path, passphrase }`. Checks the passphrase at once, then unpacks and verifies in the background |
+| DELETE | `/api/admin/backup/import` | Drop a staged restore |
+| POST | `/api/admin/restart` | Exits the process so a service manager restarts it (applies a staged restore) |

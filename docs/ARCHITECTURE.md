@@ -72,6 +72,22 @@ The cover and artwork sub-folders (`library.HIDDEN`) are hidden from Files listi
   4. `storeFile()` encrypts the media (and its thumbnail as a cover) into the Videos/Music folders. `media_meta` gets the title, creator, date, length, description and source.
   5. Filing: a video goes into the collection named after its creator, a song into the playlist named after its artist.
 - Links must be public http(s). Literal private IPs and `localhost` are refused, and yt-dlp is spawned with an argument array and `--` before the URL.
+- The duplicate check (`media_meta.source_id`) only looks in the folder being saved to, so a link can be kept both as a video and as a song.
+- **Sign-in cookies** (`src/core/cookies.js`): per user in `storage/private/cookies/<id>.enc` (16-byte IV, then AES-256-CTR with `MASTER_KEY`). A plain copy is written into the job's work folder only while yt-dlp runs and is removed with it. Errors that ask for sign-in get a hint pointing to Profile → Link downloads.
+- **Video → song** jobs have the url `akulavbox:video/<fileId>` and go through the same queue: decrypt to the work folder, ffprobe the audio codec, copy it when browsers play it (AAC → m4a, MP3, Opus, FLAC, Vorbis) or encode to AAC, store it in Music with the video's details, copy the cover (or grab a frame) into Artwork, and file it in the creator's playlist. Without yt-dlp, only conversions run.
+
+## Storage check (`src/core/maintenance.js`)
+
+Compares `storage/users/` with `files`. Files written in the last hour are skipped (an upload may be finishing).
+- **Orphans** (no row): unreadable `.enc` files are deleted; readable `.plain` files of an existing owner are adopted into a "Recovered files" folder with a type sniffed from their first bytes. Folders of deleted accounts go too.
+- **Missing** (row, no data): if the other variant (`.enc`/`.plain`) exists the row is pointed at it, otherwise it is removed through `purgeFile()`.
+- **Usage**: `users.used_bytes` is reset to the sum of the user's file rows (trash included) plus chat files still on disk.
+
+## Full backups (`src/core/backup.js`)
+
+- `.akbx` = `"AKBX" 0x01`, a plain JSON header (scrypt salt and cost, AES IV, a passphrase check value), the AES-256-CTR encrypted body, and an HMAC-SHA256 over header and ciphertext. Keys come from `scrypt(passphrase)`.
+- Body: entries of `type | name | gzip flag | u64 length | bytes`: `manifest.json` (counts, schema, version, the `MASTER_KEY`), `akulavbox.db` (a `VACUUM INTO` snapshot, gzip level 9), then every `users/<id>/<file>` as stored (already encrypted, so not compressed) and saved cookies. Thumbnails, tools and temp files are left out.
+- Import stages into `storage/import-staging/`, refuses backups with a newer schema, re-keys `.enc` files when the backup's key differs (same IV, old keystream off, new keystream on), and verifies the HMAC before writing `ready.json`. Nothing live changes until the next start: `applyPending()` runs in `db.js` before the database opens, moves the current database, `users/` and cookies to `storage/backups/pre-import-<time>/`, moves the staged data in, and clears the thumbnail cache. Migrations then bring an older backup up to date.
 
 ## Realtime (`src/modules/chat.js`)
 

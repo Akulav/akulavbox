@@ -2,6 +2,26 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 2.2.0 (2026-11-08)
+
+### New
+- **Save a video as a song.** From a video’s menu, a selection, or a whole collection. The sound goes to Music with the same title, creator, tags, description and artwork (the video’s cover, or a frame from it), filed into the creator’s playlist. Audio is copied as-is when browsers can play it (no quality loss, smallest file), otherwise it is encoded to AAC.
+- **Age-restricted and sign-in videos.** Save your browser’s sign-in cookies under Profile → Link downloads (a cookies.txt or JSON export). They’re stored encrypted, used only for your own downloads, and fix YouTube’s “Sign in to confirm your age” and sites that check your age. When a download fails for this reason, it says so and links straight there.
+- **Full backup and restore.** Admin → Backup and restore downloads one passphrase-protected file with every account, password, setting, chat, album, playlist and file. Restoring checks the file’s integrity first, then swaps everything in at the next restart and keeps the replaced data in `storage/backups/`. It restores on a server with a different `MASTER_KEY` too: files are re-encrypted on the way in. Uploads go in chunks, so reverse proxies with size limits don’t get in the way; `node scripts/backup.js` does the same from the command line.
+- **Storage check.** Admin → Storage check compares the files on disk with the database. It finds files that belong to nothing (left over from crashes, older versions or deleted accounts), listed files that are missing, and storage counters that drifted, and fixes them in one click. Readable lost files are recovered into a “Recovered files” folder instead of being deleted. Also available as `node scripts/backup.js check [--fix]`.
+- **Music selection.** Select songs in any list, including playlists. Shift-click selects a range. The bar can play the selection, edit details, add it to a playlist (or a new one), remove it from the playlist, or move it to the trash.
+- **More shuffle.** Shuffle all on the Music home, a shuffle button on every playlist tile and in its menu, Shuffle in All videos (everything shown, with the next video starting automatically) and in each collection’s menu. The shuffle choice is remembered by the player.
+- `DOWNLOAD_PROXY` sends link downloads through a proxy, for sites blocked in the server’s country.
+
+### Fixed
+- Long or numerous tags pushed video cards and the details panel out of bounds. Cards show one line of tags that shortens long ones, and the details panel shows the first 12 with “+N more”.
+- Downloading the audio of a link already saved as a video (or the other way round) was skipped as “Already in your library”. The duplicate check now looks only in the section being saved to.
+- Sites that only offer combined video+audio streams (common on adult and news sites) could fall through to a stream above 1080p; they now pick the best one up to 1080p.
+- A file recovered as plain data couldn’t get a share link.
+
+### Development
+- The downloader runs yt-dlp and ffmpeg through one helper, with shared steps for covers, details and filing. `npm run check` (114 checks) now also covers conversions, cookies, the storage check and a full backup restored into a second server with a different key, using a stand-in for ffmpeg (`scripts/test/fake-ffmpeg.js`). The check no longer installs real tools during the test.
+
 ## 2.1.0 (2026-11-08)
 
 ### New
