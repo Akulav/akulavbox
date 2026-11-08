@@ -28,7 +28,8 @@ const id = (url.split('/').pop() || 'x').replace(/[^\w-]/g, '') || 'x';
 if (args.includes('-J')) {
   if (/playlist/.test(url)) {
     console.log(JSON.stringify({ _type: 'playlist', title: 'Test playlist', uploader: 'List Maker',
-      entries: [{ url: 'https://example.com/v/first', title: 'First' }, { url: 'https://example.com/v/second', title: 'Second' }] }));
+      entries: [{ url: 'https://example.com/v/first', title: 'First', id: 'first', ie_key: 'Fake' }, { url: 'https://example.com/v/second', title: 'Second', id: 'second', ie_key: 'Fake' },
+        ...(/p2/.test(url) ? [{ url: 'https://example.com/v/third', title: 'Third', id: 'third', ie_key: 'Fake' }] : [])] }));
   } else {
     console.log(JSON.stringify({ id, title: `Test video ${id}`, track: `Test song ${id}`, uploader: 'Test Creator', channel: 'Test Creator',
       artist: 'Test Artist', album: 'Test Album', duration: 42, upload_date: '20260102', tags: ['demo', 'test'],
@@ -39,6 +40,16 @@ if (args.includes('-J')) {
 
 // download: "-o <dir>/media.%(ext)s" and "-o thumbnail:<dir>/thumb.%(ext)s"
 const outs = args.map((a, i) => (a === '-o' ? args[i + 1] : null)).filter(Boolean);
+// "flaky" drops the connection once, "stall" goes silent once (a marker in the job's folder remembers)
+if (/flaky|stall/.test(url)) {
+  const marker = require('path').join(require('path').dirname(outs[0]), 'tried.marker');
+  if (!fs.existsSync(marker)) {
+    fs.writeFileSync(marker, '1');
+    if (/flaky/.test(url)) { console.error('ERROR: [download] Got error: Connection reset by peer'); process.exit(1); }
+    setInterval(() => {}, 1000); // say nothing until AkulavBox gives up on us
+    return;
+  }
+}
 const media = outs.find(o => !o.startsWith('thumbnail:'));
 const thumb = (outs.find(o => o.startsWith('thumbnail:')) || '').replace(/^thumbnail:/, '');
 const audio = args.includes('-x') || args.some(a => /^ba\[/.test(a));

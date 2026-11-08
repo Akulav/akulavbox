@@ -6,7 +6,7 @@
 
 **Your files, your cloud.** A self-hosted personal cloud for encrypted files, photos, music, videos, books, and chat with voice calls. It's one Node.js server with a no-build browser frontend.
 
-![Version](https://img.shields.io/badge/version-2.5.0-E8A33D)
+![Version](https://img.shields.io/badge/version-2.6.0-E8A33D)
 ![Node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-5fb3a1)
 ![License](https://img.shields.io/badge/license-source--available-8ea1a4)
 
@@ -80,7 +80,9 @@ All settings live in `.env` (see [.env.example](.env.example)).
 | `AUTO_INSTALL_TOOLS` | on | `0` stops AkulavBox installing yt-dlp and ffmpeg into `storage/tools/` |
 | `YTDLP_PATH` / `FFMPEG_PATH` | auto | Use your own copies instead |
 | `VIDEO_AV1` | on | `off` keeps downloaded video in whatever format the site serves |
-| `DOWNLOAD_PARALLEL` | `2` | Downloads running at the same time |
+| `DOWNLOAD_PARALLEL` | `3` | Downloads running at the same time |
+| `ENCODE_BACKLOG` | `4` | Downloaded videos that may wait for the AV1 encoder without holding a download slot |
+| `DOWNLOAD_STALL_SECONDS` | `180` | A download that receives nothing for this long is stopped and retried |
 | `DOWNLOAD_PLAYLIST_MAX` | `200` | Most entries taken from one playlist or channel link |
 | `UPDATES` | on | `off` turns update checks and one-click updates from GitHub off |
 | `UPDATE_REPO` / `UPDATE_BRANCH` | `Akulav/akulavbox` / `main` | Where Admin → Updates looks |

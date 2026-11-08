@@ -3,8 +3,8 @@ import Icon from './Icon.js';
 import { api, session, formatBytes } from '../lib/api.js';
 import { toast } from '../lib/ui.js';
 
-const ACTIVE = ['queued', 'probing', 'downloading', 'converting', 'processing'];
-const STATUS_LABEL = { queued: 'Waiting', probing: 'Reading link…', downloading: 'Downloading', converting: 'Shrinking to AV1', processing: 'Saving…', done: 'Added', error: 'Failed', cancelled: 'Cancelled', expanded: 'Playlist' };
+const ACTIVE = ['queued', 'probing', 'downloading', 'encode_wait', 'converting', 'processing'];
+const STATUS_LABEL = { queued: 'Waiting', probing: 'Reading link…', downloading: 'Downloading', encode_wait: 'Downloaded, waiting to shrink', converting: 'Shrinking to AV1', processing: 'Saving…', done: 'Added', error: 'Failed', cancelled: 'Cancelled', expanded: 'Playlist' };
 let statusCache = null;
 
 /**
@@ -38,6 +38,7 @@ export default {
       </p>
       <p v-else-if="!jobs.length" class="text-[12px] text-faint mt-2">Saved to your {{ kind === 'audio' ? 'Music' : 'Videos' }} with title, cover and creator, and filed into a {{ kind === 'audio' ? 'playlist' : 'collection' }} named after the creator.<template v-if="kind === 'video' && st.av1"> Videos are kept in AV1 to save space.</template> Tip: paste a link anywhere on this page.</p>
 
+      <p v-if="summary" class="mt-3 text-[12.5px] text-muted flex items-center gap-2"><Icon name="loader" :size="13" class="text-accent" />{{ summary }}</p>
       <ul v-if="jobs.length" class="mt-3 divide-y divide-line border-t border-line">
         <li v-for="j in shown" :key="j.id" class="py-2.5 flex items-center gap-3">
           <span class="w-8 h-8 rounded-lg grid place-items-center shrink-0"
@@ -51,7 +52,7 @@ export default {
             </div>
             <p v-if="j.status === 'error'" class="text-[12px] text-danger" :class="needsCookies(j) ? 'line-clamp-2' : 'truncate'" :title="j.error">{{ j.error }}
               <a v-if="needsCookies(j)" href="#/profile/cookies" class="ml-1 font-medium text-accent hover:underline whitespace-nowrap">Add cookies</a></p>
-            <p v-else class="text-[12px] text-faint truncate">{{ j.creator ? 'by ' + j.creator : hostOf(j.url) }}<template v-if="isConversion(j) && j.creator"> · {{ hostOf(j.url) }}</template><template v-if="j.status === 'done' && j.error"> · {{ j.error }}</template></p>
+            <p v-else class="text-[12px] text-faint truncate">{{ j.creator ? 'by ' + j.creator : hostOf(j.url) }}<template v-if="isConversion(j) && j.creator"> · {{ hostOf(j.url) }}</template><template v-if="j.error && (j.status === 'done' || active(j))"> · <span :class="active(j) ? 'text-accent' : ''">{{ j.error }}</span></template></p>
             <div v-if="active(j)" class="meter mt-1.5" style="height:3px"><span :style="{ width: Math.round((j.progress || 0) * 100) + '%' }"></span></div>
           </div>
           <button v-if="j.status === 'done' && j.file_id" class="btn btn-ghost btn-sm" @click="$emit('open', j.file_id)">{{ kind === 'audio' ? 'Play' : 'Open' }}</button>
@@ -76,7 +77,24 @@ export default {
     const doneSeen = new Set();
 
     const active = (j) => ACTIVE.includes(j.status);
-    const shown = computed(() => (expanded.value ? jobs.value : jobs.value.slice(0, 5)));
+    // running and waiting jobs first, so a long queue doesn't hide what's happening now
+    const RANK = { downloading: 0, probing: 0, converting: 1, processing: 1, encode_wait: 2, queued: 3 };
+    const ordered = computed(() => [...jobs.value].sort((a, b) => (RANK[a.status] ?? 4) - (RANK[b.status] ?? 4)));
+    const shown = computed(() => (expanded.value ? ordered.value : ordered.value.slice(0, 5)));
+    // place in line among my waiting jobs (oldest first: that's the order they run in)
+    const queuePos = computed(() => {
+      const q = jobs.value.filter(j => j.status === 'queued').sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+      return new Map(q.map((j, i) => [j.id, i + 1]));
+    });
+    const summary = computed(() => {
+      const n = (s) => jobs.value.filter(j => s.includes(j.status)).length;
+      const parts = [];
+      const working = n(['probing', 'downloading']), shrinking = n(['encode_wait', 'converting']), waiting = n(['queued']);
+      if (working) parts.push(`${working} downloading`);
+      if (shrinking) parts.push(`${shrinking} shrinking to AV1`);
+      if (waiting) parts.push(`${waiting} waiting`);
+      return parts.length && (waiting || working + shrinking > 1) ? parts.join(' · ') + '. They keep going if you close this page.' : '';
+    });
     const isConversion = (j) => j.url.startsWith('akulavbox:');
     const hostOf = (u) => { if (u.startsWith('akulavbox:trim/')) return 'trim of your video'; if (u.startsWith('akulavbox:')) return 'from your video'; try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return u; } };
     const needsCookies = (j) => /Profile → Link downloads/.test(j.error || '');
@@ -87,6 +105,7 @@ export default {
       }
       if (j.status === 'converting') return `${j.url.startsWith('akulavbox:trim/') ? 'Trimming' : isConversion(j) ? 'Saving the sound' : 'Shrinking to AV1'} ${Math.round((j.progress || 0) * 100)}%`;
       if (j.status === 'done' && j.url.startsWith('akulavbox:trim/')) return 'Trimmed';
+      if (j.status === 'queued' && queuePos.value.get(j.id)) return `Waiting · #${queuePos.value.get(j.id)} in line`;
       return STATUS_LABEL[j.status] || j.status;
     };
 
@@ -157,6 +176,6 @@ export default {
     });
     onUnmounted(() => { alive = false; clearTimeout(timer); clearTimeout(statusTimer); window.removeEventListener('paste', onPaste); });
 
-    return { st, url, busy, jobs, shown, expanded, inputEl, session, active, hostOf, label, needsCookies, isConversion, submit, retry, remove, clear };
+    return { st, url, busy, jobs, shown, expanded, summary, inputEl, session, active, hostOf, label, needsCookies, isConversion, submit, retry, remove, clear };
   },
 };

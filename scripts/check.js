@@ -26,6 +26,7 @@ const env = {
   FFMPEG_PATH: path.join(__dirname, 'test', 'fake-ffmpeg.js'),  // and ffprobe
   AUTO_INSTALL_TOOLS: '0',
   UPDATES: 'off',   // never ask GitHub during the test
+  DOWNLOAD_STALL_SECONDS: '5',
 };
 const dbArg = process.argv.indexOf('--db');
 if (dbArg !== -1) fs.copyFileSync(process.argv[dbArg + 1], path.join(tmp, 'akulavbox.db'));
@@ -185,7 +186,7 @@ async function main() {
       const waitJobs = async (kind) => {
         for (let i = 0; i < 80; i++) {
           const jobs = (await api(`/api/downloads?kind=${kind}`)).data;
-          if (jobs.length && jobs.every(j => !['queued', 'probing', 'downloading', 'converting', 'processing'].includes(j.status))) return jobs;
+          if (jobs.length && jobs.every(j => !['queued', 'probing', 'downloading', 'encode_wait', 'converting', 'processing'].includes(j.status))) return jobs;
           await new Promise(r => setTimeout(r, 250));
         }
         return (await api(`/api/downloads?kind=${kind}`)).data;
@@ -208,6 +209,18 @@ async function main() {
       await api('/api/downloads', { method: 'POST', body: { url: 'https://example.com/playlist/p1', kind: 'video' } });
       jobs = await waitJobs('video');
       ok(jobs.some(j => j.status === 'expanded') && jobs.filter(j => j.status === 'done').length >= 4, 'a playlist link downloads every entry');
+      const jobsBefore = jobs.length;
+      await api('/api/downloads', { method: 'POST', body: { url: 'https://example.com/playlist/p2', kind: 'video' } });
+      jobs = await waitJobs('video');
+      const p2 = jobs.find(j => j.url.endsWith('/p2'));
+      ok(p2 && /1 new, 2 already in your library/.test(p2.title) && jobs.length === jobsBefore + 2 && jobs.some(j => j.url.endsWith('/third') && j.status === 'done'),
+        'pasting a playlist again only downloads what’s new', p2?.title);
+      await api('/api/downloads', { method: 'POST', body: { url: 'https://example.com/v/flaky', kind: 'video' } });
+      jobs = await waitJobs('video');
+      ok(jobs.find(j => j.url.endsWith('/flaky'))?.status === 'done', 'a dropped connection is retried', JSON.stringify(jobs.find(j => j.url.endsWith('/flaky'))));
+      await api('/api/downloads', { method: 'POST', body: { url: 'https://example.com/v/stall', kind: 'video' } });
+      jobs = await waitJobs('video');
+      ok(jobs.find(j => j.url.endsWith('/stall'))?.status === 'done', 'a stalled download is stopped and retried', JSON.stringify(jobs.find(j => j.url.endsWith('/stall'))));
       await api('/api/downloads', { method: 'POST', body: { url: 'https://example.com/v/fail', kind: 'video' } });
       jobs = await waitJobs('video');
       ok(jobs.find(j => j.url.endsWith('/fail'))?.error === 'This video is unavailable', 'failures show yt-dlp’s reason');

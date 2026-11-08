@@ -60,7 +60,7 @@ All endpoints are JSON unless noted. Authenticate with `Authorization: Bearer <t
 | Method | Path | |
 | --- | --- | --- |
 | GET | `/api/downloads/status` | `{ enabled, available, ytdlp, ffmpeg, av1, convert, installing, step, error }` |
-| GET | `/api/downloads?kind=video\|audio` | My recent jobs: `status` is `queued`, `probing`, `downloading`, `converting`, `processing`, `done`, `error`, `cancelled` or `expanded` (a playlist that became one job per entry) |
+| GET | `/api/downloads?kind=video\|audio` | All my unfinished jobs plus the 60 latest finished: `status` is `queued`, `probing`, `downloading`, `encode_wait` (downloaded, waiting for the AV1 encoder), `converting`, `processing`, `done`, `error`, `cancelled` or `expanded` (a playlist that became one job per entry) |
 | POST | `/api/downloads` | `{ url, kind }`. Several links can be separated by spaces. `akulavbox:video/<fileId>` re-queues a conversion |
 | POST | `/api/downloads/trim` | `{ file_id, start, end, exact?, copy? }` (seconds): keep start..end of my video or song. `exact` re-encodes for a frame-accurate cut; `copy` saves a new video instead of replacing. Queued as `akulavbox:trim/<id>?…` |
 | POST | `/api/downloads/from-videos` | `{ file_ids }`: save my videos' sound as songs (same details and artwork). Needs ffmpeg (`status.convert`) |

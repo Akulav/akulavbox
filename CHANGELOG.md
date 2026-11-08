@@ -2,6 +2,17 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 2.6.0 (2026-11-08)
+
+### Changed
+- **Re-pasting a playlist only downloads what’s new.** Videos and songs already in your library (or already in the queue) are skipped the moment the playlist is read, instead of each being looked up on the site first. The playlist line says how many were new, for example “60 items, 2 new, 58 already in your library”.
+- **Big playlists move faster.**
+  - **Three downloads at once** instead of two (`DOWNLOAD_PARALLEL`).
+  - **AV1 doesn’t block downloads:** a video waiting for its AV1 shrink no longer holds a download slot, so the next downloads start meanwhile (`ENCODE_BACKLOG`, default 4, caps how many can wait).
+  - **Dead connections fail fast:** they give up after 30 seconds instead of minutes. A download that goes silent for 3 minutes is stopped (`DOWNLOAD_STALL_SECONDS`).
+  - **Automatic retries:** dropped or stalled connections are retried twice before a download fails.
+- **The downloads list shows the whole queue**, running ones first, with each waiting item’s place in line and a summary such as “3 downloading · 1 shrinking to AV1 · 54 waiting”. Long playlists are no longer cut off at 60.
+
 ## 2.5.0 (2026-11-08)
 
 ### New

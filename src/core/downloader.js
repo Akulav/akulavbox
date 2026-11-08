@@ -28,7 +28,11 @@ const { guessMime } = require('./mime');
 // out of a video already in the library and saves it to Music with the same details.
 // ---------------------------------------------------------------------------
 
-const PARALLEL = Math.max(1, Number(process.env.DOWNLOAD_PARALLEL) || 2);
+const PARALLEL = Math.max(1, Number(process.env.DOWNLOAD_PARALLEL) || 3);
+// finished downloads allowed to wait for the AV1 encoder (each one sits on disk meanwhile)
+const ENCODE_BACKLOG = Math.max(1, Number(process.env.ENCODE_BACKLOG) || 4);
+// a tool that prints nothing for this long is stuck (a dead connection) and is stopped
+const STALL_MS = Math.max(5, Number(process.env.DOWNLOAD_STALL_SECONDS) || 180) * 1000;
 // AV1 is roughly half the size of H.264 at the same quality; VIDEO_AV1=off keeps whatever the site serves
 const AV1 = process.env.VIDEO_AV1 !== 'off';
 const PLAYLIST_MAX = Math.max(1, Number(process.env.DOWNLOAD_PLAYLIST_MAX) || 200);
@@ -87,7 +91,8 @@ function checkUrl(raw) {
 }
 
 // --- jobs --------------------------------------------------------------------
-const ACTIVE = ['queued', 'probing', 'downloading', 'converting', 'processing'];
+// 'encode_wait': downloaded, waiting for its turn at the AV1 encoder (no download slot held)
+const ACTIVE = ['queued', 'probing', 'downloading', 'encode_wait', 'converting', 'processing'];
 const COLS = 'id, url, kind, status, progress, title, creator, file_id, error, speed, created_at, updated_at';
 const update = (id, fields) => {
   const keys = Object.keys(fields);
@@ -151,27 +156,36 @@ function addInternal(ownerId, url) {
 }
 const isInternal = (url) => CONVERT_RE.test(url) || TRIM_RE.test(url);
 
+/** Every unfinished job (a long playlist must not be cut off) plus the 60 most recent finished ones */
 function listJobs(ownerId, kind) {
-  return kind
-    ? db.prepare(`SELECT ${COLS} FROM downloads WHERE owner_id = ? AND kind = ? ORDER BY created_at DESC, rowid DESC LIMIT 60`).all(ownerId, kind)
-    : db.prepare(`SELECT ${COLS} FROM downloads WHERE owner_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 60`).all(ownerId);
+  const k = kind ? 'AND kind = ?' : '';
+  const args = kind ? [ownerId, kind] : [ownerId];
+  const inList = ACTIVE.map(s => `'${s}'`).join(', ');
+  const open = db.prepare(`SELECT ${COLS}, rowid AS _r FROM downloads WHERE owner_id = ? ${k} AND status IN (${inList}) LIMIT 2000`).all(...args);
+  const done = db.prepare(`SELECT ${COLS}, rowid AS _r FROM downloads WHERE owner_id = ? ${k} AND status NOT IN (${inList}) ORDER BY created_at DESC, rowid DESC LIMIT 60`).all(...args);
+  return [...open, ...done]
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)) || b._r - a._r)
+    .map(({ _r, ...j }) => j);
 }
 
 const running = new Map(); // job id -> child process
-let active = 0;
+// Jobs holding one of the PARALLEL download slots. A job gives its slot back while it
+// waits for the (one-at-a-time) AV1 encoder, so downloads keep flowing meanwhile.
+const slots = new Set();
+function releaseSlot(id) { if (slots.delete(id)) setImmediate(pump); }
 
 function pump() {
   const s = status();
   if (!s.available && !s.convert) return;
-  while (active < PARALLEL) {
+  while (slots.size < PARALLEL) {
     // without yt-dlp (still installing) only conversions can run
     const next = db.prepare(`SELECT id FROM downloads WHERE status = 'queued' ${s.available ? '' : "AND url LIKE 'akulavbox:%'"} ORDER BY created_at, rowid LIMIT 1`).get();
     if (!next) return;
     update(next.id, { status: 'probing' }); // claim it before the async work starts
-    active++;
+    slots.add(next.id);
     run(next.id)
       .catch((e) => { if (!e.cancelled && getJob(next.id)?.status !== 'cancelled') update(next.id, { status: 'error', speed: null, error: String(e.message || e).slice(0, 500) }); })
-      .finally(() => { active--; running.delete(next.id); setImmediate(pump); });
+      .finally(() => { running.delete(next.id); releaseSlot(next.id); setImmediate(pump); });
   }
 }
 
@@ -194,23 +208,34 @@ function clearFinished(ownerId) {
 
 // --- running tools -------------------------------------------------------------
 /** Spawn a tool for a job; resolves with stdout (or streams lines to onLine), rejects with the last error line */
-function spawnFor(jobId, bin, args, { onLine, name } = {}) {
+function spawnFor(jobId, bin, args, { onLine, name, stallMs = 0 } = {}) {
   const [cmd, pre] = command(bin);
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, [...pre, ...args], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
     running.set(jobId, child);
     let out = '', err = '', buf = '';
+    // watchdog: no output at all for stallMs means a dead connection, not slow progress
+    let stalled = false, timer = null;
+    const alive = () => {
+      if (!stallMs) return;
+      clearTimeout(timer);
+      timer = setTimeout(() => { stalled = true; child.kill(); }, stallMs);
+    };
+    alive();
     child.stdout.on('data', (d) => {
+      alive();
       const s = d.toString();
       if (!onLine) { out += s; return; }
       buf += s;
       let i;
       while ((i = buf.indexOf('\n')) !== -1) { onLine(buf.slice(0, i).trim()); buf = buf.slice(i + 1); }
     });
-    child.stderr.on('data', (d) => { err = (err + d.toString()).slice(-4000); });
-    child.on('error', (e) => reject(new Error(`Couldn’t run ${name}: ${e.message}`)));
+    child.stderr.on('data', (d) => { alive(); err = (err + d.toString()).slice(-4000); });
+    child.on('error', (e) => { clearTimeout(timer); reject(new Error(`Couldn’t run ${name}: ${e.message}`)); });
     child.on('close', (code) => {
+      clearTimeout(timer);
       if (getJob(jobId)?.status === 'cancelled') return reject(cancelled());
+      if (stalled) return reject(Object.assign(new Error(`The connection stalled (nothing arrived for ${Math.round(stallMs / 60000)} minutes)`), { network: true }));
       if (code === 0) return resolve(out);
       const last = err.split('\n').map(l => l.trim()).filter(Boolean).reverse().find(l => /ERROR/.test(l)) || err.trim().split('\n').pop() || `${name} exited with ${code}`;
       reject(new Error(last.replace(/^ERROR:\s*/, '').replace(/^\[[^\]]+\]\s*/, '').slice(0, 400)));
@@ -298,27 +323,43 @@ async function download(job, work) {
   const common = ['--no-warnings', ...(cookieFile ? ['--cookies', cookieFile] : []), ...(PROXY ? ['--proxy', PROXY] : []),
     // YouTube needs a JavaScript runtime to unlock all formats; Node (running this server) is one
     ...(t.jsRuntime ? ['--js-runtimes', `node:${process.execPath}`] : [])];
-  const yt = (args, onLine) => spawnFor(id, t.ytdlp, [...common, ...args], { onLine, name: 'yt-dlp' }).catch((e) => { throw explain(e, !!cookieFile); });
+  // --socket-timeout: a dead connection fails in 30 s instead of yt-dlp's default retry marathon
+  const yt = (args, onLine, stallMs = STALL_MS) => spawnFor(id, t.ytdlp, [...common, '--socket-timeout', '30', ...args], { onLine, name: 'yt-dlp', stallMs })
+    .catch((e) => { throw explain(e, !!cookieFile); });
+  const key = kind === 'video' ? 'videos' : 'music';
+  const folderId = lib.ensureSystemFolder(ownerId, key);
 
-  // 1. read the link's details (playlists only list their entries)
-  const info = JSON.parse(await yt(['-J', '--flat-playlist', '--', job.url]));
+  // 1. read the link's details (playlists only list their entries; a big channel can take a while)
+  const info = JSON.parse(await yt(['-J', '--flat-playlist', '--', job.url], null, Math.max(STALL_MS, 5 * 60 * 1000)));
   if (info._type === 'playlist' || Array.isArray(info.entries)) {
     const entries = (info.entries || []).filter(Boolean).slice(0, PLAYLIST_MAX);
+    // Entries already in the library (or already waiting in my queue) are skipped right here,
+    // so re-pasting a playlist only downloads what's new, without looking each one up again.
+    const queued = new Set(db.prepare(`SELECT url FROM downloads WHERE owner_id = ? AND status IN (${ACTIVE.map(s => `'${s}'`).join(', ')})`).all(ownerId).map(r => r.url));
+    let fresh = 0, have = 0, waiting = 0;
     db.tx(() => {
       for (const e of entries) {
         const url = e.webpage_url || (/^https?:/.test(e.url || '') ? e.url : null) || (e.ie_key === 'Youtube' && e.id ? `https://www.youtube.com/watch?v=${e.id}` : null);
-        if (url) addJob(ownerId, url, kind, e.title || null);
+        if (!url) continue;
+        const ie = e.ie_key || info.extractor_key || info.extractor;
+        if (e.id && ie && alreadyHave(ownerId, folderId, `${ie}:${e.id}`)) { have++; continue; }
+        if (queued.has(url)) { waiting++; continue; }
+        addJob(ownerId, url, kind, e.title || null);
+        queued.add(url);
+        fresh++;
       }
     });
-    update(id, { status: 'expanded', progress: 1, title: `${info.title || 'Playlist'} (${entries.length} item${entries.length === 1 ? '' : 's'})`, creator: creatorOf(info, kind) });
+    const parts = [`${entries.length} item${entries.length === 1 ? '' : 's'}`];
+    if (have || waiting) parts.push(`${fresh} new`);
+    if (have) parts.push(`${have} already in your library`);
+    if (waiting) parts.push(`${waiting} already queued`);
+    update(id, { status: 'expanded', progress: 1, title: `${info.title || 'Playlist'} (${parts.join(', ')})`.slice(0, 300), creator: creatorOf(info, kind) });
     return;
   }
 
   const title = cleanTitle(kind === 'audio' ? (info.track || info.title) : info.title);
   const creator = creatorOf(info, kind);
   const sourceId = `${info.extractor_key || info.extractor || 'web'}:${info.id || job.url}`;
-  const key = kind === 'video' ? 'videos' : 'music';
-  const folderId = lib.ensureSystemFolder(ownerId, key);
   update(id, { title, creator, status: 'downloading' });
 
   // already have it? link the existing copy instead of downloading again
@@ -355,13 +396,25 @@ async function download(job, work) {
     const done = Number(m[1]) || 0, total = Number(m[2]) || Number(m[3]) || 0;
     update(id, { progress: total ? Math.min(0.99, done / total) : 0, speed: Number(m[4]) || null });
   };
-  for (let i = 0; ; i++) {
+  // dropped or stalled connections are retried twice (with a pause) before the job fails
+  const NETWORK = /timed out|stalled|Connection (reset|refused|aborted)|Temporary failure|HTTP Error 5\d\d|IncompleteRead|Read timed out|EOF occurred/i;
+  for (let i = 0, netTries = 0; ;) {
     try { await yt([...args, ...attempts[i], '--', job.url], onProgress); break; }
     catch (e) {
-      if (i === attempts.length - 1 || !/Requested format is not available/i.test(e.message)) throw e;
+      if (e.cancelled) throw e;
       for (const n of fs.readdirSync(work)) if (n.startsWith('media.')) fs.rmSync(path.join(work, n), { force: true });
+      if (/Requested format is not available/i.test(e.message) && i < attempts.length - 1) { i++; continue; }
+      if ((e.network || NETWORK.test(e.message)) && netTries < 2) {
+        netTries++;
+        update(id, { status: 'downloading', progress: 0, speed: null, error: `Connection problem, retrying (${netTries} of 2)…` });
+        await new Promise(r => setTimeout(r, 5000 * netTries));
+        throwIfCancelled(id);
+        continue;
+      }
+      throw e;
     }
   }
+  update(id, { error: null });
 
   // 3. store it
   update(id, { status: 'processing', progress: 0.99, speed: null });
@@ -554,6 +607,7 @@ async function trimMedia(job, work) {
 
 // --- AV1 conversion ---------------------------------------------------------------
 let encodeChain = Promise.resolve(); // one encode at a time: AV1 encoding uses every CPU core
+let encodeWaiting = 0;               // jobs that gave their download slot back while waiting for it
 
 /**
  * Re-encode a video to AV1 (audio is copied). Returns the new file's path when it
@@ -567,7 +621,13 @@ function toAv1(jobId, src, duration) {
   const encoder = t.av1 === 'libsvtav1'
     ? ['-c:v', 'libsvtav1', '-preset', '8', '-crf', '35', '-g', '240']
     : ['-c:v', 'libaom-av1', '-crf', '34', '-b:v', '0', '-cpu-used', '8', '-row-mt', '1'];
+  // Waiting for the encoder doesn't need a download slot: give it back so the next
+  // download can start. Only a few finished downloads may wait (each sits on disk).
+  const released = encodeWaiting < ENCODE_BACKLOG;
+  update(jobId, { status: 'encode_wait', progress: 0, speed: null });
+  if (released) { encodeWaiting++; releaseSlot(jobId); }
   const job = encodeChain.then(async () => {
+    if (released) encodeWaiting--;
     if (getJob(jobId)?.status === 'cancelled') return null;
     update(jobId, { status: 'converting', progress: 0, speed: null });
     let last = 0;
