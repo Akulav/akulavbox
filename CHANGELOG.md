@@ -2,6 +2,11 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 2.7.2 (2026-11-08)
+
+### Changed
+- **Playlists are yours alone too.** Downloaded songs, and videos saved as songs, are no longer put into a playlist named after their artist: Music → Artists already groups them. Playlists made this way earlier stay until you delete them. Songs still get their artwork.
+
 ## 2.7.1 (2026-11-08)
 
 ### Changed

@@ -446,7 +446,7 @@ export default {
       const r = await attempt(() => api('/api/downloads/from-videos', { method: 'POST', body: { file_ids: list } }));
       if (!r) return;
       selected.value = []; selecting.value = false;
-      toast.success(`Saving ${r.ids.length === 1 ? 'the sound as a song' : r.ids.length + ' songs'}. ${r.ids.length === 1 ? 'It' : 'They'}’ll appear in Music, filed under the creator.`);
+      toast.success(`Saving ${r.ids.length === 1 ? 'the sound as a song' : r.ids.length + ' songs'}. ${r.ids.length === 1 ? 'It' : 'They'}’ll appear in Music, under the creator in Artists.`);
     }
     async function collectionToSongs(c) {
       const l = await attempt(() => api(`/api/media-collections/${c.id}/items`));

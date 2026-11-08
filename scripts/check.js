@@ -229,8 +229,7 @@ async function main() {
       ok(jobs[0].status === 'done', 'audio downloaded');
       const song = (await api('/api/music/songs')).data.songs.find(s => s.id === jobs[0].file_id);
       ok(song && song.cover_file_id && song.series === 'Test Album' && song.participants[0] === 'Test Artist', 'song gets artist, album and artwork');
-      const pls = (await api('/api/music/playlists')).data;
-      ok(pls.some(p => p.title === 'Test Artist' && p.song_count === 1), 'filed into a playlist named after the artist');
+      ok(!(await api('/api/music/playlists')).data.some(p => p.title === 'Test Artist'), 'downloads don’t create playlists (Artists groups them)');
       await api('/api/downloads', { method: 'POST', body: { url: 'https://example.com/v/clip1', kind: 'audio' } });
       jobs = await waitJobs('audio');
       ok(jobs[0].status === 'done' && !jobs[0].error && jobs[0].file_id !== v.id, 'the audio of a link already saved as video still downloads', JSON.stringify(jobs[0]));
@@ -244,11 +243,12 @@ async function main() {
       const converted = (await api('/api/music/songs')).data.songs.find(s => s.id === convJob?.file_id);
       ok(converted && converted.title === 'Test video second' && converted.participants[0] === 'Test Creator' && converted.tags.includes('demo') && converted.cover_file_id && /\.m4a$/.test(converted.filename),
         'the song keeps the title, creator, tags and artwork', JSON.stringify(converted));
-      const creatorList = (await api('/api/music/playlists')).data.find(p => p.title === 'Test Creator' && p.song_count >= 1);
-      ok(creatorList, 'and is filed under the creator');
-      const rm = await api(`/api/music/playlists/${creatorList.id}/songs/remove`, { method: 'POST', body: { file_ids: [converted.id] } });
-      ok(rm.data.removed === 1 && (await api(`/api/music/playlists/${creatorList.id}/songs`)).data.length === creatorList.song_count - 1, 'remove several songs from a playlist at once');
-      await api(`/api/music/playlists/${creatorList.id}/songs/bulk`, { method: 'POST', body: { file_ids: [converted.id] } });
+      ok(!(await api('/api/music/playlists')).data.some(p => p.title === 'Test Creator'), 'and no playlist is made for the creator');
+      const myList = (await api('/api/music/playlists', { method: 'POST', body: { title: 'Road trip' } })).data;
+      await api(`/api/music/playlists/${myList.id}/songs/bulk`, { method: 'POST', body: { file_ids: [converted.id, song.id] } });
+      const rm = await api(`/api/music/playlists/${myList.id}/songs/remove`, { method: 'POST', body: { file_ids: [converted.id] } });
+      ok(rm.data.removed === 1 && (await api(`/api/music/playlists/${myList.id}/songs`)).data.length === 1, 'remove several songs from a playlist at once');
+      await api(`/api/music/playlists/${myList.id}/songs/bulk`, { method: 'POST', body: { file_ids: [converted.id] } });
       await api('/api/downloads/from-videos', { method: 'POST', body: { file_ids: [second.id] } });
       jobs = await waitJobs('audio');
       ok(jobs[0].error === 'Already in your music', 'converting the same video twice is skipped');
@@ -283,7 +283,7 @@ async function main() {
       const trimmedSong = (await api('/api/music/songs')).data.songs.find(s => s.id === jobs.find(j => j.id === ts.data?.id)?.file_id);
       ok(trimmedSong && trimmedSong.id !== songToTrim.id && /\.m4a$/.test(trimmedSong.filename) && trimmedSong.duration === 8 && trimmedSong.cover_file_id === songToTrim.cover_file_id && trimmedSong.participants[0] === 'Test Creator',
         'trim a song into a copy (same artist and artwork)', JSON.stringify(trimmedSong));
-      const inList = (await api(`/api/music/playlists/${creatorList.id}/songs`)).data;
+      const inList = (await api(`/api/music/playlists/${myList.id}/songs`)).data;
       ok(inList.some(s => s.id === trimmedSong?.id), 'the trimmed song joins the original’s playlists');
 
       const sized = await api(`/api/library/meta/${second.id}`, { method: 'PATCH', body: { width: 1920, height: 1080 } });
@@ -448,7 +448,7 @@ async function main() {
         ok(st3.restored && st3.restored.files > 0 && !st3.import.pending, 'restored on start');
         const back = await api(`/api/files/${kept.data.fileId}/view`, { raw: true });
         ok(back.status === 200 && Buffer.from(await back.arrayBuffer()).equals(marker), 'files open on a server with a different key');
-        ok((await api('/api/music/playlists')).data.some(p => p.title === 'Test Artist'), 'playlists and library details came along');
+        ok((await api('/api/music/playlists')).data.some(p => p.title === 'Road trip'), 'playlists and library details came along');
         ok(fs.readdirSync(path.join(tmp2, 'backups')).some(n => n.startsWith('pre-import-')), 'the replaced data is kept in backups/');
       } finally {
         s2.kill();

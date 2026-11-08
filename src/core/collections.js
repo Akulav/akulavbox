@@ -3,8 +3,8 @@ const db = require('./db');
 
 // ---------------------------------------------------------------------------
 // Collections group library items (videos, and later books) the way playlists
-// group songs. Collections are made by the user; downloaded songs are filed
-// into a playlist with the artist's name.
+// group songs. Both are made by the user only: downloads are grouped by
+// creator / artist in the Creators and Artists views instead.
 // ---------------------------------------------------------------------------
 
 const KINDS = ['videos', 'books'];
@@ -16,7 +16,6 @@ function createCollection(ownerId, kind, title) {
     .run(id, ownerId, kind, String(title).slice(0, TITLE_MAX));
   return id;
 }
-
 
 /** Append files (owned, not trashed) to a collection; returns how many were new */
 function addToCollection(collectionId, ownerId, fileIds) {
@@ -32,18 +31,9 @@ function addToCollection(collectionId, ownerId, fileIds) {
   return n;
 }
 
-/** Playlist with this title (any case), created if missing */
-function playlistByTitle(ownerId, title) {
-  const hit = db.prepare('SELECT id FROM playlists WHERE owner_id = ? AND title = ? COLLATE NOCASE LIMIT 1').get(ownerId, title);
-  if (hit) return hit.id;
-  const id = crypto.randomUUID();
-  db.prepare('INSERT INTO playlists (id, owner_id, title) VALUES (?, ?, ?)').run(id, ownerId, String(title).slice(0, TITLE_MAX));
-  return id;
-}
-
 function addToPlaylist(playlistId, fileId) {
   const pos = db.prepare('SELECT COALESCE(MAX(position), -1) AS p FROM playlist_songs WHERE playlist_id = ?').get(playlistId).p;
   db.prepare('INSERT OR IGNORE INTO playlist_songs (playlist_id, file_id, position) VALUES (?, ?, ?)').run(playlistId, fileId, pos + 1);
 }
 
-module.exports = { KINDS, TITLE_MAX, createCollection, addToCollection, playlistByTitle, addToPlaylist };
+module.exports = { KINDS, TITLE_MAX, createCollection, addToCollection, addToPlaylist };

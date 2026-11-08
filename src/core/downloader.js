@@ -21,8 +21,8 @@ const { guessMime } = require('./mime');
 //   queued → probing → downloading → converting (AV1) → processing → done | error | cancelled
 // A playlist or channel link turns into one job per entry. Finished media is
 // encrypted into the Videos or Music folder, gets its title, creator, date,
-// length and cover. A song is filed into a playlist named after its artist; a
-// video isn't put in any collection (Videos → Creators already groups by channel).
+// length and cover. Nothing is filed into a collection or playlist: Videos →
+// Creators and Music → Artists already group by channel / artist.
 //
 // A conversion job has the url `akulavbox:video/<fileId>`: it takes the audio
 // out of a video already in the library and saves it to Music with the same details.
@@ -322,12 +322,8 @@ const insertMeta = (fields) => {
   db.prepare(`INSERT INTO media_meta (${keys.join(', ')}, updated_at) VALUES (${keys.map(() => '?').join(', ')}, datetime('now'))`).run(...keys.map(k => fields[k]));
 };
 
-/** File a song under its artist: artwork link + the artist's playlist */
-const setSongCover = (fileId, coverId) => db.prepare('INSERT OR REPLACE INTO song_covers (file_id, cover_file_id) VALUES (?, ?)').run(fileId, coverId);
-function fileSong(ownerId, fileId, coverId, artist) {
-  if (coverId) setSongCover(fileId, coverId);
-  if (artist) col.addToPlaylist(col.playlistByTitle(ownerId, artist), fileId);
-}
+/** Link a song to its artwork. Songs aren't put in a playlist: Music → Artists groups them, playlists are the user's own. */
+const setSongCover = (fileId, coverId) => { if (coverId) db.prepare('INSERT OR REPLACE INTO song_covers (file_id, cover_file_id) VALUES (?, ?)').run(fileId, coverId); };
 
 async function run(id) {
   const job = getJob(id);
@@ -478,8 +474,8 @@ async function download(job, work) {
     thumb_file_id: kind === 'video' ? coverId : null, source_url: info.webpage_url || job.url, source_id: sourceId,
     ...(kind === 'video' ? videoSize(media.p) : {}),
   });
-  // videos are grouped by creator in the Creators view; Collections are left to the user
-  if (kind === 'audio') fileSong(ownerId, file.id, coverId, creator);
+  // grouped by creator in Videos → Creators / Music → Artists; collections and playlists are left to the user
+  if (kind === 'audio') setSongCover(file.id, coverId);
   update(id, { status: 'done', progress: 1, file_id: file.id, error: null });
 }
 
@@ -547,7 +543,7 @@ async function convertVideo(job, work) {
     details: meta.details || null, date: meta.date || null, series: meta.series || null, rating: meta.rating || null,
     duration: duration || null, source_url: meta.source_url || null, source_id: sourceId,
   });
-  fileSong(ownerId, song.id, coverId, artist);
+  setSongCover(song.id, coverId);
   update(id, { status: 'done', progress: 1, file_id: song.id, error: null });
 }
 

@@ -71,7 +71,7 @@ The cover and artwork sub-folders (`library.HIDDEN`) are hidden from Files listi
   2. Download to `storage/temp/dl-<job>/`. With ffmpeg, an AV1 stream ≤ 1080p is preferred.
   3. If the video isn't AV1 and ffmpeg has an AV1 encoder (`libsvtav1`), it is re-encoded one at a time (`converting`). The result is kept only if smaller.
   4. `storeFile()` encrypts the media (and its thumbnail as a cover) into the Videos/Music folders. `media_meta` gets the title, creator, date, length, description and source.
-  5. Filing: a song goes into the playlist named after its artist. Videos aren't put in a collection (collections are the user's own); the Creators view groups them by `participants`.
+  5. Filing: none. Collections and playlists are the user's own; Videos → Creators and Music → Artists group downloads by `participants`.
 - Links must be public http(s). Literal private IPs and `localhost` are refused, and yt-dlp is spawned with an argument array and `--` before the URL.
 - The duplicate check (`media_meta.source_id`) only looks in the folder being saved to, so a link can be kept both as a video and as a song.
 - **Sign-in cookies** (`src/core/cookies.js`): per user in `storage/private/cookies/<id>.enc` (16-byte IV, then AES-256-CTR with `MASTER_KEY`). A plain copy is written into the job's work folder only while yt-dlp runs and is removed with it. Errors that ask for sign-in get a hint pointing to Profile → Link downloads.
