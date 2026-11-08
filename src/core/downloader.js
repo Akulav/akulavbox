@@ -270,7 +270,7 @@ function tagsOf(info) {
   const list = (v) => (Array.isArray(v) ? v : typeof v === 'string' ? v.split(',') : []);
   const out = [], seen = new Set();
   for (const raw of [...list(info.tags), ...hashtags, ...list(info.categories), ...list(info.genres)]) {
-    const t = String(raw ?? '').replace(/^#/, '').replace(/\s+/g, ' ').trim().slice(0, 80);
+    const t = String(raw ?? '').replace(/^#+/, '').replace(/\s+/g, ' ').trim().slice(0, 80);
     const k = t.toLowerCase();
     if (!t || seen.has(k)) continue;
     seen.add(k); out.push(t);

@@ -139,12 +139,6 @@ export default {
 
       <!-- ===== Items (everything, or one collection) ===== -->
       <template v-else>
-        <!-- quick filter chips for the most used tags -->
-        <div v-if="!openCol && items.length && f.tags.value.length" class="flex gap-1.5 overflow-x-auto no-scrollbar -mt-2 mb-5">
-          <button v-for="t in f.tags.value.slice(0, 14)" :key="t.value" class="chip chip-tag !h-7 !px-3 shrink-0 max-w-[180px] hover:text-fg" :class="f.tag.value === t.value ? 'chip-accent' : ''" :title="'#' + t.value"
-                  @click="f.tag.value = f.tag.value === t.value ? '' : t.value">#{{ t.value }}</button>
-        </div>
-
         <div v-if="openCol ? !colLoaded : !loaded" class="grid gap-x-4 gap-y-6" :class="C.grid">
           <div v-for="i in 10" :key="i"><div class="rounded-xl skeleton" :class="C.aspect"></div><div class="h-4 w-3/4 rounded skeleton mt-3"></div></div>
         </div>

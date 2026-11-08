@@ -2,6 +2,14 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 2.7.4 (2026-11-08)
+
+### Changed
+- **Videos no longer shows the row of tag chips** above the list. Filtering by tag is still in the “All tags” menu and on each video’s tags.
+
+### Fixed
+- A downloaded tag that already started with “#” showed as “##tag”. New downloads drop the extra “#”.
+
 ## 2.7.3 (2026-11-08)
 
 ### Changed
