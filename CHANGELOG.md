@@ -2,6 +2,16 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 2.4.0 (2026-11-08)
+
+### New
+- **Trim videos.** In a video’s details panel, Trim lets you set a start and an end (type a time like 1:30, or use the current playback time), preview the cut, and either replace the video or save a trimmed copy.
+  - **Fast cut:** instant and lossless, but it may start up to a few seconds early, at the nearest keyframe.
+  - **Exact cut:** frame-accurate, re-encoded to AV1 (H.264 when AV1 isn’t available).
+  - **Replace:** the video keeps its details, cover, collections and share link; the length and storage used update.
+  - **Save as new:** the copy gets the same details and joins the same collections.
+  - Trims run on the server like downloads, so you can close the page while they finish.
+
 ## 2.3.0 (2026-11-08)
 
 ### New

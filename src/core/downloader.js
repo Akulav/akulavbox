@@ -35,6 +35,8 @@ const PLAYLIST_MAX = Math.max(1, Number(process.env.DOWNLOAD_PLAYLIST_MAX) || 20
 const ENABLED = process.env.DOWNLOADS !== 'off';
 const PROXY = (process.env.DOWNLOAD_PROXY || '').trim();
 const CONVERT_RE = /^akulavbox:video\/([\w-]{1,64})$/;
+// akulavbox:trim/<fileId>?s=<start>&e=<end>&exact=0|1&copy=0|1
+const TRIM_RE = /^akulavbox:trim\/([\w-]{1,64})\?(s=[\d.]+&e=[\d.]+&exact=[01]&copy=[01])$/;
 
 // --- tools -----------------------------------------------------------------
 // A YTDLP_PATH ending in .js runs with Node (used by the self-test's stand-in).
@@ -114,6 +116,36 @@ function addConversions(ownerId, fileIds) {
   });
   return ids;
 }
+
+/**
+ * Queue a trim of one of my videos: keep start..end (seconds). `exact` re-encodes so
+ * the cut lands on the exact frame; otherwise it cuts at the nearest keyframe before
+ * `start`, which is instant and lossless. `copy` keeps the original and saves a new video.
+ * Returns the job id, or an error sentence.
+ */
+function addTrim(ownerId, fileId, { start, end, exact, copy }) {
+  const s = Math.max(0, Number(start) || 0), e = Number(end);
+  if (!(e > s + 0.2)) return { error: 'Choose an end after the start (at least a fraction of a second).' };
+  const v = db.prepare(`SELECT f.id, f.filename, m.title, m.duration FROM files f LEFT JOIN media_meta m ON m.file_id = f.id
+    WHERE f.id = ? AND f.owner_id = ? AND f.folder_id = ? AND f.trashed_at IS NULL`).get(String(fileId), ownerId, lib.ensureSystemFolder(ownerId, 'videos'));
+  if (!v) return { error: 'That video is no longer in your library.' };
+  if (v.duration && s >= v.duration) return { error: 'The start is after the end of the video.' };
+  const url = `akulavbox:trim/${v.id}?s=${s.toFixed(3)}&e=${e.toFixed(3)}&exact=${exact ? 1 : 0}&copy=${copy ? 1 : 0}`;
+  return { id: addJob(ownerId, url, 'video', v.title || v.filename.replace(/\.[^.]+$/, '')) };
+}
+
+/** Re-queue an internal job (a retry from the downloads list) after checking ownership */
+function addInternal(ownerId, url) {
+  let m;
+  if ((m = CONVERT_RE.exec(url))) return addConversions(ownerId, [m[1]])[0] || null;
+  if ((m = TRIM_RE.exec(url))) {
+    const q = new URLSearchParams(m[2]);
+    const r = addTrim(ownerId, m[1], { start: q.get('s'), end: q.get('e'), exact: q.get('exact') === '1', copy: q.get('copy') === '1' });
+    return r.id || null;
+  }
+  return null;
+}
+const isInternal = (url) => CONVERT_RE.test(url) || TRIM_RE.test(url);
 
 function listJobs(ownerId, kind) {
   return kind
@@ -238,6 +270,7 @@ async function run(id) {
   fs.mkdirSync(work, { recursive: true });
   try {
     if (CONVERT_RE.test(job.url)) await convertVideo(job, work);
+    else if (TRIM_RE.test(job.url)) await trimVideo(job, work);
     else await download(job, work);
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
@@ -376,17 +409,8 @@ async function convertVideo(job, work) {
   const audio = AUDIO_COPY[codec] ? ['-c:a', 'copy'] : ['-c:a', 'aac', '-b:a', '160k'];
   update(id, { status: 'converting', progress: 0.1 });
   const duration = Number(meta.duration) || 0;
-  let last = 0;
-  await spawnFor(id, t.ffmpeg, ['-hide_banner', '-nostats', '-y', '-i', src, '-map', '0:a:0', '-vn', ...audio,
-    ...(ext === 'm4a' ? ['-movflags', '+faststart'] : []), '-map_metadata', '-1', '-progress', 'pipe:1', out], {
-    name: 'ffmpeg',
-    onLine: (line) => {
-      const m = /^out_time_us=(\d+)/.exec(line);
-      if (!m || !duration || Date.now() - last < 800) return;
-      last = Date.now();
-      update(id, { progress: Math.min(0.95, 0.1 + 0.85 * (Number(m[1]) / 1e6 / duration)) });
-    },
-  });
+  await ffmpegWithProgress(id, ['-i', src, '-map', '0:a:0', '-vn', ...audio,
+    ...(ext === 'm4a' ? ['-movflags', '+faststart'] : []), '-map_metadata', '-1', out], duration);
   throwIfCancelled(id);
   if (!fs.existsSync(out) || !fs.statSync(out).size) throw new Error('ffmpeg didn’t produce any audio.');
 
@@ -413,6 +437,85 @@ async function convertVideo(job, work) {
   });
   fileSong(ownerId, song.id, coverId, artist);
   update(id, { status: 'done', progress: 1, file_id: song.id, error: null });
+}
+
+// --- trimming ------------------------------------------------------------------------
+/** Run ffmpeg with -progress, reporting progress from `from` to `to` over `seconds` of output */
+function ffmpegWithProgress(jobId, args, seconds, from = 0.1, to = 0.95) {
+  const t = detect();
+  let last = 0;
+  return spawnFor(jobId, t.ffmpeg, ['-hide_banner', '-nostats', '-y', ...args.slice(0, -1), '-progress', 'pipe:1', args[args.length - 1]], {
+    name: 'ffmpeg',
+    onLine: (line) => {
+      const m = /^out_time_us=(\d+)/.exec(line);
+      if (!m || !seconds || Date.now() - last < 800) return;
+      last = Date.now();
+      update(jobId, { progress: Math.min(to, from + (to - from) * (Number(m[1]) / 1e6 / seconds)) });
+    },
+  });
+}
+
+async function trimVideo(job, work) {
+  const { id, owner_id: ownerId } = job;
+  const t = detect();
+  if (!t.ffVersion) throw new Error('Trimming needs ffmpeg, which isn’t installed on the server yet.');
+  const [, fileId, query] = TRIM_RE.exec(job.url);
+  const q = new URLSearchParams(query);
+  const start = Number(q.get('s')), end = Number(q.get('e'));
+  const exact = q.get('exact') === '1', keepOriginal = q.get('copy') === '1';
+  const video = db.prepare('SELECT * FROM files WHERE id = ? AND owner_id = ? AND trashed_at IS NULL').get(fileId, ownerId);
+  if (!video) throw new Error('The video is no longer in your library.');
+  const meta = lib.withMeta(db.prepare('SELECT * FROM media_meta WHERE file_id = ?').get(fileId));
+  update(id, { status: 'processing', progress: 0.02, creator: meta?.participants?.[0] || null });
+
+  if (!store.hasRoomFor(video.size_bytes * 2)) throw new Error('The server’s disk is too full to trim this video');
+  const srcExt = path.extname(video.filename).toLowerCase() || '.mp4';
+  const src = path.join(work, `video${srcExt}`);
+  const input = store.readAll(video);
+  if (!input) throw new Error('The video file is missing on the server.');
+  await pipeline(input, fs.createWriteStream(src));
+  throwIfCancelled(id);
+
+  const length = end - start;
+  // a fast cut keeps the container; an exact cut is re-encoded to MP4 (AV1 when available, so it stays small)
+  const ext = exact ? '.mp4' : srcExt;
+  const out = path.join(work, `trimmed${ext}`);
+  const video_enc = t.av1 === 'libsvtav1' ? ['-c:v', 'libsvtav1', '-preset', '8', '-crf', '35']
+    : t.av1 === 'libaom-av1' ? ['-c:v', 'libaom-av1', '-crf', '34', '-b:v', '0', '-cpu-used', '8', '-row-mt', '1']
+    : ['-c:v', 'libx264', '-preset', 'medium', '-crf', '20'];
+  const args = exact
+    ? ['-ss', String(start), '-i', src, '-t', String(length), '-map', '0:v:0', '-map', '0:a?', ...video_enc, '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', out]
+    : ['-ss', String(start), '-i', src, '-t', String(length), '-map', '0', '-c', 'copy', '-avoid_negative_ts', 'make_zero',
+      ...(['.mp4', '.m4v', '.mov'].includes(ext) ? ['-movflags', '+faststart'] : []), out];
+  update(id, { status: 'converting', progress: 0.1 });
+  await ffmpegWithProgress(id, args, length);
+  throwIfCancelled(id);
+  if (!fs.existsSync(out) || !fs.statSync(out).size) throw new Error('ffmpeg didn’t produce a video. Try an exact cut.');
+  const realLength = Number(execText(t.ffprobe, ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', out], 30000)) || length;
+
+  update(id, { status: 'processing', progress: 0.97 });
+  const base = video.filename.replace(/\.[^.]+$/, '');
+  if (keepOriginal) {
+    const name = `${base} (trimmed)${ext}`;
+    const copy = await store.storeFile({ ownerId, folderId: video.folder_id, srcPath: out, filename: name, mime: guessMime(name) });
+    if (meta) {
+      insertMeta({
+        file_id: copy.id, owner_id: ownerId, title: meta.title ? `${meta.title} (trimmed)`.slice(0, 300) : null,
+        participants: JSON.stringify(meta.participants), tags: JSON.stringify(meta.tags), details: meta.details || null,
+        date: meta.date || null, series: meta.series || null, rating: meta.rating || null, duration: realLength,
+        thumb_file_id: meta.thumb_file_id || null, source_url: meta.source_url || null,
+      });
+    }
+    // next to the original in every collection it's in
+    for (const c of db.prepare('SELECT collection_id FROM media_collection_items WHERE file_id = ?').all(video.id)) col.addToCollection(c.collection_id, ownerId, [copy.id]);
+    update(id, { status: 'done', progress: 1, file_id: copy.id, error: null });
+  } else {
+    const name = ext === srcExt ? null : `${base}${ext}`;
+    await store.replaceFile(video, out, { filename: name, mime: name ? guessMime(name) : null });
+    if (meta) db.prepare("UPDATE media_meta SET duration = ?, progress = NULL, updated_at = datetime('now') WHERE file_id = ?").run(realLength, video.id);
+    else insertMeta({ file_id: video.id, owner_id: ownerId, duration: realLength });
+    update(id, { status: 'done', progress: 1, file_id: video.id, error: null });
+  }
 }
 
 // --- AV1 conversion ---------------------------------------------------------------
@@ -460,4 +563,4 @@ function resume() {
   pump();
 }
 
-module.exports = { status, detect, checkUrl, addJob, addConversions, listJobs, cancel, clearFinished, pump, resume, toAv1, PLAYLIST_MAX, CONVERT_RE };
+module.exports = { status, detect, checkUrl, addJob, addConversions, addTrim, addInternal, isInternal, listJobs, cancel, clearFinished, pump, resume, toAv1, PLAYLIST_MAX, CONVERT_RE };

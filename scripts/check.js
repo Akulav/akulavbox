@@ -241,6 +241,29 @@ async function main() {
       ok(jobs[0].error === 'Already in your music', 'converting the same video twice is skipped');
       ok((await api('/api/downloads/from-videos', { method: 'POST', body: { file_ids: ['not-mine'] } })).status === 400, 'only your own videos can be converted');
 
+      console.log('\nTrim');
+      ok((await api('/api/downloads/trim', { method: 'POST', body: { file_id: second.id, start: 10, end: 5 } })).status === 400, 'an end before the start is refused');
+      ok((await api('/api/downloads/trim', { method: 'POST', body: { file_id: 'not-mine', start: 0, end: 5 } })).status === 400, 'only your own videos can be trimmed');
+      const tc = await api('/api/downloads/trim', { method: 'POST', body: { file_id: second.id, start: 2, end: 12, copy: true } });
+      ok(tc.status === 200, 'trim into a copy');
+      jobs = await waitJobs('video');
+      const tcJob = jobs.find(j => j.id === tc.data.id);
+      const allV = (await api('/api/library/videos')).data.items;
+      const trimmedCopy = allV.find(x => x.id === tcJob?.file_id);
+      ok(tcJob?.status === 'done' && trimmedCopy && trimmedCopy.id !== second.id && trimmedCopy.title === 'Test video second (trimmed)' && trimmedCopy.duration === 10 && trimmedCopy.participants[0] === 'Test Creator',
+        'the copy keeps the details, with the new length', JSON.stringify(tcJob));
+      ok(allV.some(x => x.id === second.id && x.duration === 42), 'the original is untouched');
+      const creatorCol = (await api('/api/media-collections?kind=videos')).data.find(c => c.title === 'Test Creator');
+      ok((await api(`/api/media-collections/${creatorCol.id}/items`)).data.some(x => x.id === trimmedCopy?.id), 'the copy joins the original’s collections');
+      const usedBefore = (await api('/api/user/profile')).data.used_bytes;
+      const tr = await api('/api/downloads/trim', { method: 'POST', body: { file_id: second.id, start: 0, end: 20, exact: true } });
+      jobs = await waitJobs('video');
+      const replaced = (await api('/api/library/videos')).data.items.find(x => x.id === second.id);
+      ok(jobs.find(j => j.id === tr.data.id)?.status === 'done' && replaced && replaced.duration === 20 && replaced.size_bytes === 8192, 'trim in place (same video, new length)', JSON.stringify(replaced));
+      ok((await api('/api/user/profile')).data.used_bytes === usedBefore - (64 * 1024 - 8192), 'storage used follows the new size');
+      const back = await api(`/api/files/${second.id}/view`, { raw: true });
+      ok(back.status === 200 && Buffer.from(await back.arrayBuffer()).equals(Buffer.alloc(8192, 3)), 'the trimmed video decrypts');
+
       console.log('\nSign-in cookies');
       await api('/api/downloads', { method: 'POST', body: { url: 'https://www.youtube.com/watch?v=agegate', kind: 'video' } });
       jobs = await waitJobs('video');

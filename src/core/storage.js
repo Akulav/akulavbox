@@ -121,6 +121,38 @@ async function storeFile({ ownerId, folderId, srcPath, filename, mime }) {
   return db.prepare('SELECT * FROM files WHERE id = ?').get(id);
 }
 
+/**
+ * Swap a stored file's contents for a file on this server, keeping its id (and so
+ * its albums, collections, details and share link). A fresh IV is used: a CTR IV
+ * is never reused with new content. Shared files stay plain. Readers see the old
+ * or the new file, never half of one. Returns the updated row.
+ */
+async function replaceFile(file, srcPath, { filename, mime } = {}) {
+  const size = fs.statSync(srcPath).size;
+  const delta = size - file.size_bytes;
+  const u = db.prepare('SELECT quota_bytes, used_bytes FROM users WHERE id = ?').get(file.owner_id);
+  if (delta > 0 && u.used_bytes + delta > u.quota_bytes) throw Object.assign(new Error('Storage quota exceeded'), { code: 'QUOTA' });
+  if (!hasRoomFor(size)) throw Object.assign(new Error('The server’s disk is full'), { code: 'DISK' });
+  const dest = diskPathOf(file);
+  const tmp = `${dest}.${crypto.randomBytes(6).toString('hex')}.tmp`;
+  const iv = file.is_encrypted ? crypto.randomBytes(16).toString('hex') : file.iv_hex;
+  try {
+    if (file.is_encrypted) await pipeline(fs.createReadStream(srcPath), ctrAt(iv, 0), fs.createWriteStream(tmp));
+    else await pipeline(fs.createReadStream(srcPath), fs.createWriteStream(tmp));
+    fs.renameSync(tmp, dest);
+  } catch (e) {
+    try { fs.unlinkSync(tmp); } catch (err) { /* never written */ }
+    throw e;
+  }
+  db.tx(() => {
+    db.prepare('UPDATE files SET size_bytes = ?, iv_hex = ?, filename = COALESCE(?, filename), mime_type = COALESCE(?, mime_type) WHERE id = ?')
+      .run(size, iv, filename || null, mime || null, file.id);
+    db.prepare('UPDATE users SET used_bytes = MAX(0, used_bytes + ?) WHERE id = ?').run(delta, file.owner_id);
+  });
+  thumbs.purge(file.owner_id, file.id);
+  return db.prepare('SELECT * FROM files WHERE id = ?').get(file.id);
+}
+
 // ---------------------------------------------------------------------------
 // Zip downloads
 // ---------------------------------------------------------------------------
@@ -145,4 +177,4 @@ function appendToZip(archive, entries) {
   }
 }
 
-module.exports = { MASTER_KEY, userDirOf, diskPathOf, ctrAt, readRange, readAll, diskSpace, hasRoomFor, dirSize, purgeFile, appendToZip, storeFile };
+module.exports = { MASTER_KEY, userDirOf, diskPathOf, ctrAt, readRange, readAll, diskSpace, hasRoomFor, dirSize, purgeFile, appendToZip, storeFile, replaceFile };

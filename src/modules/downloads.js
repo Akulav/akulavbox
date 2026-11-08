@@ -21,13 +21,13 @@ module.exports = async function (fastify) {
     const urls = String(request.body?.url || '').split(/\s+/).map(x => x.trim()).filter(Boolean).slice(0, 50);
     const kind = request.body?.kind === 'audio' ? 'audio' : 'video';
     if (!urls.length) return reply.code(400).send({ error: 'Paste a link first.' });
-    const conversions = urls.filter(u => dl.CONVERT_RE.test(u));
-    const links = urls.filter(u => !dl.CONVERT_RE.test(u));
+    const internal = urls.filter(u => dl.isInternal(u));
+    const links = urls.filter(u => !dl.isInternal(u));
     if (links.length && !s.available) return reply.code(503).send({ error: s.installing ? 'The downloader is still being set up. Try again in a minute.' : 'The downloader isn’t available on this server.' });
     for (const u of links) { const problem = dl.checkUrl(u); if (problem) return reply.code(400).send({ error: problem }); }
     const ids = [
       ...links.map(u => dl.addJob(request.user.id, u, kind)),
-      ...dl.addConversions(request.user.id, conversions.map(u => dl.CONVERT_RE.exec(u)[1])),
+      ...internal.map(u => dl.addInternal(request.user.id, u)).filter(Boolean),
     ];
     if (!ids.length) return reply.code(404).send({ error: 'That video is no longer in your library.' });
     dl.pump();
@@ -42,6 +42,17 @@ module.exports = async function (fastify) {
     if (!ids.length) return reply.code(400).send({ error: 'Pick one or more videos from your library.' });
     dl.pump();
     return { success: true, ids };
+  });
+
+  // Trim one of my videos: { file_id, start, end (seconds), exact?, copy? }. Runs in the queue.
+  fastify.post('/api/downloads/trim', { preHandler: verifyUser }, async (request, reply) => {
+    const s = dl.status();
+    if (!s.convert) return reply.code(503).send({ error: s.installing ? 'ffmpeg is still being set up. Try again in a minute.' : 'Trimming needs ffmpeg, which isn’t available on this server.' });
+    const b = request.body || {};
+    const r = dl.addTrim(request.user.id, b.file_id, { start: b.start, end: b.end, exact: !!b.exact, copy: !!b.copy });
+    if (r.error) return reply.code(400).send({ error: r.error });
+    dl.pump();
+    return { success: true, id: r.id };
   });
 
   // Cancel a running download, or remove a finished one from the list

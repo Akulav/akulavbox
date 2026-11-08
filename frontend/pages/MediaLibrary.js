@@ -74,7 +74,7 @@ export default {
         <LibraryFilters v-if="view === 'all' && items.length" :f="f" :kind="kind" :sorts="C.sorts" />
       </div>
 
-      <Downloads v-if="C.downloads && !openCol && view !== 'creators'" :kind="C.downloads" @finished="onDownloaded" @open="openById" />
+      <Downloads v-if="C.downloads && !openCol && view !== 'creators'" :key="dlKey" :kind="C.downloads" @finished="onDownloaded" @open="openById" />
 
       <!-- ===== Collections ===== -->
       <template v-if="view === 'collections' && !openCol">
@@ -290,6 +290,34 @@ export default {
             <p v-if="file.details" class="text-[13.5px] whitespace-pre-line leading-relaxed">{{ file.details }}</p>
             <p v-if="!file.participants?.length && !file.tags?.length && !file.details && !file.series && !file.date" class="text-muted text-[13px]">No details yet. Add {{ L.people.toLowerCase() }}, tags and notes to sort and find this later.</p>
             <button v-if="kind === 'videos'" class="btn btn-sm w-full" @click="frameAsCover(file)"><Icon name="image" :size="14" />Use current frame as cover</button>
+            <button v-if="kind === 'videos' && canConvert && !(trim && trim.id === file.id)" class="btn btn-sm w-full" @click="openTrim(file)"><Icon name="zoom-out" :size="14" />Trim</button>
+
+            <!-- Trim: keep start..end -->
+            <div v-if="trim && trim.id === file.id" class="rounded-xl border border-line p-3.5 space-y-3">
+              <div class="flex items-center gap-2"><p class="font-medium text-[13.5px] flex-1">Trim</p><button class="icon-btn icon-btn-sm" @click="trim = null" title="Close"><Icon name="x" :size="14" /></button></div>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="label !mb-1" for="trim-start">Start</label>
+                  <input id="trim-start" v-model="trim.start" class="input h-9 tabular-nums" placeholder="0:00" inputmode="decimal">
+                  <button class="text-[11.5px] text-accent hover:underline mt-1" @click="trim.start = fmtTime(currentTime())">Use current time</button>
+                </div>
+                <div>
+                  <label class="label !mb-1" for="trim-end">End</label>
+                  <input id="trim-end" v-model="trim.end" class="input h-9 tabular-nums" placeholder="1:23" inputmode="decimal">
+                  <button class="text-[11.5px] text-accent hover:underline mt-1" @click="trim.end = fmtTime(currentTime())">Use current time</button>
+                </div>
+              </div>
+              <p class="text-[12px]" :class="trimError ? 'text-danger' : 'text-muted'">{{ trimError || 'Keeps ' + fmtTime(trimRange.end - trimRange.start) + ' of ' + fmtTime(trimRange.total) + '.' }}</p>
+              <button class="btn btn-sm w-full" :disabled="!!trimError" @click="previewTrim"><Icon name="play" :size="13" />Preview the cut</button>
+              <label class="flex items-start gap-2 text-[12.5px] cursor-pointer"><input type="checkbox" class="checkbox mt-0.5" v-model="trim.exact">
+                <span>Exact cut <span class="text-muted">(re-encodes: slower, frame-accurate). Otherwise the cut is instant and lossless but may start up to a few seconds early.</span></span></label>
+              <div class="seg w-full" role="radiogroup" aria-label="Save as">
+                <button class="flex-1" :class="{ on: !trim.copy }" @click="trim.copy = false" role="radio" :aria-checked="!trim.copy">Replace</button>
+                <button class="flex-1" :class="{ on: trim.copy }" @click="trim.copy = true" role="radio" :aria-checked="trim.copy">Save as new</button>
+              </div>
+              <p v-if="!trim.copy" class="text-[11.5px] text-muted">The video keeps its details, cover and collections. The cut-off parts are gone for good.</p>
+              <button class="btn btn-primary btn-sm w-full" :disabled="!!trimError || trim.busy" @click="startTrim(file)"><Icon :name="trim.busy ? 'loader' : 'check'" :size="14" />{{ trim.copy ? 'Save trimmed copy' : 'Trim video' }}</button>
+            </div>
           </div>
         </template>
       </FileViewer>
@@ -431,6 +459,63 @@ export default {
       const l = await attempt(() => api(`/api/media-collections/${c.id}/items`));
       if (l && l.length) await toSongs(l.map(x => x.id));
     }
+    // ---------- trim ----------
+    const trim = ref(null);
+    const dlKey = ref(0); // remount the downloads list so it shows (and follows) a new job
+    const viewerVideo = () => document.querySelector('[role=dialog] video');
+    const currentTime = () => viewerVideo()?.currentTime || 0;
+    const fmtTime = (s) => {
+      if (!isFinite(s) || s < 0) s = 0;
+      const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+      const ss = sec.toFixed(1).padStart(4, '0').replace(/\.0$/, '');
+      return h ? `${h}:${String(m).padStart(2, '0')}:${ss.padStart(2, '0')}` : `${m}:${ss.padStart(2, '0')}`;
+    };
+    // "90", "1:30", "1:02:03.5" → seconds
+    const parseTime = (v) => {
+      const parts = String(v ?? '').trim().split(':').map(Number);
+      if (!parts.length || parts.some(n => !isFinite(n) || n < 0)) return NaN;
+      return parts.reduce((a, n) => a * 60 + n, 0);
+    };
+    function openTrim(file) {
+      const total = file.duration || viewerVideo()?.duration || 0;
+      trim.value = { id: file.id, start: '0:00', end: fmtTime(total), total, exact: false, copy: false, busy: false };
+    }
+    const trimRange = computed(() => {
+      const t = trim.value;
+      if (!t) return { start: 0, end: 0, total: 0 };
+      const total = t.total || viewerVideo()?.duration || 0;
+      return { start: parseTime(t.start), end: parseTime(t.end), total };
+    });
+    const trimError = computed(() => {
+      const { start, end, total } = trimRange.value;
+      if (!isFinite(start) || !isFinite(end)) return 'Write times like 1:30 or 90.';
+      if (end <= start + 0.2) return 'The end must come after the start.';
+      if (total && start >= total) return 'The start is past the end of the video.';
+      if (total && start <= 0.05 && end >= total - 0.05) return 'Move the start or the end to cut something.';
+      return '';
+    });
+    let previewStop = null;
+    function previewTrim() {
+      const v = viewerVideo();
+      if (!v) return toast('Open the video first.');
+      const { start, end } = trimRange.value;
+      if (previewStop) v.removeEventListener('timeupdate', previewStop);
+      previewStop = () => { if (v.currentTime >= end) { v.pause(); v.removeEventListener('timeupdate', previewStop); previewStop = null; } };
+      v.currentTime = start;
+      v.addEventListener('timeupdate', previewStop);
+      v.play().catch(() => {});
+    }
+    async function startTrim(file) {
+      const { start, end, total } = trimRange.value;
+      trim.value.busy = true;
+      const r = await attempt(() => api('/api/downloads/trim', { method: 'POST', body: { file_id: file.id, start, end: total ? Math.min(end, total) : end, exact: trim.value.exact, copy: trim.value.copy } }));
+      if (!r) { trim.value.busy = false; return; }
+      toast.success(trim.value.copy ? 'Trimming into a new video. It appears here when it’s done.' : 'Trimming. The video updates when it’s done; you can close this.');
+      trim.value = null;
+      viewer.value = null; // the file is about to change under the player
+      dlKey.value++;
+    }
+
     const TAGS_SHOWN = 12;
     const allTags = ref(false);
     watch(viewer, () => { allTags.value = false; });
@@ -586,6 +671,7 @@ export default {
       C, L, TILE_GRID, items, loaded, folderId, fileInput, f, selecting, selected, menu, editors, viewer, dragOver, totalDuration,
       view, openCol, collections, collectionsLoaded, colItems, colLoaded, colDuration, list, creators,
       isSel, toggleSel, toggleSelecting, selectAll, editSelected, onCardClick, open, openById, filterBy, showCreator, openMenu, run, remove, deleteSelected, onSaved, onDownloaded,
+      trim, dlKey, currentTime, fmtTime, openTrim, trimRange, trimError, previewTrim, startTrim,
       playCollection, playCollectionById, shuffleList, canConvert, toSongs, collectionToSongs, TAGS_SHOWN, allTags, newCollection, renameCollection, deleteCollection, toggleColFavorite, removeFromCol, setColCover,
       colMenu, openColMenu, runCol, picker, openPicker, pickerFromMenu, addTo, dragIndex, dragOverIndex, onCardDragStart, onCardDrop,
       frameAsCover, onPick, onDragEnter, onDragLeave, onDrop, ext, progressOf,

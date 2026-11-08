@@ -75,6 +75,7 @@ The cover and artwork sub-folders (`library.HIDDEN`) are hidden from Files listi
 - The duplicate check (`media_meta.source_id`) only looks in the folder being saved to, so a link can be kept both as a video and as a song.
 - **Sign-in cookies** (`src/core/cookies.js`): per user in `storage/private/cookies/<id>.enc` (16-byte IV, then AES-256-CTR with `MASTER_KEY`). A plain copy is written into the job's work folder only while yt-dlp runs and is removed with it. Errors that ask for sign-in get a hint pointing to Profile → Link downloads.
 - **Video → song** jobs have the url `akulavbox:video/<fileId>` and go through the same queue: decrypt to the work folder, ffprobe the audio codec, copy it when browsers play it (AAC → m4a, MP3, Opus, FLAC, Vorbis) or encode to AAC, store it in Music with the video's details, copy the cover (or grab a frame) into Artwork, and file it in the creator's playlist. Without yt-dlp, only conversions run.
+- **Trim** jobs (`akulavbox:trim/<fileId>?s=&e=&exact=&copy=`) decrypt the video, cut it with ffmpeg (`-ss` before `-i` with stream copy for a fast keyframe cut, or a re-encode to AV1/H.264 for an exact one), and either store a copy (same details and collections) or swap the contents in place with `storage.replaceFile()`, which keeps the file id, writes a fresh IV and adjusts `used_bytes`.
 
 ## Storage check (`src/core/maintenance.js`)
 

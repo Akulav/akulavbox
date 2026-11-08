@@ -51,7 +51,7 @@ export default {
             </div>
             <p v-if="j.status === 'error'" class="text-[12px] text-danger" :class="needsCookies(j) ? 'line-clamp-2' : 'truncate'" :title="j.error">{{ j.error }}
               <a v-if="needsCookies(j)" href="#/profile/cookies" class="ml-1 font-medium text-accent hover:underline whitespace-nowrap">Add cookies</a></p>
-            <p v-else class="text-[12px] text-faint truncate">{{ j.creator ? 'by ' + j.creator : hostOf(j.url) }}<template v-if="isConversion(j) && j.creator"> · from your video</template><template v-if="j.status === 'done' && j.error"> · {{ j.error }}</template></p>
+            <p v-else class="text-[12px] text-faint truncate">{{ j.creator ? 'by ' + j.creator : hostOf(j.url) }}<template v-if="isConversion(j) && j.creator"> · {{ hostOf(j.url) }}</template><template v-if="j.status === 'done' && j.error"> · {{ j.error }}</template></p>
             <div v-if="active(j)" class="meter mt-1.5" style="height:3px"><span :style="{ width: Math.round((j.progress || 0) * 100) + '%' }"></span></div>
           </div>
           <button v-if="j.status === 'done' && j.file_id" class="btn btn-ghost btn-sm" @click="$emit('open', j.file_id)">{{ kind === 'audio' ? 'Play' : 'Open' }}</button>
@@ -78,14 +78,15 @@ export default {
     const active = (j) => ACTIVE.includes(j.status);
     const shown = computed(() => (expanded.value ? jobs.value : jobs.value.slice(0, 5)));
     const isConversion = (j) => j.url.startsWith('akulavbox:');
-    const hostOf = (u) => { if (u.startsWith('akulavbox:')) return 'from your video'; try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return u; } };
+    const hostOf = (u) => { if (u.startsWith('akulavbox:trim/')) return 'trim of your video'; if (u.startsWith('akulavbox:')) return 'from your video'; try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return u; } };
     const needsCookies = (j) => /Profile → Link downloads/.test(j.error || '');
     const label = (j) => {
       if (j.status === 'downloading') {
         const pct = Math.round((j.progress || 0) * 100);
         return `${pct}%${j.speed ? ' · ' + formatBytes(j.speed) + '/s' : ''}`;
       }
-      if (j.status === 'converting') return `${isConversion(j) ? 'Saving the sound' : 'Shrinking to AV1'} ${Math.round((j.progress || 0) * 100)}%`;
+      if (j.status === 'converting') return `${j.url.startsWith('akulavbox:trim/') ? 'Trimming' : isConversion(j) ? 'Saving the sound' : 'Shrinking to AV1'} ${Math.round((j.progress || 0) * 100)}%`;
+      if (j.status === 'done' && j.url.startsWith('akulavbox:trim/')) return 'Trimmed';
       return STATUS_LABEL[j.status] || j.status;
     };
 
