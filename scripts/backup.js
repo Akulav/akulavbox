@@ -12,6 +12,9 @@ const fs = require('fs');
 const path = require('path');
 const { pipeline } = require('stream/promises');
 
+// the server applies staged restores; this tool may run next to it and must not
+process.env.AKB_NO_RESTORE = '1';
+
 const [cmd, arg] = process.argv.slice(2);
 const pass = process.env.AKB_PASSPHRASE || '';
 const gb = (b) => `${(b / 1024 ** 3).toFixed(2)} GB`;
@@ -40,7 +43,8 @@ async function main() {
     try {
       const r = await backup.stageImport(path.resolve(arg), pass, { currentSchema: LATEST });
       console.log(`\rReady: ${r.users} accounts and ${r.files} files from ${r.created_at}${r.rekeyed ? ' (re-encrypted for this server’s key)' : ''}.`);
-      console.log('Start the server (npm start) to apply it. The current data is kept in storage/backups/pre-import-*.');
+      console.log('Restart the server (stop it, then npm start) to apply it. The current data is kept in storage/backups/pre-import-*.');
+      console.log('If the Admin page still says “Ready to restore” afterwards, it shows why the swap failed.');
     } finally { clearInterval(timer); }
   } else if (cmd === 'check') {
     const m = require('../src/core/maintenance');

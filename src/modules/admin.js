@@ -50,7 +50,7 @@ module.exports = async function (fastify) {
 
     // temporary chat files they sent or received
     for (const m of db.prepare("SELECT file_path FROM messages WHERE type = 'file' AND (sender_id = ? OR receiver_id = ?)").all(id, id)) {
-      if (m.file_path) { try { fs.unlinkSync(m.file_path); } catch (e) { /* gone */ } }
+      if (m.file_path) { try { fs.unlinkSync(store.chatFileOf(m.file_path)); } catch (e) { /* gone */ } }
     }
     db.tx(() => {
       const cleanup = [
@@ -187,7 +187,7 @@ module.exports = async function (fastify) {
   };
 
   fastify.get('/api/admin/backup', { preHandler: verifyAdmin }, async () => ({
-    estimate: backup.estimate(db), import: { ...backup.state, pending: backup.pending() }, restored: db.restored || null,
+    estimate: backup.estimate(db), import: { ...backup.state, staging: backup.stagingBy(), pending: backup.pending() }, restored: db.restored || null,
   }));
 
   fastify.post('/api/admin/backup/export', { preHandler: formAdmin }, async (request, reply) => {
@@ -206,15 +206,24 @@ module.exports = async function (fastify) {
   const IMPORT_ID = /^[\w-]{8,64}$/;
   const importPath = (id) => path.join(config.tempDir, `import-${id}.akbx`);
   fastify.addContentTypeParser('application/octet-stream', { parseAs: 'buffer', bodyLimit: 32 * 1024 * 1024 }, (req, body, done) => done(null, body));
+  const uploadedSize = (id) => { try { return fs.statSync(importPath(id)).size; } catch (e) { return 0; } };
+  // How much of an upload the server has, so a dropped connection or a reload resumes instead of starting over
+  fastify.get('/api/admin/backup/upload', { preHandler: verifyAdmin }, async (request, reply) => {
+    const id = String(request.query.id || '');
+    if (!IMPORT_ID.test(id)) return reply.code(400).send({ error: 'Bad upload id' });
+    return { size: uploadedSize(id) };
+  });
   fastify.put('/api/admin/backup/upload', { preHandler: verifyAdmin, bodyLimit: 32 * 1024 * 1024 }, async (request, reply) => {
     const id = String(request.query.id || '');
     const offset = Number(request.query.offset);
-    if (!IMPORT_ID.test(id) || !(offset >= 0)) return reply.code(400).send({ error: 'Bad upload id or offset' });
+    if (!IMPORT_ID.test(id) || !Number.isSafeInteger(offset) || offset < 0) return reply.code(400).send({ error: 'Bad upload id or offset' });
     const p = importPath(id);
-    const current = fs.existsSync(p) ? fs.statSync(p).size : 0;
-    if (offset > current) return reply.code(409).send({ error: 'Upload chunk out of order, start again' });
+    const current = uploadedSize(id);
+    // the answer carries the size, so the page can carry on from there
+    if (offset > current) return reply.code(409).send({ error: 'Upload chunk out of order', size: current });
     const body = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
     if (!store.hasRoomFor(body.length * 2)) return reply.code(507).send({ error: 'The server’s disk is full.' });
+    fs.mkdirSync(config.tempDir, { recursive: true });
     if (offset === 0) fs.writeFileSync(p, body);
     else { if (offset < current) fs.truncateSync(p, offset); fs.appendFileSync(p, body); }
     return { success: true, size: offset + body.length };
@@ -226,12 +235,17 @@ module.exports = async function (fastify) {
     const { id, server_path: serverPath, passphrase } = request.body || {};
     const file = serverPath ? path.resolve(String(serverPath)) : (IMPORT_ID.test(String(id || '')) ? importPath(id) : null);
     if (!file || !fs.existsSync(file) || !fs.statSync(file).isFile()) return reply.code(400).send({ error: serverPath ? 'No file at that path on the server.' : 'Upload the backup first.' });
-    if (backup.state.running) return reply.code(409).send({ error: 'An import is already running.' });
+    if (backup.state.running || backup.stagingBy()) return reply.code(409).send({ error: 'An import is already running.' });
     try { await backup.openHeader(file, passphrase || ''); } // fail fast on a wrong passphrase or a wrong file
     catch (e) { return reply.code(400).send({ error: e.message }); }
+    // the upload is kept when the check fails (full disk, say), so a retry needn't send it again;
+    // the hourly temp sweep removes it after a day
     backup.stageImport(file, passphrase, { currentSchema: LATEST })
-      .catch((e) => fastify.log.warn(`backup import failed: ${e.message}`))
-      .finally(() => { if (!serverPath) fs.rmSync(file, { force: true }); });
+      .then(() => { if (!serverPath) fs.rmSync(file, { force: true }); })
+      .catch((e) => {
+        fastify.log.warn(`backup import failed: ${e.message}`);
+        if (!serverPath && /damaged|incomplete|changed/.test(e.message)) fs.rmSync(file, { force: true }); // bad bytes: a retry must upload again
+      });
     return { success: true, started: true };
   });
 
@@ -262,7 +276,8 @@ module.exports = async function (fastify) {
   // Restart so a staged restore is applied. Needs a service manager (systemd, pm2, Docker) to start
   // the process again; the page says so before offering it.
   fastify.post('/api/admin/restart', { preHandler: verifyAdmin }, async () => {
-    setTimeout(() => process.exit(0), 300).unref();
+    // after the answer is sent; server.js closes the database first (plain exit when run without it)
+    setTimeout(() => { if (!process.emit('akulavbox:restart')) process.exit(0); }, 300).unref();
     return { success: true };
   });
 };

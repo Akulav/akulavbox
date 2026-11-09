@@ -75,7 +75,7 @@ function scan() {
   const actual = new Map();
   for (const r of rows) actual.set(r.owner_id, (actual.get(r.owner_id) || 0) + (r.size_bytes || 0));
   for (const m of db.prepare("SELECT sender_id, file_size, file_path FROM messages WHERE type = 'file' AND file_path IS NOT NULL").all()) {
-    if (m.file_path && fs.existsSync(m.file_path)) actual.set(m.sender_id, (actual.get(m.sender_id) || 0) + (m.file_size || 0));
+    if (m.file_path && fs.existsSync(store.chatFileOf(m.file_path))) actual.set(m.sender_id, (actual.get(m.sender_id) || 0) + (m.file_size || 0));
   }
   const usage = [...users.values()].map(u => ({ id: u.id, username: u.username, recorded: u.used_bytes || 0, actual: actual.get(u.id) || 0 }))
     .filter(u => u.recorded !== u.actual);

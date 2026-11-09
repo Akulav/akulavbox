@@ -473,12 +473,19 @@ async function main() {
       const tmp2 = fs.mkdtempSync(path.join(os.tmpdir(), 'akulavbox-check2-'));
       const env2 = { ...env, STORAGE_DIR: tmp2, PORT: String(port + 1), MASTER_KEY: crypto.randomBytes(16).toString('hex') };
       const base1 = base;
-      const boot2 = async () => {
-        const s = spawn(process.execPath, ['src/server.js'], { cwd: root, env: env2, stdio: ['ignore', 'pipe', 'pipe'] });
+      const boot2 = async (extra = {}, p = port + 1) => {
+        const s = spawn(process.execPath, ['src/server.js'], { cwd: root, env: { ...env2, PORT: String(p), ...extra }, stdio: ['ignore', 'pipe', 'pipe'] });
         s.stdout.on('data', d => { log += d; }); s.stderr.on('data', d => { log += d; });
-        base = `http://127.0.0.1:${port + 1}`;
+        base = `http://127.0.0.1:${p}`;
         for (let i = 0; i < 60; i++) { try { if ((await fetch(`${base}/api/health`)).ok) break; } catch (e) { /* not yet */ } await new Promise(r => setTimeout(r, 250)); }
         return s;
+      };
+      const restart2 = async (extra) => {
+        const r = await api('/api/admin/restart', { method: 'POST' });
+        await new Promise(res => s2.once('exit', res));
+        s2 = await boot2(extra);
+        token = (await api('/api/login', { method: 'POST', body: { username: 'admin', password: 'admin' } })).data.token;
+        return r;
       };
       let s2 = await boot2();
       try {
@@ -486,6 +493,9 @@ async function main() {
         const uploadId = crypto.randomUUID();
         const half = Math.floor(archive.length / 2);
         await api(`/api/admin/backup/upload?id=${uploadId}&offset=0`, { method: 'PUT', body: archive.subarray(0, half), headers: { 'Content-Type': 'application/octet-stream' } });
+        ok((await api(`/api/admin/backup/upload?id=${uploadId}`)).data.size === half, 'an upload reports how much has arrived (to resume)');
+        const gap = await api(`/api/admin/backup/upload?id=${uploadId}&offset=${half + 10}`, { method: 'PUT', body: archive.subarray(half + 10), headers: { 'Content-Type': 'application/octet-stream' } });
+        ok(gap.status === 409 && gap.data.size === half, 'a chunk after a gap is refused with the size to resume from');
         const up2 = await api(`/api/admin/backup/upload?id=${uploadId}&offset=${half}`, { method: 'PUT', body: archive.subarray(half), headers: { 'Content-Type': 'application/octet-stream' } });
         ok(up2.status === 200 && up2.data.size === archive.length, 'upload a backup in chunks');
         ok((await api('/api/admin/backup/import', { method: 'POST', body: { id: uploadId, passphrase: 'wrong passphrase' } })).status === 400, 'a wrong passphrase is refused at once');
@@ -493,11 +503,27 @@ async function main() {
         let st2;
         for (let i = 0; i < 80; i++) { st2 = (await api('/api/admin/backup')).data; if (!st2.import.running) break; await new Promise(r => setTimeout(r, 250)); }
         ok(imp.status === 200 && st2.import.pending && st2.import.pending.rekeyed, 'the backup is verified and staged', JSON.stringify(st2.import));
-        const restart = await api('/api/admin/restart', { method: 'POST' });
-        await new Promise(r => s2.once('exit', r));
+
+        // a second copy started on the same folder must leave the running server's data alone
+        const base2 = base;
+        const twin = await boot2({}, port + 2);
+        const twinSaw = (await api('/api/admin/backup')).status;
+        twin.kill();
+        await new Promise(r => setTimeout(r, 300));
+        base = base2;
+        const afterTwin = (await api('/api/admin/backup')).data.import.pending;
+        ok(twinSaw && afterTwin && /Another AkulavBox/.test(afterTwin.failed?.error || ''), 'a second server on the same folder doesn’t swap the restore in', JSON.stringify(afterTwin));
+        ok((await api(`/api/files/${kept.data.fileId}/view`, { raw: true })).status === 404, 'the running server keeps its data');
+
+        // a rename that keeps failing (Windows: a file held open) is undone and reported
+        await restart2({ AKB_TEST_FAIL_MOVE: 'import-staging/users', AKB_SWAP_RETRY_MS: '200' });
+        const failed = (await api('/api/admin/backup')).data;
+        ok(!failed.restored && failed.import.pending && /Couldn’t move/.test(failed.import.pending.failed?.error || ''), 'a failed swap is reported on the Admin page', JSON.stringify(failed.import));
+        ok((await api(`/api/files/${kept.data.fileId}/view`, { raw: true })).status === 404 && fs.existsSync(path.join(tmp2, 'akulavbox.db')), 'a failed swap is put back: the old data still works');
+        ok(!fs.readdirSync(path.join(tmp2, 'backups')).some(n => n.startsWith('pre-import-')), 'nothing is left half moved');
+
+        const restart = await restart2();
         ok(restart.status === 200, 'restart to apply it');
-        s2 = await boot2();
-        token = (await api('/api/login', { method: 'POST', body: { username: 'admin', password: 'admin' } })).data.token;
         const st3 = (await api('/api/admin/backup')).data;
         ok(st3.restored && st3.restored.files > 0 && !st3.import.pending, 'restored on start');
         const back = await api(`/api/files/${kept.data.fileId}/view`, { raw: true });

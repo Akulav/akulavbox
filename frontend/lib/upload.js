@@ -1,5 +1,5 @@
 import { reactive, ref, markRaw } from 'vue';
-import { session } from './api.js';
+import { session, randomId } from './api.js';
 
 const CHUNK_SIZE = 16 * 1024 * 1024; // 16 MB
 const PARALLEL = 3;                  // files uploading at the same time
@@ -37,7 +37,7 @@ function sendChunk(form, onProgress, item) {
 /** Upload one File in chunks. Returns the new file id. */
 export async function uploadFile(file, folderId, onProgress = () => {}, item = null) {
   const totalChunks = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
-  const uploadId = crypto.randomUUID();
+  const uploadId = randomId();
   let done = 0, result = null;
 
   for (let i = 0; i < totalChunks; i++) {

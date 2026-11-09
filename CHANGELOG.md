@@ -2,6 +2,28 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 2.9.0 (2026-11-09)
+
+### Added
+- **Restoring a backup can't silently fail any more.** If the swap at startup fails, the Admin page now says why, for example a file held open by antivirus, Explorer, OneDrive or a second AkulavBox. Before, the page just kept saying “Ready to restore”. Everything already moved is put back, so the server runs on its old data, and the next restart tries again.
+- **Backup uploads resume.** If the connection drops, the page reloads, or the check fails, picking the same file again sends only the missing part. Failed chunks are retried, and the chunks get smaller when a proxy refuses big requests (413, for example nginx's default 1 MB limit).
+- **Restart now** waits for AkulavBox to come back, then reloads the page (it used to reload after a fixed 6 seconds).
+
+### Fixed
+- **A second server started on the same storage folder could swap a restore in under the running one.** Servers now record themselves in `storage/akulavbox.pid`, and only one at a time applies a restore. `scripts/backup.js` never applies one.
+- **On Windows, a rename the swap needed failed at once if a file was briefly held open.** It is retried for up to 30 seconds. Storage folders spread over several drives or mounts work (copy, then delete).
+- A crash in the middle of the swap carries on from where it stopped at the next start. Before, AkulavBox could start on an empty database.
+- **Restart now** closes the database cleanly instead of exiting on the spot.
+- A wrong passphrase on `scripts/backup.js import` deleted a restore that was already staged.
+- Restoring onto a server with a different key: leftover `.enc` files that no database row lists are skipped instead of copied in unreadable.
+- A damaged backup can no longer make the import read huge amounts into memory.
+- **Uploads opened over a LAN address with plain http** (for example `http://192.168.1.10:3000`) failed, because `crypto.randomUUID` only exists on https and localhost.
+- An import that died half way no longer leaves its staging folder behind.
+
+### Security
+- **Chat attachments are only read and deleted inside `storage/chat_temp/`.** The database held an absolute path, which was used as-is. After a restore onto another server those paths were wrong, and a crafted backup could make the server send or delete any file it can reach.
+- **Zip downloads** turn folder names `.` and `..` into `_`, so an archive can't put files outside the folder it is unpacked into.
+
 ## 2.8.0 (2026-11-09)
 
 ### Added

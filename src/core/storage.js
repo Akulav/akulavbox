@@ -165,8 +165,10 @@ const STORED_EXT = /\.(jpe?g|png|gif|webp|avif|heic|heif|mp4|m4v|mov|webm|mkv|av
 /** Append files to an archive, de-duplicating names ("a.jpg", "a (2).jpg") */
 function appendToZip(archive, entries) {
   const used = new Set();
-  for (const { file, name } of entries) {
+  for (let { file, name } of entries) {
     const stream = readAll(file);
+    // a folder called ".." must not become a path that climbs out of wherever the zip is unpacked
+    name = name.split('/').map(s => (s === '.' || s === '..' ? '_' : s)).join('/');
     let n = name, i = 2;
     while (used.has(n.toLowerCase())) {
       const dot = name.lastIndexOf('.'), slash = name.lastIndexOf('/');
@@ -181,4 +183,11 @@ function appendToZip(archive, entries) {
   }
 }
 
-module.exports = { MASTER_KEY, userDirOf, diskPathOf, ctrAt, readRange, readAll, diskSpace, hasRoomFor, dirSize, purgeFile, appendToZip, storeFile, replaceFile };
+/**
+ * Where a chat attachment lives. messages.file_path holds an absolute path, which is
+ * wrong after STORAGE_DIR moves or a restore onto another server, and must never
+ * reach outside chat_temp (a database from a backup is not to be trusted with paths).
+ */
+const chatFileOf = (filePath) => (filePath ? path.join(config.chatDir, path.basename(String(filePath))) : null);
+
+module.exports = { MASTER_KEY, userDirOf, diskPathOf, ctrAt, readRange, readAll, diskSpace, hasRoomFor, dirSize, purgeFile, appendToZip, storeFile, replaceFile, chatFileOf };

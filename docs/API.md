@@ -95,12 +95,13 @@ All endpoints are JSON unless noted. Authenticate with `Authorization: Bearer <t
 | GET | `/api/admin/system` | Disk `{ total, free, used }`, storage breakdown, totals, overcommit, version, schema, Node, uptime (`?fresh=1` re-measures) |
 | GET | `/api/admin/storage-check` | Files on disk vs. the database: `orphans` (no row), `missing` (row, no data), `usage` (drifted counters), with byte totals |
 | POST | `/api/admin/storage-check/clean` | `{ orphans?, missing?, usage? }` (all on by default) → `{ deleted, freed_bytes, recovered, repaired, removed_rows, usage_fixed }` |
-| GET | `/api/admin/backup` | `{ estimate, import: { running, step, done, total, error, pending }, restored }` |
+| GET | `/api/admin/backup` | `{ estimate, import: { running, step, done, total, error, staging, pending }, restored }`. `staging` is the id of another process (the command line) unpacking a backup; `pending.failed` is `{ error, at }` when the last start couldn't swap the restore in |
 | POST | `/api/admin/backup/export` | Form post: `token, passphrase` (8+ characters). Streams an `.akbx` file |
-| PUT | `/api/admin/backup/upload?id=&offset=` | Raw `application/octet-stream` chunk of a backup (≤ 32 MB each) |
+| GET | `/api/admin/backup/upload?id=` | `{ size }`: how much of that upload the server has, to resume it |
+| PUT | `/api/admin/backup/upload?id=&offset=` | Raw `application/octet-stream` chunk of a backup (≤ 32 MB each). A chunk past the end → 409 `{ error, size }` |
 | POST | `/api/admin/backup/import` | `{ id \| server_path, passphrase }`. Checks the passphrase at once, then unpacks and verifies in the background |
 | DELETE | `/api/admin/backup/import` | Drop a staged restore |
 | GET | `/api/admin/updates` | `{ enabled, repo, branch, current, latest: { version, sha, notes, node_ok }, available, mode, applying, step, error, ready, rollback }` (`?check=1` asks GitHub now) |
 | POST | `/api/admin/updates/apply` | Install the newest version in the background; it runs after a restart |
 | POST | `/api/admin/updates/rollback` | Put back the code from before the last update |
-| POST | `/api/admin/restart` | Exits the process so a service manager restarts it (applies a staged restore) |
+| POST | `/api/admin/restart` | Stops the server cleanly so a service manager restarts it (applies a staged restore) |

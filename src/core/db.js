@@ -4,9 +4,15 @@ const config = require('./config');
 const { migrate } = require('./migrations');
 const backup = require('./backup');
 
-// A restore staged from the Admin page is swapped in before anything opens the database
+// A restore staged from the Admin page is swapped in before anything opens the database.
+// Only the server does this: a command-line tool running next to it must not.
 let restored = null;
-try { restored = backup.applyPending(); } catch (e) { console.error('[backup] Couldn’t apply the staged restore:', e.message); }
+if (process.env.AKB_NO_RESTORE !== '1') {
+  try { restored = backup.applyPending(); } catch (e) {
+    console.error(`[backup] ${e.message}`);
+    if (e.fatal) process.exit(1);
+  }
+}
 
 const db = new DatabaseSync(config.dbPath);
 db.restored = restored;

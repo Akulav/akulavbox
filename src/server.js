@@ -22,6 +22,7 @@ const fastify = require('fastify')({
 });
 
 const db = require('./core/db');
+const instance = require('./core/instance');
 
 // The app is served from this same origin, so other sites get no CORS access by default.
 // CORS_ORIGIN=https://a.example,https://b.example opens the API to those origins (e.g. a separate client).
@@ -88,6 +89,9 @@ fastify.setNotFoundHandler((request, reply) => {
 const start = async () => {
   try {
     await fastify.listen({ port: config.port, host: config.host });
+    // only once the port is ours: a second copy that fails to listen must not claim the folder
+    instance.claim();
+    process.on('exit', instance.release);
     const schema = db.schema;
     console.log(`${config.name} v${config.version} by ${config.author} is running on http://localhost:${config.port}`);
     console.log(`  storage: ${config.storageDir}`);
@@ -113,5 +117,7 @@ async function shutdown(signal) {
 }
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
+// Admin → Restart: the same clean stop, so the database is closed before a restore is swapped in
+process.on('akulavbox:restart', () => shutdown('Restart'));
 
 start();

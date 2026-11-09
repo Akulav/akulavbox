@@ -36,7 +36,7 @@ module.exports = async function (fastify) {
   const expire = () => {
     const expired = db.prepare(`SELECT id, sender_id, receiver_id, file_path, file_size FROM messages WHERE type = 'file' AND created_at < datetime('now', '-10 minutes')`).all();
     for (const msg of expired) {
-      if (msg.file_path) { try { fs.unlinkSync(msg.file_path); } catch (e) { /* gone */ } }
+      if (msg.file_path) { try { fs.unlinkSync(store.chatFileOf(msg.file_path)); } catch (e) { /* gone */ } }
       db.prepare('UPDATE users SET used_bytes = MAX(0, used_bytes - ?) WHERE id = ?').run(msg.file_size, msg.sender_id);
       db.prepare(`UPDATE messages SET type = 'deleted_file', content = 'File expired (10 min limit)', file_path = NULL, file_size = 0 WHERE id = ?`).run(msg.id);
       emitToUser(msg.sender_id, 'file_expired', { message_id: msg.id });
@@ -46,7 +46,7 @@ module.exports = async function (fastify) {
   setInterval(expire, 60000).unref();
   // Files whose message is gone (trimmed by the 1,000-message limit, or the server stopped mid-upload)
   try {
-    const known = new Set(db.prepare("SELECT file_path FROM messages WHERE type = 'file' AND file_path IS NOT NULL").all().map(r => path.resolve(r.file_path)));
+    const known = new Set(db.prepare("SELECT file_path FROM messages WHERE type = 'file' AND file_path IS NOT NULL").all().map(r => path.resolve(store.chatFileOf(r.file_path))));
     for (const name of fs.readdirSync(chatDir)) {
       const p = path.resolve(chatDir, name);
       if (!known.has(p)) { try { fs.unlinkSync(p); } catch (e) { /* ignore */ } }
@@ -210,7 +210,7 @@ module.exports = async function (fastify) {
     const msg = db.prepare('SELECT * FROM messages WHERE id = ? AND sender_id = ?').get(request.params.id, request.user.id);
     if (!msg) return reply.code(404).send({ error: 'Message not found' });
     if (msg.type === 'file' && msg.file_path) {
-      try { fs.unlinkSync(msg.file_path); } catch (e) { /* gone */ }
+      try { fs.unlinkSync(store.chatFileOf(msg.file_path)); } catch (e) { /* gone */ }
       db.prepare('UPDATE users SET used_bytes = MAX(0, used_bytes - ?) WHERE id = ?').run(msg.file_size, msg.sender_id);
     }
     db.prepare('DELETE FROM messages WHERE id = ?').run(msg.id);
@@ -276,17 +276,18 @@ module.exports = async function (fastify) {
     if (!msg || (msg.sender_id !== request.user.id && msg.receiver_id !== request.user.id)) {
       return reply.code(404).send({ error: 'File expired or not found.' });
     }
-    if (!msg.file_path || !fs.existsSync(msg.file_path)) return reply.code(404).send({ error: 'File expired or not found.' });
+    const filePath = store.chatFileOf(msg.file_path);
+    if (!filePath || !fs.existsSync(filePath)) return reply.code(404).send({ error: 'File expired or not found.' });
 
     const mime = guessMime(msg.content, msg.file_mime);
     const download = request.query.download === '1';
     reply.header('Content-Type', mime);
     reply.header('X-Content-Type-Options', 'nosniff');
-    reply.header('Content-Length', fs.statSync(msg.file_path).size);
+    reply.header('Content-Length', fs.statSync(filePath).size);
     const csp = fileCsp(mime);
     if (csp) reply.header('Content-Security-Policy', csp);
     reply.header('Content-Disposition', `${download ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(msg.content || 'file')}`);
-    return reply.send(fs.createReadStream(msg.file_path));
+    return reply.send(fs.createReadStream(filePath));
   });
 
   io.use((socket, next) => {
