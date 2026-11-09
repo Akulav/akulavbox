@@ -11,8 +11,10 @@ export async function systemFolder(key) {
 }
 export function forgetFolders() { for (const k of Object.keys(folderCache)) delete folderCache[k]; }
 
-export const SECTION_OF = { gallery: 'Photos', music: 'Music', music_art: 'Music', videos: 'Videos', video_covers: 'Videos', books: 'Books', book_covers: 'Books' };
-export const ROUTE_OF = { gallery: 'albums', music: 'music', music_art: 'music', videos: 'videos', video_covers: 'videos', books: 'books', book_covers: 'books' };
+export const SECTION_OF = { gallery: 'Photos', music: 'Music', music_art: 'Music', videos: 'Videos', video_covers: 'Videos', books: 'Books', book_covers: 'Books', xxx: 'XXX', xxx_covers: 'XXX' };
+export const ROUTE_OF = { gallery: 'albums', music: 'music', music_art: 'music', videos: 'videos', video_covers: 'videos', books: 'books', book_covers: 'books', xxx: 'xxx', xxx_covers: 'xxx' };
+// cover kind -> the locked folder its covers are kept in
+const COVER_FOLDER = { video: 'video_covers', book: 'book_covers', xxx: 'xxx_covers' };
 export const ACCEPTS_LABEL = { image: 'images', audio: 'audio files', video: 'videos', book: 'books (PDF, EPUB, …)' };
 
 // ---------- thumbnails ----------
@@ -241,8 +243,8 @@ export async function epubCover(source) {
 
 /** Store a cover image for a video/book and link it */
 export async function setCover(fileId, blob, extra = {}, kind = 'video') {
-  // covers live next to what they belong to: Videos/Covers or Books/Covers
-  const folderId = await systemFolder(kind === 'book' ? 'book_covers' : 'video_covers');
+  // covers live next to what they belong to: Videos/Covers, XXX/Covers or Books/Covers
+  const folderId = await systemFolder(COVER_FOLDER[kind] || COVER_FOLDER.video);
   const ext = blob.type === 'image/png' ? 'png' : blob.type === 'image/webp' ? 'webp' : 'jpg';
   const coverId = await uploadFile(new File([blob], `cover-${fileId.slice(0, 8)}.${ext}`, { type: blob.type || 'image/jpeg' }), folderId);
   return saveMeta(fileId, { ...extra, thumb_file_id: coverId });
@@ -252,11 +254,11 @@ export async function setCover(fileId, blob, extra = {}, kind = 'video') {
 export async function autoCover(item, source, kind) {
   coverTried.add(item.id);
   const ext = (item.filename || '').split('.').pop().toLowerCase();
-  if (kind === 'video') {
+  if (kind === 'video' || kind === 'xxx') {
     const frame = await captureVideoFrame(source || fileUrl(item.id));
     if (!frame) return null;
     const extra = { ...(frame.duration ? { duration: frame.duration } : {}), ...(frame.width ? { width: frame.width, height: frame.height } : {}) };
-    return setCover(item.id, frame.blob, extra, 'video');
+    return setCover(item.id, frame.blob, extra, kind);
   }
   if (kind === 'book') {
     if (!source && item.size_bytes > 60 * 1024 * 1024) return null;

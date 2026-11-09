@@ -286,6 +286,13 @@ const MIGRATIONS = [
       db.exec('CREATE INDEX IF NOT EXISTS idx_media_meta_source ON media_meta(owner_id, source_id)');
     },
   },
+  {
+    name: 'opt-in XXX section',
+    up(db) {
+      // off by default: the section, its folder and its search hits stay hidden until the user turns it on
+      addColumn(db, 'users', 'show_xxx', 'INTEGER DEFAULT 0');
+    },
+  },
 ];
 
 const LATEST = MIGRATIONS.length;

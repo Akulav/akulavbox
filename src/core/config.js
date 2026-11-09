@@ -33,6 +33,8 @@ const config = {
   // Uploads are refused when they would leave less than this much free disk
   diskReserveBytes: Math.max(0, Number(process.env.DISK_RESERVE_MB ?? 512)) * 1024 * 1024,
   tokenTtl: process.env.TOKEN_TTL || '7d',
+  // other origins allowed to call the API from a browser (none by default)
+  corsOrigins: String(process.env.CORS_ORIGIN || '').split(',').map(s => s.trim().replace(/\/$/, '')).filter(Boolean),
 };
 
 /** Fail fast with a readable message instead of a crash on the first upload or login */

@@ -22,6 +22,8 @@ const TABS = [
   { id: 'videos', label: 'Videos', icon: 'film', key: 'v' },
   { id: 'music', label: 'Music', icon: 'music', key: 'm' },
   { id: 'books', label: 'Books', icon: 'file-text', key: 'b' },
+  // opt-in (Profile → Sections); shown in the top bar only, so the phone's bottom bar keeps six slots
+  { id: 'xxx', label: 'XXX', icon: 'flame', key: 'x', optIn: true, desktopOnly: true },
   { id: 'chat', label: 'Chat', icon: 'message', key: 'c' },
   { id: 'trash', label: 'Trash', icon: 'trash', key: 't', secondary: true },
   { id: 'profile', label: 'Profile', icon: 'user', desktopOnly: true, secondary: true, key: 'u' },
@@ -157,6 +159,8 @@ createApp({
                   </a>
                   <div class="p-1">
                     <a href="#/profile" class="menu-item"><Icon name="user" :size="16" />Profile & settings</a>
+                    <!-- phones have no room for it in the bottom bar -->
+                    <a v-if="account.show_xxx" href="#/xxx" class="menu-item md:hidden"><Icon name="flame" :size="16" />XXX</a>
                     <button class="menu-item" @click="showKeys = true"><Icon name="keyboard" :size="16" />Keyboard shortcuts<span class="kbd ml-auto">?</span></button>
                     <div class="menu-sep"></div>
                     <button class="menu-item" @click="logout"><Icon name="logout" :size="16" />Sign out</button>
@@ -187,6 +191,7 @@ createApp({
             <CustomAlbums v-else-if="route.tab === 'albums'" key="albums" :args="route.args" />
             <MediaLibrary v-else-if="route.tab === 'videos'" key="videos" kind="videos" :args="route.args" />
             <MediaLibrary v-else-if="route.tab === 'books'" key="books" kind="books" :args="route.args" />
+            <MediaLibrary v-else-if="route.tab === 'xxx' && account.show_xxx" key="xxx" kind="xxx" :args="route.args" />
             <Music v-else-if="route.tab === 'music'" key="music" />
             <ChatVoice v-else-if="route.tab === 'chat'" key="chat" />
             <Profile v-else-if="route.tab === 'profile'" key="profile" />
@@ -302,9 +307,13 @@ createApp({
       clearInterval(versionTimer);
     });
 
-    const visibleTabs = computed(() => TABS.filter(t => !t.admin || session.role === 'admin'));
-    const mobileTabs = TABS.filter(t => !t.admin && !t.secondary);
-    const mainTabs = mobileTabs;
+    const visibleTabs = computed(() => TABS.filter(t => (!t.admin || session.role === 'admin') && (!t.optIn || account.show_xxx)));
+    const mobileTabs = TABS.filter(t => !t.admin && !t.secondary && !t.desktopOnly);
+    const mainTabs = computed(() => visibleTabs.value.filter(t => !t.admin && !t.secondary));
+    // a turned-off section (or one turned off on another device) falls back to Files
+    watch(() => [route.tab, account.loaded, account.show_xxx], () => {
+      if (route.tab === 'xxx' && account.loaded && !account.show_xxx) location.hash = '#/files';
+    });
     const userMenu = ref(false);
     // close the account menu when the page changes
     watch(() => route.tab, () => { userMenu.value = false; });
@@ -358,7 +367,7 @@ createApp({
       disconnectRealtime();
       clearSession();
       forgetFolders();
-      Object.assign(account, { username: '', role: '', used_bytes: 0, quota_bytes: 0, trash_bytes: 0, profile_image: null, loaded: false });
+      Object.assign(account, { username: '', role: '', used_bytes: 0, quota_bytes: 0, trash_bytes: 0, profile_image: null, show_xxx: false, loaded: false });
       toast('Signed out');
     };
 

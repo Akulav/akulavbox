@@ -214,7 +214,7 @@ export default {
         <h2 class="font-semibold mb-4 flex items-center gap-2"><Icon name="user-plus" :size="17" class="text-accent" />Create an account</h2>
         <form class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_120px_130px_auto] gap-3 items-end" @submit.prevent="createUser">
           <div><label class="label" for="nu">Username</label><input id="nu" v-model="form.username" class="input" autocomplete="off" maxlength="32" required></div>
-          <div><label class="label" for="np">Password</label><input id="np" v-model="form.password" type="password" class="input" autocomplete="new-password" minlength="4" required></div>
+          <div><label class="label" for="np">Password</label><input id="np" v-model="form.password" type="password" class="input" autocomplete="new-password" minlength="8" required></div>
           <div><label class="label" for="nq">Storage (GB)</label><input id="nq" v-model.number="form.quotaGb" type="number" min="0.1" step="0.1" class="input" required></div>
           <div><label class="label" for="nr">Role</label><select id="nr" v-model="form.role" class="input"><option value="user">User</option><option value="admin">Admin</option></select></div>
           <button type="submit" class="btn btn-primary h-[38px]" :disabled="busy"><Icon :name="busy ? 'loader' : 'user-plus'" :size="16" />Create</button>

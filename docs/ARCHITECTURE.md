@@ -30,13 +30,15 @@ The schema version is `PRAGMA user_version`. Each entry in `MIGRATIONS` is one v
 | 5 | `album_images.added_at`, `playlist_songs.position` |
 | 6 | `chat_reads` (persistent unread counts) |
 | 7 | `media_collections`, `media_collection_items`, `downloads`, `media_meta.source_url` / `source_id` |
+| 8 | `users.show_xxx` (opt-in XXX section) |
 
 ## Authentication
 
 - JWTs carry `{ id, username, role, tv }`. `tv` must equal `users.token_version`. Bumping it (password change, admin reset, "sign out everywhere") revokes every older token.
 - `verifyUser` / `verifyAdmin` (`src/core/auth.js`) verify the signature **and** load the user, so deleted users and changed roles take effect immediately.
 - Tokens older than a day get a fresh one in the `X-Refresh-Token` response header (sliding sessions). `frontend/lib/api.js` stores it.
-- Media URLs (`<img>`, `<video>`) pass the token as `?token=`. It is redacted from logs, and `Referrer-Policy: same-origin` keeps it from leaking.
+- Media URLs (`<img>`, `<video>`) pass the token as `?token=`. It is redacted from logs, and `Referrer-Policy: same-origin` keeps it from leaking. Every user file served from the origin (except PDFs) gets a `sandbox` CSP (`mime.fileCsp`), so no uploaded file can run script next to the token.
+- Tokens are HS256 only. CORS is off unless `CORS_ORIGIN` lists origins. New passwords need `PASSWORD_MIN` (8) characters.
 - Login: rate limited per IP and per username (10 failures / 15 min), a dummy bcrypt comparison runs for unknown usernames, and usernames are matched case-insensitively.
 - `src/core/hash.js` prefers native `bcrypt` and falls back to `bcryptjs`. The hash formats are identical.
 
@@ -61,6 +63,8 @@ Photos, Music (+ Artwork), Videos (+ Covers), and Books (+ Covers) are system fo
 
 The cover and artwork sub-folders (`library.HIDDEN`) are hidden from Files listings, search and the Move picker. Their sizes still count towards the parent folder.
 
+**XXX** (+ Covers) is an opt-in video section (`optIn` in `SYSTEM`, `users.show_xxx`, toggled with `PATCH /api/user/settings`). While it is off, `library.hiddenKeys(userId)` adds both folders to the hidden set, the folder can't be opened, and its library, folder id and `kind: 'xxx'` downloads answer 403. It is never adopted by name (`noAdopt`), so a user's own "XXX" folder stays theirs. Download and trim jobs of kind `xxx` are videos stored in it (`downloader.KINDS`); "save as song" isn't offered there.
+
 ## Collections and link downloads
 
 - `media_collections` and `media_collection_items` group library items, the way `playlists` and `playlist_songs` group songs (`src/core/collections.js`, `src/modules/collections.js`). Only videos use them in the UI today, but `kind` allows books.
@@ -72,7 +76,7 @@ The cover and artwork sub-folders (`library.HIDDEN`) are hidden from Files listi
   3. If the video isn't AV1 and ffmpeg has an AV1 encoder (`libsvtav1`), it is re-encoded one at a time (`converting`). The result is kept only if smaller.
   4. `storeFile()` encrypts the media (and its thumbnail as a cover) into the Videos/Music folders. `media_meta` gets the title, creator, date, length, description and source.
   5. Filing: none. Collections and playlists are the user's own; Videos → Creators and Music → Artists group downloads by `participants`.
-- Links must be public http(s). Literal private IPs and `localhost` are refused, and yt-dlp is spawned with an argument array and `--` before the URL.
+- Links must be public http(s). Private, loopback, link-local, shared (100.64/10) and multicast addresses are refused, literal or after a DNS lookup (`checkLink`), as are `localhost`, `.local`, `.internal` and `.lan` names. Redirects the site makes later aren't checked; `DOWNLOAD_PROXY` isolates yt-dlp completely. yt-dlp is spawned with an argument array and `--` before the URL.
 - The duplicate check (`media_meta.source_id`) only looks in the folder being saved to, so a link can be kept both as a video and as a song.
 - **Sign-in cookies** (`src/core/cookies.js`): per user in `storage/private/cookies/<id>.enc` (16-byte IV, then AES-256-CTR with `MASTER_KEY`). A plain copy is written into the job's work folder only while yt-dlp runs and is removed with it. Errors that ask for sign-in get a hint pointing to Profile → Link downloads.
 - **Video → song** jobs have the url `akulavbox:video/<fileId>` and go through the same queue: decrypt to the work folder, ffprobe the audio codec, copy it when browsers play it (AAC → m4a, MP3, Opus, FLAC, Vorbis) or encode to AAC, store it in Music with the video's details, copy the cover (or grab a frame) into Artwork, and file it in the creator's playlist. Without yt-dlp, only conversions run.

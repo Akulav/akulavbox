@@ -5,7 +5,7 @@ const crypto = require('crypto');
 const { pipeline } = require('stream/promises');
 const config = require('../core/config');
 const { verifyUser, authenticate } = require('../core/auth');
-const { guessMime, isActiveContent } = require('../core/mime');
+const { guessMime, fileCsp } = require('../core/mime');
 const store = require('../core/storage');
 
 const chatDir = config.chatDir;
@@ -16,13 +16,16 @@ module.exports = async function (fastify) {
   fastify.register(require('@fastify/multipart'), { limits: { fileSize: MAX_CHAT_FILE } });
 
   // --- SOCKET.IO (REAL-TIME ENGINE & WEBRTC SIGNALING) ---
-  const io = require('socket.io')(fastify.server, { cors: { origin: '*' } });
+  // same origin only, like the API (CORS_ORIGIN adds others)
+  const io = require('socket.io')(fastify.server, { cors: { origin: config.corsOrigins.length ? config.corsOrigins : false } });
   // user_id -> number of open sockets (a user can have several tabs open)
   const connectionCounts = new Map();
   const roomOf = (userId) => `user:${userId}`;
   const emitToUser = (userId, event, payload) => io.to(roomOf(userId)).emit(event, payload);
 
-  const areFriends = (a, b) => !!db.prepare(`
+  // ids come straight from socket events: anything but a string (an object, an array) would make
+  // SQLite throw inside the event handler, which nothing catches
+  const areFriends = (a, b) => typeof a === 'string' && typeof b === 'string' && !!db.prepare(`
     SELECT 1 FROM friends WHERE status = 'accepted' AND ((user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?))
   `).get(a, b, b, a);
   const friendIdsOf = (me) => db.prepare(`
@@ -243,7 +246,9 @@ module.exports = async function (fastify) {
 
     const fileId = crypto.randomUUID();
     const destPath = path.join(chatDir, fileId);
-    await pipeline(data.file, fs.createWriteStream(destPath));
+    // a dropped connection must not leave a half-written file behind until the next restart
+    try { await pipeline(data.file, fs.createWriteStream(destPath)); }
+    catch (e) { try { fs.unlinkSync(destPath); } catch (err) { /* never written */ } return reply.code(400).send({ error: 'The upload was interrupted. Try again.' }); }
 
     if (data.file.truncated) {
       fs.unlinkSync(destPath);
@@ -278,7 +283,8 @@ module.exports = async function (fastify) {
     reply.header('Content-Type', mime);
     reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('Content-Length', fs.statSync(msg.file_path).size);
-    if (isActiveContent(mime)) reply.header('Content-Security-Policy', "sandbox; default-src 'none'");
+    const csp = fileCsp(mime);
+    if (csp) reply.header('Content-Security-Policy', csp);
     reply.header('Content-Disposition', `${download ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(msg.content || 'file')}`);
     return reply.send(fs.createReadStream(msg.file_path));
   });
@@ -305,9 +311,9 @@ module.exports = async function (fastify) {
     if (!wasOnline) for (const f of friends) emitToUser(f, 'user_online', me);
 
     socket.on('send_message', (data, ack) => {
-      const content = String(data?.content || '').trim().substring(0, 2000);
+      const content = typeof data?.content === 'string' ? data.content.trim().substring(0, 2000) : '';
       const done = typeof ack === 'function' ? ack : () => {};
-      if (!content || !data?.receiver_id || !areFriends(me, data.receiver_id)) return done({ ok: false, error: 'You can only message friends.' });
+      if (!content || !areFriends(me, data.receiver_id)) return done({ ok: false, error: 'You can only message friends.' });
       const msgId = crypto.randomUUID();
       db.prepare(`INSERT INTO messages (id, sender_id, receiver_id, content, type) VALUES (?, ?, ?, ?, 'text')`).run(msgId, me, data.receiver_id, content);
       const savedMsg = db.prepare(`SELECT ${MSG_COLS} FROM messages WHERE id = ?`).get(msgId);

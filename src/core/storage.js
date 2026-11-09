@@ -82,21 +82,25 @@ async function dirSize(dir) {
 // Permanent deletion (the trash calls this when it is emptied)
 // ---------------------------------------------------------------------------
 function purgeFile(file) {
+  // one transaction: a crash halfway must not leave references to a deleted row or a wrong quota
+  db.tx(() => {
+    db.prepare('DELETE FROM files WHERE id = ?').run(file.id);
+    // Foreign keys aren't enforced, so clean up references manually
+    db.prepare('DELETE FROM album_images WHERE file_id = ?').run(file.id);
+    db.prepare('DELETE FROM playlist_songs WHERE file_id = ?').run(file.id);
+    db.prepare('DELETE FROM song_covers WHERE file_id = ? OR cover_file_id = ?').run(file.id, file.id);
+    db.prepare('UPDATE albums SET cover_file_id = NULL WHERE cover_file_id = ?').run(file.id);
+    db.prepare('UPDATE collections SET cover_file_id = NULL WHERE cover_file_id = ?').run(file.id);
+    db.prepare('UPDATE playlists SET cover_file_id = NULL WHERE cover_file_id = ?').run(file.id);
+    db.prepare('DELETE FROM media_collection_items WHERE file_id = ?').run(file.id);
+    db.prepare('UPDATE media_collections SET cover_file_id = NULL WHERE cover_file_id = ?').run(file.id);
+    db.prepare('DELETE FROM media_meta WHERE file_id = ?').run(file.id);
+    db.prepare('UPDATE media_meta SET thumb_file_id = NULL WHERE thumb_file_id = ?').run(file.id);
+    db.prepare('UPDATE users SET used_bytes = MAX(0, used_bytes - ?) WHERE id = ?').run(file.size_bytes, file.owner_id);
+  });
+  // the data goes once the row is gone (a leftover file is an orphan the storage check removes)
   try { fs.unlinkSync(diskPathOf(file)); } catch (e) { /* already gone */ }
-  db.prepare('DELETE FROM files WHERE id = ?').run(file.id);
-  // Foreign keys aren't enforced, so clean up references manually
-  db.prepare('DELETE FROM album_images WHERE file_id = ?').run(file.id);
-  db.prepare('DELETE FROM playlist_songs WHERE file_id = ?').run(file.id);
-  db.prepare('DELETE FROM song_covers WHERE file_id = ? OR cover_file_id = ?').run(file.id, file.id);
-  db.prepare('UPDATE albums SET cover_file_id = NULL WHERE cover_file_id = ?').run(file.id);
-  db.prepare('UPDATE collections SET cover_file_id = NULL WHERE cover_file_id = ?').run(file.id);
-  db.prepare('UPDATE playlists SET cover_file_id = NULL WHERE cover_file_id = ?').run(file.id);
-  db.prepare('DELETE FROM media_collection_items WHERE file_id = ?').run(file.id);
-  db.prepare('UPDATE media_collections SET cover_file_id = NULL WHERE cover_file_id = ?').run(file.id);
-  db.prepare('DELETE FROM media_meta WHERE file_id = ?').run(file.id);
-  db.prepare('UPDATE media_meta SET thumb_file_id = NULL WHERE thumb_file_id = ?').run(file.id);
   thumbs.purge(file.owner_id, file.id);
-  db.prepare('UPDATE users SET used_bytes = MAX(0, used_bytes - ?) WHERE id = ?').run(file.size_bytes, file.owner_id);
 }
 
 /**

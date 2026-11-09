@@ -23,14 +23,20 @@ const fastify = require('fastify')({
 
 const db = require('./core/db');
 
-fastify.register(require('@fastify/cors'));
+// The app is served from this same origin, so other sites get no CORS access by default.
+// CORS_ORIGIN=https://a.example,https://b.example opens the API to those origins (e.g. a separate client).
+fastify.register(require('@fastify/cors'), { origin: config.corsOrigins.length ? config.corsOrigins : false, exposedHeaders: ['X-Refresh-Token'] });
 
 // Baseline security headers for every response
 fastify.addHook('onSend', async (request, reply, payload) => {
   // never send ?token= URLs to other sites in the Referer header
   reply.header('Referrer-Policy', 'same-origin');
   if (!reply.hasHeader('X-Content-Type-Options')) reply.header('X-Content-Type-Options', 'nosniff');
-  if (!request.url.startsWith('/shared/')) reply.header('X-Frame-Options', 'SAMEORIGIN');
+  if (!request.url.startsWith('/shared/')) {
+    reply.header('X-Frame-Options', 'SAMEORIGIN');
+    // a page opened from here (a shared link, a file) can't reach back into the signed-in window
+    reply.header('Cross-Origin-Opener-Policy', 'same-origin');
+  }
   reply.header('X-Powered-By', `${config.name}/${config.version}`);
   return payload;
 });

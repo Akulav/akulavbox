@@ -143,7 +143,7 @@ export async function copyText(text) {
 export const storage = { read, write };
 
 // Signed-in account summary (storage meter, avatar) shared by the shell and pages
-export const account = reactive({ username: '', role: '', used_bytes: 0, quota_bytes: 0, trash_bytes: 0, profile_image: null, loaded: false });
+export const account = reactive({ username: '', role: '', used_bytes: 0, quota_bytes: 0, trash_bytes: 0, profile_image: null, show_xxx: false, loaded: false });
 
 export function formatRelative(s) {
   const d = parseDbDate(s);

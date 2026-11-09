@@ -33,11 +33,19 @@ if (db.prepare('SELECT count(*) AS count FROM users').get().count === 0) {
   console.log('[db] Default admin created (username "admin", password "admin"). Change the password after signing in.');
 }
 
-/** Run fn inside a transaction (synchronous; DatabaseSync has no async work in between) */
+/**
+ * Run fn inside a transaction (synchronous; DatabaseSync has no async work in between).
+ * Nested calls join the outer transaction, so helpers like purgeFile() can use it too
+ * (a second BEGIN would throw "cannot start a transaction within a transaction").
+ */
+let txDepth = 0;
 db.tx = (fn) => {
+  if (txDepth) { txDepth++; try { return fn(); } finally { txDepth--; } }
   db.exec('BEGIN');
+  txDepth = 1;
   try { const r = fn(); db.exec('COMMIT'); return r; }
   catch (e) { db.exec('ROLLBACK'); throw e; }
+  finally { txDepth = 0; }
 };
 
 module.exports = db;

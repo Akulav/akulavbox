@@ -2,6 +2,25 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 2.8.0 (2026-11-09)
+
+### Added
+- **XXX section** for adult videos, off by default. Turn it on in Profile → Sections. It works like Videos (Creators, Collections, All videos, link downloads, trim, covers) but keeps everything in its own locked “XXX” folder, with its own downloads list and collections, and never sends anything to Videos or Music. While it’s off, the tab, the folder and its files are hidden from Files, search and Move. Covers can be blurred until you point at them (per device). On phones it’s in the account menu.
+
+### Security
+- **Every file opened from the server is sandboxed** (no scripts on the AkulavBox origin), not only HTML and SVG. The file type a browser claims on upload was trusted before, so a file could be served as an unlisted active type. PDFs are the exception, since browsers won’t show a sandboxed PDF.
+- **Upload types are validated**: anything that isn’t a plain `type/subtype` is replaced by the type from the file name.
+- **Link downloads check where a name points**: a public-looking name that resolves into the server’s own network is refused, as are IPv4-mapped loopback addresses, shared address space (100.64/10), multicast and `.lan` names.
+- **Login tokens must be HS256**, and malformed tokens in `?token=` are rejected cleanly.
+- **No cross-site API access by default**: CORS was open to every site; it is now same-origin unless `CORS_ORIGIN` lists others. Pages get `Cross-Origin-Opener-Policy: same-origin`.
+- **New passwords need at least 8 characters** (was 4). Existing passwords keep working, and shorter ones are flagged as easy to guess at sign-in.
+
+### Fixed
+- A chat socket event with a non-text id could throw inside the event handler.
+- An interrupted chat upload left a half-written file until the next restart.
+- Permanently deleting a file now updates every reference and the quota in one transaction.
+- Trashed files could be renamed, added to playlists or used as song artwork.
+
 ## 2.7.6 (2026-11-08)
 
 ### Changed

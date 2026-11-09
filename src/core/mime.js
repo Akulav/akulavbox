@@ -35,13 +35,30 @@ function extOf(filename = '') {
   return i === -1 ? '' : filename.slice(i + 1).toLowerCase();
 }
 
+// A plain "type/subtype" (the browser's upload type is client input; anything odd is ignored)
+const MIME_RE = /^[a-z0-9][a-z0-9!#$&^_.+-]{0,63}\/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}$/;
+
 function guessMime(filename, provided) {
-  if (provided && provided !== 'application/octet-stream') return provided;
-  return MAP[extOf(filename)] || provided || 'application/octet-stream';
+  const p = String(provided || '').split(';')[0].trim().toLowerCase();
+  if (p && p !== 'application/octet-stream' && MIME_RE.test(p)) return p;
+  return MAP[extOf(filename)] || 'application/octet-stream';
 }
 
 function isActiveContent(mime) {
   return ACTIVE.has((mime || '').split(';')[0].trim().toLowerCase());
 }
 
-module.exports = { guessMime, isActiveContent, extOf };
+/**
+ * CSP for a user file opened directly on our origin. Everything is sandboxed (no
+ * scripts, no same-origin access to the login token), not only the types known to
+ * be active: a stored type is whatever the uploader's browser claimed. PDFs are the
+ * exception, since browsers refuse to show a PDF in a sandboxed document; their
+ * viewer runs in its own isolated origin anyway.
+ */
+function fileCsp(mime) {
+  const m = (mime || '').split(';')[0].trim().toLowerCase();
+  if (m === 'application/pdf') return null;
+  return "sandbox; default-src 'none'; img-src 'self' data: blob:; media-src 'self' data: blob:; style-src 'unsafe-inline'";
+}
+
+module.exports = { guessMime, isActiveContent, fileCsp, extOf };

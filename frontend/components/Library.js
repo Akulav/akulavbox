@@ -257,7 +257,7 @@ export const MetaEditor = {
                   <div class="flex flex-wrap gap-1 mt-2">
                     <input ref="coverInput" type="file" accept="image/*" class="hidden" @change="onCoverPicked">
                     <button type="button" class="btn btn-sm flex-1" @click="coverInput.click()" :disabled="coverBusy">{{ coverBusy ? 'Saving…' : 'Upload' }}</button>
-                    <button type="button" class="btn btn-sm flex-1" @click="regenerate" :disabled="coverBusy" :title="kind === 'videos' ? 'Grab a frame from the video' : 'Use the book’s own cover'">Auto</button>
+                    <button type="button" class="btn btn-sm flex-1" @click="regenerate" :disabled="coverBusy" :title="kind !== 'books' ? 'Grab a frame from the video' : 'Use the book’s own cover'">Auto</button>
                   </div>
                 </div>
               </div>
@@ -336,6 +336,8 @@ export const MetaEditor = {
     </Teleport>`,
   setup(props, { emit }) {
     const L = computed(() => labelsFor(props.kind));
+    // where a new cover is kept (lib/library.js COVER_FOLDER)
+    const coverKind = computed(() => ({ books: 'book', xxx: 'xxx' })[props.kind] || 'video');
     const bulk = computed(() => props.items.length > 1);
     const it = props.items[0] || {};
     const form = reactive({
@@ -383,16 +385,16 @@ export const MetaEditor = {
       e.target.value = '';
       if (!f) return;
       coverBusy.value = true;
-      try { const meta = await setCover(it.id, f, {}, props.kind === 'books' ? 'book' : 'video'); Object.assign(it, { thumb_file_id: meta.thumb_file_id }); coverVersion.value = meta.thumb_file_id; emit('saved'); }
+      try { const meta = await setCover(it.id, f, {}, coverKind.value); Object.assign(it, { thumb_file_id: meta.thumb_file_id }); coverVersion.value = meta.thumb_file_id; emit('saved'); }
       catch (err) { toast.error(err.message); }
       finally { coverBusy.value = false; }
     }
     async function regenerate() {
       coverBusy.value = true;
       try {
-        const meta = await autoCover(it, null, props.kind === 'videos' ? 'video' : 'book');
+        const meta = await autoCover(it, null, coverKind.value);
         if (meta) { Object.assign(it, { thumb_file_id: meta.thumb_file_id, duration: meta.duration ?? it.duration }); coverVersion.value = meta.thumb_file_id; emit('saved'); }
-        else toast.error(props.kind === 'videos' ? 'Couldn’t read a frame from this video in your browser.' : 'This book doesn’t include a cover image that can be read here.');
+        else toast.error(props.kind !== 'books' ? 'Couldn’t read a frame from this video in your browser.' : 'This book doesn’t include a cover image that can be read here.');
       } finally { coverBusy.value = false; }
     }
 

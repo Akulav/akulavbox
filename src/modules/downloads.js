@@ -2,29 +2,31 @@ const { verifyUser, verifyAdmin } = require('../core/auth');
 const dl = require('../core/downloader');
 const tools = require('../core/tools');
 const cookies = require('../core/cookies');
+const lib = require('../core/library');
 
 module.exports = async function (fastify) {
   // Is the downloader ready? (yt-dlp, ffmpeg, AV1, and whether they're being installed right now)
   fastify.get('/api/downloads/status', { preHandler: verifyUser }, async () => dl.status());
 
-  // My recent downloads: ?kind=video|audio
+  // My recent downloads: ?kind=video|audio|xxx
   fastify.get('/api/downloads', { preHandler: verifyUser }, async (request) => {
-    const kind = ['video', 'audio'].includes(request.query.kind) ? request.query.kind : null;
+    const kind = Object.hasOwn(dl.KINDS, request.query.kind) ? request.query.kind : null;
     return dl.listJobs(request.user.id, kind);
   });
 
-  // { url, kind: 'video' | 'audio' }. Playlist and channel links become one download per entry.
+  // { url, kind: 'video' | 'audio' | 'xxx' }. Playlist and channel links become one download per entry.
   // `akulavbox:video/<id>` links (a retried "save as song") are conversions of my own videos.
   fastify.post('/api/downloads', { preHandler: verifyUser }, async (request, reply) => {
     const s = dl.status();
     if (!s.enabled) return reply.code(403).send({ error: 'Link downloads are turned off on this server.' });
     const urls = String(request.body?.url || '').split(/\s+/).map(x => x.trim()).filter(Boolean).slice(0, 50);
-    const kind = request.body?.kind === 'audio' ? 'audio' : 'video';
+    const kind = Object.hasOwn(dl.KINDS, request.body?.kind) ? request.body.kind : 'video';
+    if (kind === 'xxx' && !lib.showsXxx(request.user.id)) return reply.code(403).send({ error: 'The XXX section is turned off. Turn it on in Profile.' });
     if (!urls.length) return reply.code(400).send({ error: 'Paste a link first.' });
     const internal = urls.filter(u => dl.isInternal(u));
     const links = urls.filter(u => !dl.isInternal(u));
     if (links.length && !s.available) return reply.code(503).send({ error: s.installing ? 'The downloader is still being set up. Try again in a minute.' : 'The downloader isn’t available on this server.' });
-    for (const u of links) { const problem = dl.checkUrl(u); if (problem) return reply.code(400).send({ error: problem }); }
+    for (const u of links) { const problem = await dl.checkLink(u); if (problem) return reply.code(400).send({ error: problem }); }
     const ids = [
       ...links.map(u => dl.addJob(request.user.id, u, kind)),
       ...internal.map(u => dl.addInternal(request.user.id, u)).filter(Boolean),

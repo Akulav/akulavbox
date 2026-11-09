@@ -3,7 +3,8 @@ const { verifyUser } = require('../core/auth');
 const lib = require('../core/library');
 
 // Sections backed by a locked folder + per-file details (title, participants, tags…)
-const SECTIONS = { videos: 'videos', books: 'books', music: 'music', photos: 'gallery' };
+const SECTIONS = { videos: 'videos', books: 'books', music: 'music', photos: 'gallery', xxx: 'xxx' };
+const XXX_OFF = 'The XXX section is turned off. Turn it on in Profile.';
 
 const TEXT_FIELDS = { title: 300, details: 10000, date: 40, series: 300 };
 
@@ -76,7 +77,9 @@ module.exports = async function (fastify) {
 
   // Folder id for a locked folder (created on first use)
   fastify.get('/api/library/folder/:key', { preHandler: verifyUser }, async (request, reply) => {
-    if (!lib.SYSTEM[request.params.key]) return reply.code(404).send({ error: 'Unknown folder' });
+    const def = lib.SYSTEM[request.params.key];
+    if (!def) return reply.code(404).send({ error: 'Unknown folder' });
+    if (def.optIn && !lib.showsXxx(request.user.id)) return reply.code(403).send({ error: XXX_OFF });
     return { id: lib.ensureSystemFolder(request.user.id, request.params.key) };
   });
 
@@ -84,6 +87,7 @@ module.exports = async function (fastify) {
   fastify.get('/api/library/:section', { preHandler: verifyUser }, async (request, reply) => {
     const key = SECTIONS[request.params.section];
     if (!key) return reply.code(404).send({ error: 'Unknown section' });
+    if (lib.SYSTEM[key].optIn && !lib.showsXxx(request.user.id)) return reply.code(403).send({ error: XXX_OFF });
     const folderId = lib.ensureSystemFolder(request.user.id, key);
     const items = db.prepare(`
       SELECT f.id, f.filename, f.size_bytes, f.mime_type, f.is_encrypted, f.public_hash, f.created_at, ${lib.META_COLS}

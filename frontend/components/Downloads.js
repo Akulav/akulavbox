@@ -8,7 +8,7 @@ const STATUS_LABEL = { queued: 'Waiting', probing: 'Reading link…', downloadin
 let statusCache = null;
 
 /**
- * "Paste a link" bar for Videos (kind="video") and Music (kind="audio").
+ * "Paste a link" bar for Videos (kind="video"), XXX (kind="xxx") and Music (kind="audio").
  * Emits `finished` whenever a download lands in the library, and `open` with a file id.
  */
 export default {
@@ -36,7 +36,7 @@ export default {
         <span>The downloader couldn’t be set up<template v-if="st.error">: {{ st.error }}</template>.
           <template v-if="session.role === 'admin'"> Try again from the Admin page.</template><template v-else> Ask the admin to check the Admin page.</template></span>
       </p>
-      <p v-else-if="!jobs.length" class="text-[12px] text-faint mt-2">Saved to your {{ kind === 'audio' ? 'Music' : 'Videos' }} with title, cover and creator, and listed under the {{ kind === 'audio' ? 'artist in Artists' : 'creator in Creators' }}.<template v-if="kind === 'video' && st.av1"> Videos are kept in AV1 to save space.</template> Tip: paste a link anywhere on this page.</p>
+      <p v-else-if="!jobs.length" class="text-[12px] text-faint mt-2">Saved to your {{ kind === 'audio' ? 'Music' : kind === 'xxx' ? 'XXX section' : 'Videos' }} with title, cover and creator, and listed under the {{ kind === 'audio' ? 'artist in Artists' : 'creator in Creators' }}.<template v-if="kind !== 'audio' && st.av1"> Videos are kept in AV1 to save space.</template> Tip: paste a link anywhere on this page.</p>
 
       <p v-if="summary" class="mt-3 text-[12.5px] text-muted flex items-center gap-2"><Icon name="loader" :size="13" class="text-accent" />{{ summary }}</p>
       <ul v-if="jobs.length" class="mt-3 divide-y divide-line border-t border-line">

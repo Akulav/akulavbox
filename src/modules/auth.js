@@ -1,7 +1,7 @@
 const db = require('../core/db');
 const bcrypt = require('../core/hash');
 const config = require('../core/config');
-const { signToken } = require('../core/auth');
+const { signToken, PASSWORD_MIN } = require('../core/auth');
 
 // A real hash to compare against when the username doesn't exist, so a wrong
 // username takes as long as a wrong password (no account discovery by timing).
@@ -57,7 +57,8 @@ module.exports = async function (fastify) {
     failures.delete(userKey);
     db.prepare("UPDATE users SET last_login_at = datetime('now') WHERE id = ?").run(user.id);
 
-    const weak = WEAK.has(password.toLowerCase()) || password.toLowerCase() === user.username.toLowerCase() || password.length < 6;
+    // older accounts may still have a password shorter than today's minimum: nudge them to change it
+    const weak = WEAK.has(password.toLowerCase()) || password.toLowerCase() === user.username.toLowerCase() || password.length < PASSWORD_MIN;
     return { token: signToken(user), role: user.role, id: user.id, username: user.username, weak_password: weak };
   });
 };

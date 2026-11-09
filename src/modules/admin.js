@@ -5,7 +5,7 @@ const path = require('path');
 const bcrypt = require('../core/hash');
 const crypto = require('crypto');
 const config = require('../core/config');
-const { verifyAdmin } = require('../core/auth');
+const { verifyAdmin, PASSWORD_MIN } = require('../core/auth');
 const thumbs = require('../core/thumbs');
 const store = require('../core/storage');
 const cookies = require('../core/cookies');
@@ -30,7 +30,7 @@ module.exports = async function (fastify) {
     const role = request.body?.role === 'admin' ? 'admin' : 'user';
     if (!username || !password) return reply.code(400).send({ error: 'Username and password are required' });
     if (!USERNAME_RE.test(username)) return reply.code(400).send({ error: 'Usernames are 1–32 letters, numbers, spaces, dots, dashes or underscores.' });
-    if (String(password).length < 4) return reply.code(400).send({ error: 'Passwords need at least 4 characters.' });
+    if (String(password).length < PASSWORD_MIN) return reply.code(400).send({ error: `Passwords need at least ${PASSWORD_MIN} characters.` });
     if (db.prepare('SELECT 1 FROM users WHERE username = ? COLLATE NOCASE').get(username)) return reply.code(400).send({ error: 'That username is already taken.' });
 
     const id = crypto.randomUUID();
@@ -83,7 +83,7 @@ module.exports = async function (fastify) {
   // Force password reset (signs the user out everywhere)
   fastify.patch('/api/admin/users/:id/password', { preHandler: verifyAdmin }, async (request, reply) => {
     const newPassword = String(request.body?.newPassword || '');
-    if (newPassword.length < 4) return reply.code(400).send({ error: 'Passwords need at least 4 characters.' });
+    if (newPassword.length < PASSWORD_MIN) return reply.code(400).send({ error: `Passwords need at least ${PASSWORD_MIN} characters.` });
     const hash = await bcrypt.hash(newPassword, 10);
     const r = db.prepare('UPDATE users SET password_hash = ?, token_version = COALESCE(token_version, 0) + 1 WHERE id = ?').run(hash, request.params.id);
     return r.changes ? { success: true } : notFound(reply);

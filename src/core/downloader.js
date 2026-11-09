@@ -39,6 +39,15 @@ const PLAYLIST_MAX = Math.max(1, Number(process.env.DOWNLOAD_PLAYLIST_MAX) || 20
 const ENABLED = process.env.DOWNLOADS !== 'off';
 const PROXY = (process.env.DOWNLOAD_PROXY || '').trim();
 const CONVERT_RE = /^akulavbox:video\/([\w-]{1,64})$/;
+
+// Job kinds: what is downloaded, and which locked folders it lands in.
+// 'xxx' is a video kept in the opt-in XXX section instead of Videos.
+const KINDS = {
+  video: { media: 'video', folder: 'videos', covers: 'video_covers' },
+  xxx:   { media: 'video', folder: 'xxx',    covers: 'xxx_covers' },
+  audio: { media: 'audio', folder: 'music',  covers: 'music_art' },
+};
+const kindOf = (k) => KINDS[k] || KINDS.video;
 // akulavbox:trim/<fileId>?s=<start>&e=<end>&exact=0|1&copy=0|1
 const TRIM_RE = /^akulavbox:trim\/([\w-]{1,64})\?(s=[\d.]+&e=[\d.]+&exact=[01]&copy=[01])$/;
 
@@ -79,14 +88,42 @@ const status = () => {
 
 // --- link checks ------------------------------------------------------------
 // Only public http(s) links: no local files, and no addresses inside the server's own network.
-const PRIVATE = [/^127\./, /^10\./, /^192\.168\./, /^172\.(1[6-9]|2\d|3[01])\./, /^169\.254\./, /^0\./, /^::1$/, /^f[cd]/i, /^fe80/i];
+const PRIVATE = new net.BlockList();
+for (const [a, bits] of [['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8], ['169.254.0.0', 16], ['172.16.0.0', 12],
+  ['192.0.0.0', 24], ['192.168.0.0', 16], ['198.18.0.0', 15], ['224.0.0.0', 4], ['240.0.0.0', 4]]) PRIVATE.addSubnet(a, bits, 'ipv4');
+for (const [a, bits] of [['::', 128], ['::1', 128], ['fc00::', 7], ['fe80::', 10], ['ff00::', 8]]) PRIVATE.addSubnet(a, bits, 'ipv6');
+function isPrivateIp(ip) {
+  const v4 = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip); // IPv4-mapped IPv6 (::ffff:127.0.0.1)
+  if (v4) ip = v4[1];
+  const family = net.isIP(ip);
+  return !!family && PRIVATE.check(ip, family === 4 ? 'ipv4' : 'ipv6');
+}
+const LOCAL_LINK = 'Links to this server’s own network can’t be downloaded.';
+
 function checkUrl(raw) {
   let u;
   try { u = new URL(String(raw || '').trim()); } catch (e) { return 'That doesn’t look like a link.'; }
   if (!['http:', 'https:'].includes(u.protocol)) return 'Only http and https links can be downloaded.';
-  const host = u.hostname.replace(/^\[|\]$/g, '');
-  if (host === 'localhost' || host.endsWith('.local') || host.endsWith('.internal')) return 'Links to this server’s own network can’t be downloaded.';
-  if (net.isIP(host) && PRIVATE.some(re => re.test(host))) return 'Links to this server’s own network can’t be downloaded.';
+  const host = u.hostname.replace(/^\[|\]$/g, '').replace(/\.$/, '').toLowerCase();
+  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.internal') || host.endsWith('.lan')) return LOCAL_LINK;
+  if (net.isIP(host) && isPrivateIp(host)) return LOCAL_LINK;
+  return null;
+}
+
+/**
+ * checkUrl plus DNS: a public-looking name that points into the server's own network
+ * (127.0.0.1.nip.io, a LAN router's name) is refused too. Redirects made later by the
+ * site itself aren't covered, so DOWNLOAD_PROXY is the way to isolate yt-dlp completely.
+ */
+async function checkLink(raw) {
+  const problem = checkUrl(raw);
+  if (problem) return problem;
+  const host = new URL(String(raw).trim()).hostname.replace(/^\[|\]$/g, '');
+  if (net.isIP(host) || PROXY) return null; // with a proxy, the proxy resolves names
+  try {
+    const addrs = await require('dns').promises.lookup(host, { all: true, verbatim: true });
+    if (addrs.some(a => isPrivateIp(a.address))) return LOCAL_LINK;
+  } catch (e) { /* unknown name: yt-dlp reports it with a clearer message */ }
   return null;
 }
 
@@ -135,6 +172,9 @@ function addTrim(ownerId, fileId, { start, end, exact, copy }) {
   const s = Math.max(0, Number(start) || 0), e = Number(end);
   if (!(e > s + 0.2)) return { error: 'Choose an end after the start (at least a fraction of a second).' };
   const sections = { [lib.ensureSystemFolder(ownerId, 'videos')]: 'video', [lib.ensureSystemFolder(ownerId, 'music')]: 'audio' };
+  // the XXX folder only exists once the section was used; don't create it here
+  const xxx = db.prepare("SELECT id FROM folders WHERE owner_id = ? AND system_key = 'xxx'").get(ownerId);
+  if (xxx) sections[xxx.id] = 'xxx';
   const v = db.prepare(`SELECT f.id, f.filename, f.folder_id, m.title, m.duration FROM files f LEFT JOIN media_meta m ON m.file_id = f.id
     WHERE f.id = ? AND f.owner_id = ? AND f.trashed_at IS NULL`).get(String(fileId), ownerId);
   const kind = v && sections[v.folder_id];
@@ -342,7 +382,8 @@ async function run(id) {
 
 async function download(job, work) {
   const { id, owner_id: ownerId } = job;
-  const kind = job.kind === 'audio' ? 'audio' : 'video';
+  const target = kindOf(job.kind);
+  const kind = target.media;
   const t = detect();
   if (!t.ytVersion) throw new Error('The downloader isn’t ready yet.');
   const cookieFile = cookies.writeFor(ownerId, work);
@@ -352,8 +393,7 @@ async function download(job, work) {
   // --socket-timeout: a dead connection fails in 30 s instead of yt-dlp's default retry marathon
   const yt = (args, onLine, stallMs = STALL_MS) => spawnFor(id, t.ytdlp, [...common, '--socket-timeout', '30', ...args], { onLine, name: 'yt-dlp', stallMs })
     .catch((e) => { throw explain(e, !!cookieFile); });
-  const key = kind === 'video' ? 'videos' : 'music';
-  const folderId = lib.ensureSystemFolder(ownerId, key);
+  const folderId = lib.ensureSystemFolder(ownerId, target.folder);
 
   // 1. read the link's details (playlists only list their entries; a big channel can take a while)
   const info = JSON.parse(await yt(['-J', '--flat-playlist', '--', job.url], null, Math.max(STALL_MS, 5 * 60 * 1000)));
@@ -372,7 +412,7 @@ async function download(job, work) {
         // a flat listing rarely carries tags, but when it does they repair older downloads
         if (known) { if (e.tags || e.categories) fillMissingTags(known.id, e); have++; continue; }
         if (queued.has(url)) { waiting++; continue; }
-        addJob(ownerId, url, kind, e.title || null);
+        addJob(ownerId, url, job.kind, e.title || null); // the entries go where the playlist was going
         queued.add(url);
         fresh++;
       }
@@ -398,7 +438,7 @@ async function download(job, work) {
     return;
   }
 
-  const u =db.prepare('SELECT quota_bytes, used_bytes FROM users WHERE id = ?').get(ownerId);
+  const u = db.prepare('SELECT quota_bytes, used_bytes FROM users WHERE id = ?').get(ownerId);
   const left = u.quota_bytes - u.used_bytes;
   const approx = info.filesize || info.filesize_approx || 0;
   if (approx && approx > left) throw new Error('Not enough storage left for this download');
@@ -462,7 +502,7 @@ async function download(job, work) {
   const filename = `${title}.${path.extname(media.n).slice(1).toLowerCase()}`;
   const file = await store.storeFile({ ownerId, folderId, srcPath: media.p, filename, mime: guessMime(filename) });
   const thumb = files.find(f => f.n.startsWith('thumb.') && f.s > 0);
-  const coverId = thumb ? await storeCover(ownerId, kind === 'video' ? 'video_covers' : 'music_art', thumb.p, title) : null;
+  const coverId = thumb ? await storeCover(ownerId, target.covers, thumb.p, title) : null;
 
   // 4. details + filing by creator
   insertMeta({
@@ -688,4 +728,4 @@ function resume() {
   pump();
 }
 
-module.exports = { status, detect, checkUrl, addJob, addConversions, addTrim, addInternal, isInternal, listJobs, cancel, clearFinished, pump, resume, toAv1, PLAYLIST_MAX, CONVERT_RE };
+module.exports = { status, detect, checkUrl, checkLink, KINDS, addJob, addConversions, addTrim, addInternal, isInternal, listJobs, cancel, clearFinished, pump, resume, toAv1, PLAYLIST_MAX, CONVERT_RE };

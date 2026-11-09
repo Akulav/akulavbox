@@ -50,7 +50,7 @@ export default {
           </div>
           <div>
             <label class="label" for="new">New password</label>
-            <input id="new" v-model="pw.next" type="password" class="input" autocomplete="new-password" minlength="4" required>
+            <input id="new" v-model="pw.next" type="password" class="input" autocomplete="new-password" minlength="8" required>
             <div v-if="pw.next" class="flex items-center gap-2 mt-2">
               <div class="flex gap-1 flex-1"><span v-for="i in 4" :key="i" class="h-1 flex-1 rounded-full transition-colors" :class="i <= strength.score ? strength.color : 'bg-elevated'"></span></div>
               <span class="text-xs text-muted w-20 text-right">{{ strength.label }}</span>
@@ -87,6 +87,18 @@ export default {
           <button class="btn btn-primary btn-sm" :disabled="!ck.text.trim() || ck.busy" @click="saveCookies"><Icon :name="ck.busy ? 'loader' : 'check'" :size="15" />Save cookies</button>
           <button class="btn btn-sm" @click="cookieFile.click()"><Icon name="upload" :size="15" />Pick a file</button>
           <button v-if="ck.saved" class="btn btn-ghost btn-sm !text-danger" @click="removeCookies"><Icon name="trash" :size="15" />Remove</button>
+        </div>
+      </section>
+
+      <section class="panel p-5 md:p-6">
+        <h2 class="title text-lg mb-1">Sections</h2>
+        <p class="text-muted text-[13.5px] mb-5">Saved to your account, so it applies on every device.</p>
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="min-w-0 max-w-md"><p class="font-medium text-[14px]">XXX</p><p class="text-xs text-muted">A separate, private section for adult videos, with its own downloads and collections. While it’s off, the section, its folder and its files stay hidden everywhere.</p></div>
+          <div class="seg" role="radiogroup" aria-label="XXX section">
+            <button :class="{ on: account.show_xxx }" @click="setXxx(true)" role="radio" :aria-checked="!!account.show_xxx"><Icon name="flame" :size="14" />On</button>
+            <button :class="{ on: !account.show_xxx }" @click="setXxx(false)" role="radio" :aria-checked="!account.show_xxx">Off</button>
+          </div>
         </div>
       </section>
 
@@ -208,6 +220,12 @@ export default {
       }
     }
 
+    async function setXxx(on) {
+      if (!!account.show_xxx === on) return;
+      const r = await attempt(() => api('/api/user/settings', { method: 'PATCH', body: { show_xxx: on } }), on ? 'XXX section turned on' : 'XXX section turned off and hidden');
+      if (r) account.show_xxx = r.show_xxx;
+    }
+
     const since = (s) => { const d = parseDbDate(s); return d ? d.toLocaleDateString([], { year: 'numeric', month: 'long', day: 'numeric' }) : ''; };
 
     // ---------- sign-in cookies for link downloads ----------
@@ -237,6 +255,6 @@ export default {
       loadCookies().then(() => { if (location.hash.includes('cookies')) document.getElementById('link-downloads')?.scrollIntoView({ behavior: 'smooth' }); });
     });
     return { account, session, app, pct, pw, strength, themes, theme, setTheme, motion, setMotion, fileInputRef, cropImageSrc, cropperImageRef,
-      onFileSelected, cancelCrop, confirmCrop, removeAvatar, changePassword, formatBytes, since, ck, cookieFile, saveCookies, onCookieFile, removeCookies };
+      onFileSelected, cancelCrop, confirmCrop, removeAvatar, changePassword, setXxx, formatBytes, since, ck, cookieFile, saveCookies, onCookieFile, removeCookies };
   },
 };

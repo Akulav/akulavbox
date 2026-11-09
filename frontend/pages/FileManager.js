@@ -10,8 +10,8 @@ import { kindOf, iconFor, tintFor, isImageKind } from '../lib/filetypes.js';
 import { thumbUrl, SECTION_OF, ROUTE_OF, ACCEPTS_LABEL, compareText } from '../lib/library.js';
 import { useRenderLimit } from '../lib/lists.js';
 
-const SYS_ICON = { gallery: 'images', music: 'music', music_art: 'image', videos: 'film', video_covers: 'image', books: 'file-text', book_covers: 'image' };
-const SYS_ORDER = ['gallery', 'music', 'music_art', 'videos', 'video_covers', 'books', 'book_covers'];
+const SYS_ICON = { gallery: 'images', music: 'music', music_art: 'image', videos: 'film', video_covers: 'image', books: 'file-text', book_covers: 'image', xxx: 'flame', xxx_covers: 'image' };
+const SYS_ORDER = ['gallery', 'music', 'music_art', 'videos', 'video_covers', 'books', 'book_covers', 'xxx', 'xxx_covers'];
 
 // Locked library folders get a solid tile, their section's icon and a lock badge
 const FolderGlyph = {
@@ -666,7 +666,7 @@ export default {
 
     // ---------- locked library folders ----------
     const BOOK_EXT = /\.(pdf|epub|mobi|azw3?|djvu|fb2|cbz|cbr|txt)$/i;
-    const ACCEPTS = { gallery: 'image', music_art: 'image', video_covers: 'image', book_covers: 'image', music: 'audio', videos: 'video', books: 'book' };
+    const ACCEPTS = { gallery: 'image', music_art: 'image', video_covers: 'image', book_covers: 'image', xxx_covers: 'image', music: 'audio', videos: 'video', xxx: 'video', books: 'book' };
     function fits(systemKey, kind, name = '') {
       const want = ACCEPTS[systemKey];
       if (!want) return true;

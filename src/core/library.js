@@ -20,12 +20,26 @@ const SYSTEM = {
   video_covers: { name: 'Covers',  section: 'Videos', accepts: 'image', parent: 'videos', role: 'Video cover images' },
   books:        { name: 'Books',   section: 'Books',  accepts: 'book' },
   book_covers:  { name: 'Covers',  section: 'Books',  accepts: 'image', parent: 'books', role: 'Book cover images' },
+  // Opt-in (users.show_xxx). Never adopted by name: a user's own "XXX" folder may hold anything.
+  xxx:          { name: 'XXX',     section: 'XXX',    accepts: 'video', optIn: true, noAdopt: true },
+  xxx_covers:   { name: 'Covers',  section: 'XXX',    accepts: 'image', parent: 'xxx', optIn: true, role: 'XXX cover images' },
 };
 const ORDER = Object.keys(SYSTEM);
 // Covers and artwork are managed by their section, so Files doesn't show them:
-// Files shows just Photos, Music, Videos and Books.
+// Files shows just Photos, Music, Videos and Books (and XXX when it's turned on).
 const HIDDEN = Object.keys(SYSTEM).filter(k => SYSTEM[k].parent);
-const HIDDEN_SQL = `(${HIDDEN.map(k => `'${k}'`).join(', ')})`;
+const sqlList = (keys) => `(${keys.map(k => `'${k}'`).join(', ')})`;
+const HIDDEN_SQL = sqlList(HIDDEN);
+const OPT_IN = Object.keys(SYSTEM).filter(k => SYSTEM[k].optIn);
+
+/** Has this user turned the XXX section on? */
+const showsXxx = (userId) => !!db.prepare('SELECT show_xxx FROM users WHERE id = ?').get(userId)?.show_xxx;
+
+/** System folders Files, search and the Move picker leave out for this user */
+function hiddenKeys(userId) {
+  return showsXxx(userId) ? HIDDEN : [...new Set([...HIDDEN, ...OPT_IN])];
+}
+const hiddenSql = (userId) => sqlList(hiddenKeys(userId));
 
 const BOOK_EXT = ['pdf', 'epub', 'mobi', 'azw', 'azw3', 'djvu', 'fb2', 'cbz', 'cbr', 'txt'];
 const IMAGE_EXT = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'bmp', 'heic', 'heif', 'svg', 'tif', 'tiff'];
@@ -69,6 +83,7 @@ function ensureSystemFolder(userId, key) {
   db.exec('BEGIN');
   try {
     for (const [key, def] of Object.entries(SYSTEM)) {
+      if (def.noAdopt) continue;
       const names = def.parent ? (def.legacy || []) : [def.name, ...(def.legacy || [])];
       for (const legacyName of names) {
         const rows = db.prepare('SELECT id, owner_id FROM folders WHERE name = ? AND parent_id IS NULL AND system_key IS NULL AND trashed_at IS NULL').all(legacyName);
@@ -141,4 +156,4 @@ function deleteMetaFor(fileId) {
   db.prepare('UPDATE media_meta SET thumb_file_id = NULL WHERE thumb_file_id = ?').run(fileId);
 }
 
-module.exports = { SYSTEM, ORDER, HIDDEN, HIDDEN_SQL, categoryOf, ensureSystemFolder, systemKeyOf, accepts, rejectMessage, withMeta, parseList, META_COLS, deleteMetaFor };
+module.exports = { SYSTEM, ORDER, HIDDEN, HIDDEN_SQL, OPT_IN, showsXxx, hiddenKeys, hiddenSql, categoryOf, ensureSystemFolder, systemKeyOf, accepts, rejectMessage, withMeta, parseList, META_COLS, deleteMetaFor };

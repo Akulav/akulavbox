@@ -7,8 +7,8 @@ const { Transform } = require('stream');
 const bcrypt = require('../core/hash');
 const { ZipArchive } = require('archiver');
 const config = require('../core/config');
-const { verifyUser, signToken } = require('../core/auth');
-const { guessMime, isActiveContent } = require('../core/mime');
+const { verifyUser, signToken, PASSWORD_MIN } = require('../core/auth');
+const { guessMime, fileCsp } = require('../core/mime');
 const lib = require('../core/library');
 const thumbs = require('../core/thumbs');
 const store = require('../core/storage');
@@ -112,7 +112,7 @@ module.exports = async function (fastify) {
   });
 
   fastify.get('/api/folders/all', { preHandler: verifyUser }, async (request) => {
-    return db.prepare(`SELECT id, name, parent_id, system_key FROM folders WHERE owner_id = ? AND trashed_at IS NULL AND (system_key IS NULL OR system_key NOT IN ${lib.HIDDEN_SQL}) ORDER BY name COLLATE NOCASE`).all(request.user.id);
+    return db.prepare(`SELECT id, name, parent_id, system_key FROM folders WHERE owner_id = ? AND trashed_at IS NULL AND (system_key IS NULL OR system_key NOT IN ${lib.hiddenSql(request.user.id)}) ORDER BY name COLLATE NOCASE`).all(request.user.id);
   });
 
   fastify.patch('/api/folders/:id/name', { preHandler: verifyUser }, async (request, reply) => {
@@ -167,7 +167,8 @@ module.exports = async function (fastify) {
   // Folder sizes and item counts for the whole tree in one pass (1.x ran a recursive query per folder)
   function folderStats(userId) {
     const folders = db.prepare('SELECT id, parent_id, system_key FROM folders WHERE owner_id = ? AND trashed_at IS NULL').all(userId);
-    const hidden = new Set(folders.filter(f => lib.HIDDEN.includes(f.system_key)).map(f => f.id));
+    const hiddenKeys = lib.hiddenKeys(userId);
+    const hidden = new Set(folders.filter(f => hiddenKeys.includes(f.system_key)).map(f => f.id));
     const sums = db.prepare('SELECT folder_id, SUM(size_bytes) AS bytes, COUNT(*) AS n FROM files WHERE owner_id = ? AND trashed_at IS NULL GROUP BY folder_id').all(userId);
     const own = new Map(sums.map(s => [s.folder_id, s]));
     const children = new Map();
@@ -193,8 +194,10 @@ module.exports = async function (fastify) {
     const uid = request.user.id;
     const folderId = request.params.folderId || null;
     if (folderId && !ownsFolder(folderId, uid)) return reply.code(404).send({ error: 'Folder not found' });
+    // a turned-off XXX folder doesn't exist as far as Files is concerned
+    if (folderId && lib.OPT_IN.includes(lib.systemKeyOf(folderId)) && !lib.showsXxx(uid)) return reply.code(404).send({ error: 'Folder not found' });
 
-    const folders = db.prepare(`SELECT id, name, parent_id, system_key FROM folders WHERE owner_id = ? AND parent_id IS ? AND trashed_at IS NULL AND (system_key IS NULL OR system_key NOT IN ${lib.HIDDEN_SQL})`).all(uid, folderId);
+    const folders = db.prepare(`SELECT id, name, parent_id, system_key FROM folders WHERE owner_id = ? AND parent_id IS ? AND trashed_at IS NULL AND (system_key IS NULL OR system_key NOT IN ${lib.hiddenSql(uid)})`).all(uid, folderId);
     const files = db.prepare(`SELECT id, filename, size_bytes, mime_type, is_encrypted, public_hash, created_at FROM files
       WHERE owner_id = ? AND folder_id IS ? AND trashed_at IS NULL`).all(uid, folderId);
 
@@ -230,14 +233,15 @@ module.exports = async function (fastify) {
     const q = String(request.query.q || '').trim();
     if (q.length < 2) return { files: [], folders: [] };
     const like = `%${q.replace(/[%_\\]/g, m => '\\' + m)}%`;
+    const hidden = lib.hiddenSql(request.user.id);
     const files = db.prepare(`
       SELECT f.id, f.filename, f.size_bytes, f.mime_type, f.is_encrypted, f.public_hash, f.created_at, f.folder_id, d.name AS folder_name
       FROM files f LEFT JOIN folders d ON d.id = f.folder_id
-      WHERE f.owner_id = ? AND f.trashed_at IS NULL AND (d.system_key IS NULL OR d.system_key NOT IN ${lib.HIDDEN_SQL}) AND f.filename LIKE ? ESCAPE '\\' ORDER BY f.filename COLLATE NOCASE LIMIT 200
+      WHERE f.owner_id = ? AND f.trashed_at IS NULL AND (d.system_key IS NULL OR d.system_key NOT IN ${hidden}) AND f.filename LIKE ? ESCAPE '\\' ORDER BY f.filename COLLATE NOCASE LIMIT 200
     `).all(request.user.id, like);
     const folders = db.prepare(`
       SELECT id, name, parent_id, system_key, (system_key IS NOT NULL) AS is_system FROM folders
-      WHERE owner_id = ? AND trashed_at IS NULL AND (system_key IS NULL OR system_key NOT IN ${lib.HIDDEN_SQL}) AND name LIKE ? ESCAPE '\\' ORDER BY name COLLATE NOCASE LIMIT 50
+      WHERE owner_id = ? AND trashed_at IS NULL AND (system_key IS NULL OR system_key NOT IN ${hidden}) AND name LIKE ? ESCAPE '\\' ORDER BY name COLLATE NOCASE LIMIT 50
     `).all(request.user.id, like);
     return { files, folders };
   });
@@ -363,7 +367,7 @@ module.exports = async function (fastify) {
   fastify.patch('/api/files/:id/name', { preHandler: verifyUser }, async (request, reply) => {
     const name = cleanName(request.body?.name);
     if (!name) return reply.code(400).send({ error: 'File name is required' });
-    const file = db.prepare('SELECT mime_type, folder_id FROM files WHERE id = ? AND owner_id = ?').get(request.params.id, request.user.id);
+    const file = db.prepare('SELECT mime_type, folder_id FROM files WHERE id = ? AND owner_id = ? AND trashed_at IS NULL').get(request.params.id, request.user.id);
     if (!file) return reply.code(404).send({ error: 'File not found' });
     const sysKey = lib.systemKeyOf(file.folder_id);
     if (sysKey && !lib.accepts(sysKey, name, guessMime(name))) return reply.code(400).send({ error: `That name would change the file type. ${lib.rejectMessage(sysKey)}` });
@@ -463,8 +467,9 @@ module.exports = async function (fastify) {
     reply.header('ETag', etag);
     reply.header('Cache-Control', 'private, no-cache');
     if (!range && request.headers['if-none-match'] === etag) { reply.removeHeader('Content-Length'); return reply.code(304).send(); }
-    // Uploaded HTML/SVG must never run scripts on our origin (would expose the login token)
-    if (isActiveContent(mime)) reply.header('Content-Security-Policy', "sandbox; default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'");
+    // Uploaded files must never run scripts on our origin (that would expose the login token)
+    const csp = fileCsp(mime);
+    if (csp) reply.header('Content-Security-Policy', csp);
 
     const safeName = encodeURIComponent(file.filename);
     reply.header('Content-Disposition', `${download ? 'attachment' : 'inline'}; filename*=UTF-8''${safeName}`);
@@ -475,9 +480,17 @@ module.exports = async function (fastify) {
 
   // --- USER PROFILE & SETTINGS ---
   fastify.get('/api/user/profile', { preHandler: verifyUser }, async (request) => {
-    const p = db.prepare('SELECT id, username, role, quota_bytes, used_bytes, profile_image, created_at FROM users WHERE id = ?').get(request.user.id);
+    const p = db.prepare('SELECT id, username, role, quota_bytes, used_bytes, profile_image, created_at, show_xxx FROM users WHERE id = ?').get(request.user.id);
     const t = db.prepare('SELECT COALESCE(SUM(size_bytes), 0) AS bytes FROM files WHERE owner_id = ? AND trashed_at IS NOT NULL').get(request.user.id);
-    return { ...p, trash_bytes: t.bytes };
+    return { ...p, show_xxx: !!p.show_xxx, trash_bytes: t.bytes };
+  });
+
+  // Account settings that follow the user to every device: { show_xxx }
+  fastify.patch('/api/user/settings', { preHandler: verifyUser }, async (request, reply) => {
+    const b = request.body || {};
+    if (b.show_xxx === undefined) return reply.code(400).send({ error: 'Nothing to change' });
+    db.prepare('UPDATE users SET show_xxx = ? WHERE id = ?').run(b.show_xxx ? 1 : 0, request.user.id);
+    return { success: true, show_xxx: !!b.show_xxx };
   });
 
   fastify.patch('/api/user/profile', { preHandler: verifyUser }, async (request, reply) => {
@@ -492,7 +505,7 @@ module.exports = async function (fastify) {
   // Changing the password signs out every other session; this one gets a fresh token
   fastify.patch('/api/user/password', { preHandler: verifyUser }, async (request, reply) => {
     const { currentPassword, newPassword } = request.body || {};
-    if (!newPassword || String(newPassword).length < 4) return reply.code(400).send({ error: 'New password must be at least 4 characters' });
+    if (!newPassword || String(newPassword).length < PASSWORD_MIN) return reply.code(400).send({ error: `New password must be at least ${PASSWORD_MIN} characters.` });
     const user = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(request.user.id);
     if (!user || !(await bcrypt.compare(String(currentPassword || ''), user.password_hash))) {
       return reply.code(400).send({ error: 'Current password is incorrect' });

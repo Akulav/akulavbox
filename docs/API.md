@@ -41,27 +41,28 @@ All endpoints are JSON unless noted. Authenticate with `Authorization: Bearer <t
 ## Account
 | Method | Path | |
 | --- | --- | --- |
-| GET | `/api/user/profile` | Includes `used_bytes`, `quota_bytes`, `trash_bytes` |
+| GET | `/api/user/profile` | Includes `used_bytes`, `quota_bytes`, `trash_bytes`, `show_xxx` |
 | PATCH | `/api/user/profile` | `{ profile_image: dataUrl \| null }` |
-| PATCH | `/api/user/password` | `{ currentPassword, newPassword }` → `{ token }`. Other sessions are revoked |
+| PATCH | `/api/user/settings` | `{ show_xxx: boolean }`: turn the XXX section on or off for the account |
+| PATCH | `/api/user/password` | `{ currentPassword, newPassword }` → `{ token }`. At least 8 characters. Other sessions are revoked |
 
 ## Library (photos, music, videos, books)
 | Method | Path | |
 | --- | --- | --- |
-| GET | `/api/library/folder/:key` | The id of a locked folder (`gallery`, `music`, `music_art`, `videos`, `video_covers`, `books`, `book_covers`) |
-| GET | `/api/library/:section` | `photos` / `videos` / `books` / `music` items with details |
+| GET | `/api/library/folder/:key` | The id of a locked folder (`gallery`, `music`, `music_art`, `videos`, `video_covers`, `books`, `book_covers`, `xxx`, `xxx_covers`). The XXX ones answer 403 while the section is off |
+| GET | `/api/library/:section` | `photos` / `videos` / `books` / `music` / `xxx` items with details (`xxx`: 403 while off) |
 | PATCH | `/api/library/meta/:fileId` | Title, participants, tags, details, date, series, rating, duration, thumb_file_id, progress, width, height (a video’s resolution) |
 | POST | `/api/library/meta/bulk` | `{ file_ids, add_participants, remove_participants, add_tags, remove_tags, set }` |
 
 ## Video collections
-`/api/media-collections?kind=videos` (GET: with `item_count`, `total_duration`, `display_cover_id`; POST `{ kind, title, file_ids? }`), `/api/media-collections/:id` (PATCH `{ title?, notes?, cover_file_id? }`, DELETE: the videos stay), `/:id/favorite` (PATCH), `/:id/items` (GET; POST `{ file_ids }`), `/:id/items/remove` (POST `{ file_ids }`), `/:id/order` (PUT `{ file_ids }`).
+`/api/media-collections?kind=videos|xxx|books` (GET: with `item_count`, `total_duration`, `display_cover_id`; POST `{ kind, title, file_ids? }`), `/api/media-collections/:id` (PATCH `{ title?, notes?, cover_file_id? }`, DELETE: the videos stay), `/:id/favorite` (PATCH), `/:id/items` (GET; POST `{ file_ids }`), `/:id/items/remove` (POST `{ file_ids }`), `/:id/order` (PUT `{ file_ids }`).
 
 ## Link downloads
 | Method | Path | |
 | --- | --- | --- |
 | GET | `/api/downloads/status` | `{ enabled, available, ytdlp, ffmpeg, av1, convert, installing, step, error }` |
-| GET | `/api/downloads?kind=video\|audio` | All my unfinished jobs plus the 60 latest finished: `status` is `queued`, `probing`, `downloading`, `encode_wait` (downloaded, waiting for the AV1 encoder), `converting`, `processing`, `done`, `error`, `cancelled` or `expanded` (a playlist that became one job per entry) |
-| POST | `/api/downloads` | `{ url, kind }`. Several links can be separated by spaces. `akulavbox:video/<fileId>` re-queues a conversion |
+| GET | `/api/downloads?kind=video\|audio\|xxx` | All my unfinished jobs plus the 60 latest finished: `status` is `queued`, `probing`, `downloading`, `encode_wait` (downloaded, waiting for the AV1 encoder), `converting`, `processing`, `done`, `error`, `cancelled` or `expanded` (a playlist that became one job per entry) |
+| POST | `/api/downloads` | `{ url, kind }` (`video`, `audio`, or `xxx`: a video saved to the XXX section, 403 while it's off). Several links can be separated by spaces. `akulavbox:video/<fileId>` re-queues a conversion |
 | POST | `/api/downloads/trim` | `{ file_id, start, end, exact?, copy? }` (seconds): keep start..end of my video or song. `exact` re-encodes for a frame-accurate cut; `copy` saves a new video instead of replacing. Queued as `akulavbox:trim/<id>?…` |
 | POST | `/api/downloads/from-videos` | `{ file_ids }`: save my videos' sound as songs (same details and artwork). Needs ffmpeg (`status.convert`) |
 | GET / PUT / DELETE | `/api/downloads/cookies` | My sign-in cookies for downloads. GET → `{ saved, sites, updated_at }` (never the values). PUT `{ text }`: a Netscape cookies.txt or a JSON export |

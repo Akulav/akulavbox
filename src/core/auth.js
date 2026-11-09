@@ -9,9 +9,12 @@ function signToken(user) {
   return jwt.sign(
     { id: user.id, username: user.username, role: user.role, tv: user.token_version || 0 },
     process.env.JWT_SECRET,
-    { expiresIn: config.tokenTtl },
+    { expiresIn: config.tokenTtl, algorithm: 'HS256' },
   );
 }
+
+/** Shortest password accepted when one is set or changed (existing ones keep working) */
+const PASSWORD_MIN = 8;
 
 /**
  * Verify a token AND that it still belongs to a live account. Tokens of deleted
@@ -19,7 +22,9 @@ function signToken(user) {
  * database, so promoting or demoting someone takes effect immediately.
  */
 function authenticate(token) {
-  const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  if (typeof token !== 'string') throw new Error('No token');
+  // only the algorithm we sign with: no "none", no switching to another family
+  const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
   const user = userById.get(decoded.id);
   if (!user) throw new Error('Account no longer exists');
   if ((decoded.tv || 0) !== (user.token_version || 0)) throw new Error('Session was revoked');
@@ -31,7 +36,8 @@ function authenticate(token) {
 function readToken(request) {
   const header = request.headers.authorization || '';
   const fromHeader = header.startsWith('Bearer ') ? header.slice(7) : null;
-  return fromHeader || (request.query && request.query.token) || null;
+  const fromQuery = request.query && typeof request.query.token === 'string' ? request.query.token : null;
+  return fromHeader || fromQuery || null;
 }
 
 const REFRESH_AFTER = 24 * 3600; // seconds
@@ -59,4 +65,4 @@ async function verifyAdmin(request, reply) {
   if (problem) return reply.code(401).send({ error: 'Unauthorized access' });
 }
 
-module.exports = { verifyUser, verifyAdmin, readToken, signToken, authenticate };
+module.exports = { verifyUser, verifyAdmin, readToken, signToken, authenticate, PASSWORD_MIN };

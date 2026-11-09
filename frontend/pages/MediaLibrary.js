@@ -4,7 +4,7 @@ import FileViewer from '../components/FileViewer.js';
 import Downloads from '../components/Downloads.js';
 import TrimPanel from '../components/Trim.js';
 import { Thumb, Stars, MetaEditor, LibraryFilters, labelsFor } from '../components/Library.js';
-import { api, fileUrl, formatBytes, formatDate, downloadUrl, refreshAccount } from '../lib/api.js';
+import { api, fileUrl, formatBytes, formatDate, downloadUrl, refreshAccount, storage } from '../lib/api.js';
 import { toast, confirmDialog, promptDialog, attempt } from '../lib/ui.js';
 import { uploadMany } from '../lib/upload.js';
 import { useLibraryFilter, displayTitle, formatDuration, autoCover, backfillCovers, backfillSizes, resolutionLabel, setCover, thumbUrl, preload, groupByPerson } from '../lib/library.js';
@@ -12,16 +12,24 @@ import { useRenderLimit, useSelection } from '../lib/lists.js';
 import { kindOf } from '../lib/filetypes.js';
 import { moveToTrash } from '../lib/trash.js';
 
+const VIDEO_SORTS = [['added', 'Recently added'], ['oldest', 'Oldest added'], ['title', 'Title'], ['date', 'Date recorded'], ['people', 'Participants'], ['series', 'Series'], ['rating', 'Rating'], ['longest', 'Longest'], ['shortest', 'Shortest'], ['resolution', 'Highest resolution'], ['size', 'Largest file']];
+const VIDEO_ACCEPT = 'video/*,.mkv,.avi,.mov,.wmv,.flv,.m4v,.3gp,.ts';
+const VIDEO_GRID = 'grid-cols-1 min-[480px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5';
+// media: what the items are; coverKind: where covers go (lib/library.js COVER_FOLDER); downloads: the job kind
 const CONFIG = {
   videos: {
-    title: 'Videos', icon: 'film', aspect: 'aspect-video', coverKind: 'video', uploadLabel: 'Upload videos', collections: true, downloads: 'video',
-    accept: 'video/*,.mkv,.avi,.mov,.wmv,.flv,.m4v,.3gp,.ts',
-    grid: 'grid-cols-1 min-[480px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5',
+    title: 'Videos', media: 'video', noun: 'video', nouns: 'videos', icon: 'film', aspect: 'aspect-video', coverKind: 'video', uploadLabel: 'Upload videos', collections: true, downloads: 'video', songs: true,
+    accept: VIDEO_ACCEPT, grid: VIDEO_GRID, sorts: VIDEO_SORTS,
     empty: 'Upload videos or paste a link above, then add participants, tags and details so you can sort and find them later.',
-    sorts: [['added', 'Recently added'], ['oldest', 'Oldest added'], ['title', 'Title'], ['date', 'Date recorded'], ['people', 'Participants'], ['series', 'Series'], ['rating', 'Rating'], ['longest', 'Longest'], ['shortest', 'Shortest'], ['resolution', 'Highest resolution'], ['size', 'Largest file']],
+  },
+  // the opt-in adult section: Videos with its own folder, downloads and collections, nothing sent to Music
+  xxx: {
+    title: 'XXX', media: 'video', noun: 'video', nouns: 'videos', icon: 'flame', aspect: 'aspect-video', coverKind: 'xxx', uploadLabel: 'Upload videos', collections: true, downloads: 'xxx', songs: false, blur: true,
+    accept: VIDEO_ACCEPT, grid: VIDEO_GRID, sorts: VIDEO_SORTS,
+    empty: 'Upload videos or paste a link above. They stay in this section only: they never show up in Videos, Music or search while the section is off.',
   },
   books: {
-    title: 'Books', icon: 'file-text', aspect: 'aspect-[2/3]', coverKind: 'book', uploadLabel: 'Add books', collections: false, downloads: null,
+    title: 'Books', media: 'book', noun: 'book', nouns: 'books', icon: 'file-text', aspect: 'aspect-[2/3]', coverKind: 'book', uploadLabel: 'Add books', collections: false, downloads: null, songs: false,
     accept: '.pdf,.epub,.mobi,.azw,.azw3,.djvu,.fb2,.cbz,.cbr,.txt,application/pdf,application/epub+zip',
     grid: 'grid-cols-2 min-[520px]:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7',
     empty: 'Add PDF or EPUB books. EPUBs open in the built-in reader, which remembers where you stopped.',
@@ -35,7 +43,7 @@ export default {
   // args: [] = everything, ['collections'] / ['collections', id], ['creators']
   props: { kind: { type: String, required: true }, args: { type: Array, default: () => [] } },
   template: /*html*/`
-    <div @dragenter="onDragEnter" @dragover.prevent @dragleave="onDragLeave" @drop.prevent="onDrop">
+    <div :class="{ 'blur-covers': C.blur && blurred }" @dragenter="onDragEnter" @dragover.prevent @dragleave="onDragLeave" @drop.prevent="onDrop">
       <div class="flex flex-col gap-4 mb-6">
         <div class="flex items-end gap-3 flex-wrap">
           <div class="flex-1 min-w-0">
@@ -46,7 +54,7 @@ export default {
             </div>
             <p class="text-muted text-[13.5px]">
               <template v-if="openCol">{{ colItems.length }} video{{ colItems.length === 1 ? '' : 's' }}<template v-if="colDuration">, {{ colDuration }}</template><template v-if="colItems.length > 1"> · drag to reorder</template></template>
-              <template v-else-if="loaded">{{ f.filtered.value.length === items.length ? items.length : f.filtered.value.length + ' of ' + items.length }} {{ kind === 'videos' ? (items.length === 1 ? 'video' : 'videos') : (items.length === 1 ? 'book' : 'books') }}<template v-if="totalDuration">, {{ totalDuration }}</template></template>
+              <template v-else-if="loaded">{{ f.filtered.value.length === items.length ? items.length : f.filtered.value.length + ' of ' + items.length }} {{ items.length === 1 ? C.noun : C.nouns }}<template v-if="totalDuration">, {{ totalDuration }}</template></template>
               <template v-else>&nbsp;</template>
             </p>
           </div>
@@ -60,12 +68,14 @@ export default {
               <button class="btn btn-primary" @click="newCollection()"><Icon name="plus" :size="16" />New collection</button>
             </template>
             <template v-else-if="view === 'all'">
-              <button v-if="kind === 'videos' && list.length > 1" class="btn" @click="shuffleList" title="Play everything shown, shuffled"><Icon name="shuffle" :size="16" /><span class="hidden sm:inline">Shuffle</span></button>
+              <button v-if="C.blur" class="btn" :class="blurred ? '!border-accent text-accent' : ''" @click="toggleBlur" :title="blurred ? 'Covers are blurred until you point at them' : 'Blur covers on this device'"><Icon :name="blurred ? 'eye-off' : 'eye'" :size="16" /><span class="hidden sm:inline">{{ blurred ? 'Blurred' : 'Blur' }}</span></button>
+              <button v-if="isVideo && list.length > 1" class="btn" @click="shuffleList" title="Play everything shown, shuffled"><Icon name="shuffle" :size="16" /><span class="hidden sm:inline">Shuffle</span></button>
               <button v-if="items.length" class="btn" :class="selecting ? '!border-accent text-accent' : ''" @click="toggleSelecting"><Icon name="check" :size="16" />{{ selecting ? 'Done' : 'Select' }}</button>
               <button class="btn btn-primary" @click="fileInput.click()"><Icon name="upload" :size="16" />{{ C.uploadLabel }}</button>
             </template>
             <!-- Creators is where Videos opens, so uploading starts here too -->
             <template v-else-if="view === 'creators'">
+              <button v-if="C.blur" class="btn" :class="blurred ? '!border-accent text-accent' : ''" @click="toggleBlur" :title="blurred ? 'Covers are blurred until you point at them' : 'Blur covers on this device'"><Icon :name="blurred ? 'eye-off' : 'eye'" :size="16" /><span class="hidden sm:inline">{{ blurred ? 'Blurred' : 'Blur' }}</span></button>
               <button v-if="items.length > 1" class="btn" @click="shuffleList" title="Play every video, shuffled"><Icon name="shuffle" :size="16" /><span class="hidden sm:inline">Shuffle</span></button>
               <button class="btn btn-primary" @click="fileInput.click()"><Icon name="upload" :size="16" />{{ C.uploadLabel }}</button>
             </template>
@@ -76,7 +86,7 @@ export default {
         <div v-if="C.collections && !openCol" class="seg self-start" role="tablist" aria-label="View">
           <a :href="'#/' + kind" :class="{ on: view === 'creators' }" role="tab"><Icon name="users" :size="14" />Creators<span v-if="f.people.value.length" class="text-faint tabular-nums">{{ f.people.value.length }}</span></a>
           <a :href="'#/' + kind + '/collections'" :class="{ on: view === 'collections' }" role="tab"><Icon name="list-music" :size="14" />Collections<span v-if="collections.length" class="text-faint tabular-nums">{{ collections.length }}</span></a>
-          <a :href="allHref" :class="{ on: view === 'all' }" role="tab"><Icon :name="C.icon" :size="14" />All {{ kind }}</a>
+          <a :href="allHref" :class="{ on: view === 'all' }" role="tab"><Icon :name="C.icon" :size="14" />All {{ C.nouns }}</a>
         </div>
         <LibraryFilters v-if="view === 'all' && items.length" :f="f" :kind="kind" :sorts="C.sorts" />
       </div>
@@ -119,7 +129,7 @@ export default {
         <div v-else-if="!creators.length" class="panel py-16 px-6 text-center rise">
           <span class="w-14 h-14 rounded-2xl bg-accent/10 text-accent grid place-items-center mx-auto mb-4"><Icon name="users" :size="24" /></span>
           <p class="title text-lg mb-1">No creators yet</p>
-          <p class="text-muted text-[13.5px] max-w-md mx-auto">Creators come from the {{ L.people.toLowerCase() }} on your {{ kind }}. Downloads from a link fill this in for you.</p>
+          <p class="text-muted text-[13.5px] max-w-md mx-auto">Creators come from the {{ L.people.toLowerCase() }} on your {{ C.nouns }}. Downloads from a link fill this in for you.</p>
         </div>
         <div v-else :class="TILE_GRID">
           <a v-for="p in shownCreators" :key="p.value" :href="allHref" class="group tile lift" :class="p.cover ? 'tile-media tile-cap-on' : ''" :style="p.cover ? '' : { '--tint': p.tint }" :title="p.value" @click="showCreator(p.value)">
@@ -146,15 +156,15 @@ export default {
         <div v-else-if="openCol && !colItems.length" class="panel py-16 px-6 text-center rise">
           <span class="w-14 h-14 rounded-2xl bg-accent/10 text-accent grid place-items-center mx-auto mb-4"><Icon name="list-music" :size="24" /></span>
           <p class="title text-lg mb-1">This collection is empty</p>
-          <p class="text-muted text-[13.5px] max-w-md mx-auto">Add videos from <a :href="allHref" class="text-accent hover:underline">All {{ kind }}</a> with “Add to collection”.</p>
+          <p class="text-muted text-[13.5px] max-w-md mx-auto">Add videos from <a :href="allHref" class="text-accent hover:underline">All {{ C.nouns }}</a> with “Add to collection”.</p>
         </div>
 
         <div v-else-if="!openCol && !items.length" class="panel py-16 px-6 text-center">
           <span class="w-14 h-14 rounded-2xl bg-elevated grid place-items-center mx-auto mb-4 text-muted"><Icon :name="C.icon" :size="24" /></span>
-          <p class="title text-lg mb-1">No {{ kind }} yet</p>
+          <p class="title text-lg mb-1">No {{ C.nouns }} yet</p>
           <p class="text-muted text-[13.5px] mb-5 max-w-md mx-auto">{{ C.empty }}</p>
           <button class="btn btn-primary" @click="fileInput.click()"><Icon name="upload" :size="16" />{{ C.uploadLabel }}</button>
-          <p class="text-faint text-xs mt-4">They’re stored in the locked “{{ kind === 'videos' ? 'Videos' : 'Books' }}” folder in Files.</p>
+          <p class="text-faint text-xs mt-4">They’re stored in the locked “{{ C.title }}” folder in Files.</p>
         </div>
 
         <div v-else-if="!list.length" class="panel py-12 px-6 text-center">
@@ -170,13 +180,13 @@ export default {
               <Thumb :file-id="it.id" :w="480" :version="it.thumb_file_id || 'none'" :icon="C.icon" />
               <span v-if="openCol" class="absolute top-2 left-2 min-w-[22px] h-[22px] px-1.5 rounded-full bg-black/65 text-white text-[11px] font-semibold grid place-items-center tabular-nums">{{ i + 1 }}</span>
               <!-- small watermark, resolution and length along the bottom edge -->
-              <span v-if="kind === 'videos'" class="absolute bottom-2 left-2 w-5 h-5 grid place-items-center text-white/70 drop-shadow pointer-events-none" aria-hidden="true"><Icon name="film" :size="14" :stroke="2" /></span>
-              <span v-if="kind === 'videos'" class="absolute bottom-2 right-2 flex gap-1">
+              <span v-if="isVideo" class="absolute bottom-2 left-2 w-5 h-5 grid place-items-center text-white/70 drop-shadow pointer-events-none" aria-hidden="true"><Icon :name="C.icon" :size="14" :stroke="2" /></span>
+              <span v-if="isVideo" class="absolute bottom-2 right-2 flex gap-1">
                 <span v-if="resolutionLabel(it.width, it.height)" class="px-1.5 h-5 rounded text-[10.5px] font-bold tracking-wide grid place-items-center"
                       :class="Math.min(it.width, it.height) >= 2000 ? 'bg-accent text-accent-fg' : 'bg-black/75 text-white'" :title="it.width + ' × ' + it.height">{{ resolutionLabel(it.width, it.height) }}</span>
                 <span v-if="it.duration" class="px-1.5 h-5 rounded bg-black/75 text-white text-[11px] font-medium tabular-nums grid place-items-center">{{ formatDuration(it.duration) }}</span>
               </span>
-              <span v-if="kind === 'videos'" class="absolute inset-0 grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+              <span v-if="isVideo" class="absolute inset-0 grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                 <span class="w-12 h-12 rounded-full bg-black/55 backdrop-blur grid place-items-center text-white"><Icon name="play" :size="18" class="translate-x-[1px]" /></span>
               </span>
               <span v-if="kind === 'books'" class="absolute top-2 left-2 chip !bg-black/60 !text-white uppercase !text-[10px] tracking-wide">{{ ext(it) }}</span>
@@ -211,7 +221,7 @@ export default {
           <span class="text-[13.5px] font-medium mr-2 whitespace-nowrap">{{ selected.length }} selected</span>
           <button class="btn btn-ghost btn-sm" @click="selectAll">All</button>
           <button v-if="C.collections" class="btn btn-ghost btn-sm" @click="openPicker($event, selected)"><Icon name="list-music" :size="15" /><span class="whitespace-nowrap">Add to collection</span></button>
-          <button v-if="canConvert" class="btn btn-ghost btn-sm" @click="toSongs(selected)" title="Save the sound as songs in Music"><Icon name="music" :size="15" /><span class="whitespace-nowrap">Save as songs</span></button>
+          <button v-if="canSongs" class="btn btn-ghost btn-sm" @click="toSongs(selected)" title="Save the sound as songs in Music"><Icon name="music" :size="15" /><span class="whitespace-nowrap">Save as songs</span></button>
           <button class="btn btn-ghost btn-sm" @click="editSelected"><Icon name="pencil" :size="15" /><span class="hidden sm:inline">Edit details</span></button>
           <button class="btn btn-ghost btn-sm !text-danger" @click="deleteSelected"><Icon name="trash" :size="15" /><span class="hidden sm:inline">Delete</span></button>
           <button class="icon-btn icon-btn-sm shrink-0" @click="selected = []; selecting = false" title="Clear"><Icon name="x" :size="15" /></button>
@@ -221,10 +231,10 @@ export default {
       <!-- Card menu -->
       <div v-if="menu" class="fixed inset-0 z-[230]" @click="menu = null">
         <div class="menu fixed" :style="{ left: menu.x + 'px', top: menu.y + 'px' }" @click.stop>
-          <button class="menu-item" @click="run(open)"><Icon :name="kind === 'videos' ? 'play' : 'eye'" :size="kind === 'videos' ? 14 : 16" />{{ kind === 'videos' ? 'Play' : 'Read' }}</button>
+          <button class="menu-item" @click="run(open)"><Icon :name="isVideo ? 'play' : 'eye'" :size="isVideo ? 14 : 16" />{{ isVideo ? 'Play' : 'Read' }}</button>
           <button class="menu-item" @click="run(it => editors = [it])"><Icon name="pencil" :size="16" />Edit details</button>
           <button v-if="C.collections" class="menu-item" @click="pickerFromMenu($event)"><Icon name="list-music" :size="16" />Add to collection<Icon name="chevron-right" :size="15" class="ml-auto text-faint" /></button>
-          <button v-if="canConvert" class="menu-item" @click="run(it => toSongs([it.id]))"><Icon name="music" :size="16" />Save as song</button>
+          <button v-if="canSongs" class="menu-item" @click="run(it => toSongs([it.id]))"><Icon name="music" :size="16" />Save as song</button>
           <template v-if="openCol">
             <button class="menu-item" @click="run(setColCover)"><Icon name="image" :size="16" />Use as collection cover</button>
             <button class="menu-item" @click="run(removeFromCol)"><Icon name="x" :size="16" />Remove from collection</button>
@@ -239,7 +249,7 @@ export default {
       <!-- "Add to collection" picker -->
       <div v-if="picker" class="fixed inset-0 z-[231]" @click="picker = null">
         <div class="menu fixed max-h-[60vh] overflow-y-auto w-[240px]" :style="{ left: picker.x + 'px', top: picker.y + 'px' }" @click.stop>
-          <p class="px-2.5 py-1.5 text-xs text-muted">Add {{ picker.ids.length === 1 ? 'to' : picker.ids.length + ' ' + kind + ' to' }}</p>
+          <p class="px-2.5 py-1.5 text-xs text-muted">Add {{ picker.ids.length === 1 ? 'to' : picker.ids.length + ' ' + C.nouns + ' to' }}</p>
           <button v-for="c in collections" :key="c.id" class="menu-item" @click="addTo(c)"><Icon name="list-music" :size="16" /><span class="truncate">{{ c.title }}</span><span class="ml-auto text-faint text-xs tabular-nums">{{ c.item_count }}</span></button>
           <div v-if="collections.length" class="menu-sep"></div>
           <button class="menu-item" @click="newCollection(picker.ids)"><Icon name="plus" :size="16" />New collection…</button>
@@ -251,7 +261,7 @@ export default {
         <div class="menu fixed" :style="{ left: colMenu.x + 'px', top: colMenu.y + 'px' }" @click.stop>
           <button v-if="colMenu.c.item_count || openCol" class="menu-item" @click="runCol(c => playCollectionById(c))"><Icon name="play" :size="14" />Play</button>
           <button v-if="colMenu.c.item_count > 1 || (openCol && colItems.length > 1)" class="menu-item" @click="runCol(c => playCollectionById(c, true))"><Icon name="shuffle" :size="16" />Shuffle</button>
-          <button v-if="canConvert && (colMenu.c.item_count || openCol)" class="menu-item" @click="runCol(collectionToSongs)"><Icon name="music" :size="16" />Save all as songs</button>
+          <button v-if="canSongs && (colMenu.c.item_count || openCol)" class="menu-item" @click="runCol(collectionToSongs)"><Icon name="music" :size="16" />Save all as songs</button>
           <button class="menu-item" @click="runCol(toggleColFavorite)"><Icon :name="colMenu.c.is_favorite ? 'star-fill' : 'star'" :size="16" />{{ colMenu.c.is_favorite ? 'Remove from favorites' : 'Add to favorites' }}</button>
           <button class="menu-item" @click="runCol(renameCollection)"><Icon name="pencil" :size="16" />Rename</button>
           <div class="menu-sep"></div>
@@ -293,13 +303,13 @@ export default {
               <template v-if="file.series"><dt class="text-muted">{{ L.series }}</dt><dd>{{ file.series }}</dd></template>
               <template v-if="file.date"><dt class="text-muted">{{ L.date }}</dt><dd>{{ file.date }}</dd></template>
               <template v-if="file.duration"><dt class="text-muted">Length</dt><dd class="tabular-nums">{{ formatDuration(file.duration) }}</dd></template>
-              <template v-if="file.width && kind === 'videos'"><dt class="text-muted">Resolution</dt><dd class="tabular-nums">{{ file.width }} × {{ file.height }} <span class="text-muted">({{ resolutionLabel(file.width, file.height) }})</span></dd></template>
+              <template v-if="file.width && isVideo"><dt class="text-muted">Resolution</dt><dd class="tabular-nums">{{ file.width }} × {{ file.height }} <span class="text-muted">({{ resolutionLabel(file.width, file.height) }})</span></dd></template>
               <template v-if="file.rating"><dt class="text-muted">Rating</dt><dd><Stars :model-value="file.rating" :size="14" readonly /></dd></template>
             </dl>
             <p v-if="file.details" class="text-[13.5px] whitespace-pre-line leading-relaxed">{{ file.details }}</p>
             <p v-if="!file.participants?.length && !file.tags?.length && !file.details && !file.series && !file.date" class="text-muted text-[13px]">No details yet. Add {{ L.people.toLowerCase() }}, tags and notes to sort and find this later.</p>
-            <button v-if="kind === 'videos'" class="btn btn-sm w-full" @click="frameAsCover(file)"><Icon name="image" :size="14" />Use current frame as cover</button>
-            <button v-if="kind === 'videos' && canConvert && !(trim && trim.id === file.id)" class="btn btn-sm w-full" @click="openTrim(file)"><Icon name="zoom-out" :size="14" />Trim</button>
+            <button v-if="isVideo" class="btn btn-sm w-full" @click="frameAsCover(file)"><Icon name="image" :size="14" />Use current frame as cover</button>
+            <button v-if="isVideo && canConvert && !(trim && trim.id === file.id)" class="btn btn-sm w-full" @click="openTrim(file)"><Icon name="zoom-out" :size="14" />Trim</button>
 
             <!-- Trim: keep start..end -->
             <TrimPanel v-if="trim && trim.id === file.id" :item="{ id: file.id, duration: file.duration || videoDuration() }" kind="video"
@@ -312,6 +322,10 @@ export default {
   setup(props) {
     const C = computed(() => CONFIG[props.kind]);
     const L = computed(() => labelsFor(props.kind));
+    const isVideo = computed(() => C.value.media === 'video');
+    // XXX covers can be blurred until pointed at; remembered per device
+    const blurred = ref(storage.read(`akulavBlur_${props.kind}`) !== '0');
+    const toggleBlur = () => { blurred.value = !blurred.value; storage.write(`akulavBlur_${props.kind}`, blurred.value ? null : '0'); };
     const items = ref([]);
     const loaded = ref(false);
     const folderId = ref('');
@@ -340,7 +354,7 @@ export default {
     const list = computed(() => (openCol.value ? colItems.value : f.filtered.value));
 
     const fmtTotal = (s) => { if (!s) return ''; if (s < 60) return formatDuration(s); const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60); return h ? `${h} h ${m} min` : `${m} min`; };
-    const totalDuration = computed(() => (props.kind === 'videos' ? fmtTotal(f.filtered.value.reduce((a, it) => a + (it.duration || 0), 0)) : ''));
+    const totalDuration = computed(() => (isVideo.value ? fmtTotal(f.filtered.value.reduce((a, it) => a + (it.duration || 0), 0)) : ''));
     const colDuration = computed(() => fmtTotal(colItems.value.reduce((a, it) => a + (it.duration || 0), 0)));
 
     // one tile per creator, with the cover of their newest video that has one
@@ -380,7 +394,7 @@ export default {
     function startBackfill() {
       if (stopBackfill) stopBackfill();
       if (stopSizes) { stopSizes(); stopSizes = null; }
-      const missing = items.value.filter(it => !it.thumb_file_id && (props.kind === 'videos' || /\.(pdf|epub)$/i.test(it.filename)));
+      const missing = items.value.filter(it => !it.thumb_file_id && (isVideo.value || /\.(pdf|epub)$/i.test(it.filename)));
       if (missing.length) {
         stopBackfill = backfillCovers(missing, C.value.coverKind, (it, meta) => {
           it.thumb_file_id = meta.thumb_file_id;
@@ -389,7 +403,7 @@ export default {
         });
       }
       // videos that have a cover but no resolution yet (uploaded before resolutions were kept)
-      const noSize = props.kind === 'videos' ? items.value.filter(it => it.thumb_file_id && !it.width) : [];
+      const noSize = isVideo.value ? items.value.filter(it => it.thumb_file_id && !it.width) : [];
       if (noSize.length) stopSizes = backfillSizes(noSize, (it, patch) => Object.assign(it, patch));
     }
 
@@ -440,8 +454,9 @@ export default {
     }
 
     // ---------- save as song (the sound goes to Music with the same details) ----------
-    const canConvert = ref(false);
-    if (props.kind === 'videos') api('/api/downloads/status').then(s => { canConvert.value = !!s.convert; }).catch(() => {});
+    const canConvert = ref(false); // ffmpeg is there: trim (and save as song, where that applies)
+    const canSongs = computed(() => canConvert.value && !!C.value.songs);
+    if (isVideo.value) api('/api/downloads/status').then(s => { canConvert.value = !!s.convert; }).catch(() => {});
     async function toSongs(ids) {
       const list = [...ids];
       const r = await attempt(() => api('/api/downloads/from-videos', { method: 'POST', body: { file_ids: list } }));
@@ -495,7 +510,7 @@ export default {
       await attempt(async () => { await api(`/api/media-collections/${c.id}`, { method: 'PATCH', body: { title } }); await loadCollections(); });
     }
     async function deleteCollection(c) {
-      if (!await confirmDialog({ title: `Delete “${c.title}”?`, message: `The ${props.kind} themselves stay in your library.`, confirmText: 'Delete', danger: true })) return;
+      if (!await confirmDialog({ title: `Delete “${c.title}”?`, message: `The ${C.value.nouns} themselves stay in your library.`, confirmText: 'Delete', danger: true })) return;
       await attempt(async () => { await api(`/api/media-collections/${c.id}`, { method: 'DELETE' }); await loadCollections(); }, 'Collection deleted');
       if (openColId.value === c.id) location.hash = `#/${props.kind}/collections`;
     }
@@ -584,7 +599,7 @@ export default {
         c.width = Math.round(video.videoWidth * scale); c.height = Math.round(video.videoHeight * scale);
         c.getContext('2d').drawImage(video, 0, 0, c.width, c.height);
         const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.85));
-        const meta = await setCover(file.id, blob, isFinite(video.duration) ? { duration: video.duration } : {}, 'video');
+        const meta = await setCover(file.id, blob, isFinite(video.duration) ? { duration: video.duration } : {}, C.value.coverKind);
         file.thumb_file_id = meta.thumb_file_id;
         toast.success('Cover updated');
       } catch (e) { toast.error(e.message || 'Couldn’t capture this frame'); }
@@ -594,10 +609,10 @@ export default {
     async function upload(fileList) {
       const fitting = fileList.filter(fl => {
         const k = kindOf({ filename: fl.name, mime_type: fl.type });
-        return props.kind === 'videos' ? k === 'video' : (['pdf', 'epub', 'text'].includes(k) || /\.(mobi|azw3?|djvu|fb2|cbz|cbr)$/i.test(fl.name));
+        return isVideo.value ? k === 'video' : (['pdf', 'epub', 'text'].includes(k) || /\.(mobi|azw3?|djvu|fb2|cbz|cbr)$/i.test(fl.name));
       });
       const skipped = fileList.length - fitting.length;
-      if (skipped) toast(`${skipped} file${skipped > 1 ? 's' : ''} skipped: only ${props.kind === 'videos' ? 'videos' : 'books'} can go here. Use Files for anything else.`);
+      if (skipped) toast(`${skipped} file${skipped > 1 ? 's' : ''} skipped: only ${C.value.nouns} can go here. Use Files for anything else.`);
       if (!fitting.length) return;
       if (!folderId.value) await load();
       const colId = openColId.value;
@@ -610,7 +625,7 @@ export default {
       // dropped onto an open collection: add them there too
       if (colId && res.length) await api(`/api/media-collections/${colId}/items`, { method: 'POST', body: { file_ids: res.map(r => r.fileId) } }).catch(() => {});
       await reloadAll(); refreshAccount();
-      if (res.length) toast.success(`Added ${res.length} ${props.kind === 'videos' ? (res.length === 1 ? 'video' : 'videos') : (res.length === 1 ? 'book' : 'books')}`);
+      if (res.length) toast.success(`Added ${res.length} ${res.length === 1 ? C.value.noun : C.value.nouns}`);
     }
     async function onPick(e) { const l = Array.from(e.target.files || []); e.target.value = ''; if (l.length) await upload(l); }
     const isFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
@@ -628,7 +643,7 @@ export default {
     onUnmounted(() => { if (stopBackfill) stopBackfill(); if (stopSizes) stopSizes(); window.removeEventListener('keydown', onKey); });
 
     return {
-      C, L, TILE_GRID, items, loaded, folderId, fileInput, f, selecting, selected, menu, editors, viewer, dragOver, totalDuration,
+      C, L, isVideo, blurred, toggleBlur, canSongs, TILE_GRID, items, loaded, folderId, fileInput, f, selecting, selected, menu, editors, viewer, dragOver, totalDuration,
       view, allHref, openCol, collections, collectionsLoaded, colItems, colLoaded, colDuration, list, creators,
       shownList, moreList, listEnd, shownCreators, moreCreators, creatorsEnd, shownCollections, moreCollections, collectionsEnd,
       isSel, toggleSel, toggleSelecting, selectAll, editSelected, onCardClick, open, openById, filterBy, showCreator, openMenu, run, remove, deleteSelected, onSaved, onDownloaded,

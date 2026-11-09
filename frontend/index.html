@@ -347,6 +347,9 @@
     .lift:active { transform: translateY(-1px) scale(.995); }
     .zoom-media img { transition: transform .6s cubic-bezier(.2,.8,.2,1), opacity .2s; }
     .group:hover .zoom-media img { transform: scale(1.045); }
+    /* XXX section: covers stay blurred until you point at (or tab to) them */
+    .blur-covers .zoom-media img { filter: blur(22px) saturate(.7); transition: transform .6s cubic-bezier(.2,.8,.2,1), opacity .2s, filter .2s; }
+    .blur-covers .group:hover .zoom-media img, .blur-covers .group:focus-within .zoom-media img { filter: none; }
 
     /* brand */
     .brand-text { background: linear-gradient(100deg, rgb(var(--fg)) 30%, rgb(var(--accent-hi)) 75%, rgb(var(--accent))); -webkit-background-clip: text; background-clip: text; color: transparent; }

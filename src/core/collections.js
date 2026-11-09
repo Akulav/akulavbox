@@ -7,7 +7,7 @@ const db = require('./db');
 // creator / artist in the Creators and Artists views instead.
 // ---------------------------------------------------------------------------
 
-const KINDS = ['videos', 'books'];
+const KINDS = ['videos', 'books', 'xxx'];
 const TITLE_MAX = 200;
 
 function createCollection(ownerId, kind, title) {
