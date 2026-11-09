@@ -2,6 +2,16 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 2.10.0 (2026-11-09)
+
+### Added
+- **Scheduled backups.** In Admin → Backup and restore, back up daily or weekly at a set hour into any folder on the server. The newest backups you choose to keep stay, and older ones are deleted. If the server was off at the scheduled time, the backup runs once when it starts. **Back up now** makes one on demand. The page shows the next run, the last backup and any failure. The passphrase can come from `BACKUP_PASSPHRASE` in `.env`, or it's saved from Admin, encrypted with `MASTER_KEY`. A schedule restored onto a server with another key asks for the passphrase again.
+- **Activity log** in Admin: sign-ins, failed sign-ins (also for account names that don't exist, with the IP), lock-outs, password changes, account changes by admins, public links created and removed, backups, restores, updates and restarts. Filter by type or account, search by name, file or IP, and load older entries. Entries are kept for 180 days (`ACTIVITY_DAYS`). Deleting an account removes its own entries.
+
+### Changed
+- The Backup and restore panel and the activity log are separate components, so the Admin page code is smaller. Restarting and the helpers for waiting and retrying are shared from `lib/api.js` instead of copied.
+- Form posts (zip and backup downloads) use one parser and one token check for the whole server, and signing someone out or setting their password goes through one helper.
+
 ## 2.9.0 (2026-11-09)
 
 ### Added

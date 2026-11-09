@@ -28,7 +28,7 @@ Made with ♥ by **Akulav**
 | **Videos and books** | Video collections with play-all and shuffle, a Creators view, **save any video as a song** (same details and artwork), **trim** (fast lossless or frame-exact, in place or as a copy), covers generated automatically, participants, tags, series, and ratings. The EPUB reader remembers your page |
 | **Chat and calls** | Real-time messaging between friends, unread counts that survive reloads, deleting your own messages, files that disappear after 10 minutes, and WebRTC voice calls with optional TURN relay |
 | **Multi-user** | Per-user storage quotas. The admin panel shows **free disk space on the server**, a storage breakdown, a warning when quotas promise more than the disk can hold, roles, password resets, and "sign out everywhere" |
-| **Backup and upkeep** | **Full backup and restore** of every account, password and file in one passphrase-protected file (restores onto a new server, even with a different key), and a **storage check** that finds and cleans files on disk that belong to nothing |
+| **Backup and upkeep** | **Full backup and restore** of every account, password and file in one passphrase-protected file (restores onto a new server, even with a different key), **scheduled backups** (daily or weekly, into any folder, keeping the newest N), an **activity log** (sign-ins and failed sign-ins, account changes, shares, backups), and a **storage check** that finds and cleans files on disk that belong to nothing |
 | **Security** | Revocable sessions (a password change signs out other devices), sign-in rate limiting, timing-safe login, tokens kept out of logs and `Referer` headers, and a sandbox for uploaded HTML and SVG |
 | **Polish** | Light, dark, and system themes, a subtle animated background (can be turned off), keyboard shortcuts (press `?`), installable as an app (PWA manifest), offline and update banners |
 
@@ -87,6 +87,8 @@ All settings live in `.env` (see [.env.example](.env.example)).
 | `UPDATE_REPO` / `UPDATE_BRANCH` | `Akulav/akulavbox` / `main` | Where Admin → Updates looks |
 | `GITHUB_TOKEN` | | Only needed to update from a private fork |
 | `DOWNLOAD_PROXY` | | Send link downloads through a proxy (`http://…` or `socks5://…`), for sites blocked where the server is |
+| `BACKUP_PASSPHRASE` | | Passphrase for scheduled backups. When set, the one in Admin is ignored and none is stored |
+| `ACTIVITY_DAYS` | `180` | How long the activity log keeps entries |
 
 The server refuses to start if `MASTER_KEY` or `JWT_SECRET` is missing or invalid, and warns you if they are still the example values.
 

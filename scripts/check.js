@@ -418,6 +418,21 @@ async function main() {
       for (let i = 0; i < 11; i++) { const r = await api('/api/login', { method: 'POST', body: { username: 'ghost', password: 'x' }, auth: false }); if (r.status === 429) fails++; }
       ok(fails > 0, 'repeated failed sign-ins are rate limited');
 
+      console.log('\nActivity log');
+      const act = async (q = '') => (await api(`/api/admin/activity${q}`)).data;
+      const all = await act('?limit=500');
+      ok(all.items.some(a => a.action === 'auth.login' && a.username === 'admin' && a.ip), 'sign-ins are recorded with the IP');
+      const failedRows = (await act('?kind=failed')).items;
+      ok(failedRows.some(a => a.action === 'auth.login_failed' && a.username === 'ghost' && a.detail === 'No such account'), 'failed sign-ins are recorded, also for names that don’t exist');
+      ok(all.items.some(a => a.action === 'auth.locked'), 'a lock-out is recorded');
+      ok(all.items.some(a => a.action === 'admin.user_deleted' && a.target === 'checker' && a.username === 'admin'), 'admin actions are recorded with the account they touched');
+      ok(!all.items.some(a => a.user_id === u.data.id), 'a deleted account’s own activity goes with it');
+      const page1 = await act('?limit=2'), page2 = await act(`?limit=2&before=${page1.next}`);
+      ok(page1.items.length === 2 && page2.items.length && page2.items[0].id < page1.items[1].id, 'older activity loads page by page');
+      const found = await act('?q=ghost');
+      ok(found.items.length && found.items.every(a => a.username === 'ghost'), 'activity can be searched');
+      ok((await act('?q=%25')).items.length === 0, 'search text is literal (no LIKE wildcards)');
+
       console.log('\nUpdates');
       const upd = await api('/api/admin/updates');
       ok(upd.status === 200 && upd.data.enabled === false && upd.data.repo === 'Akulav/akulavbox' && upd.data.current === health.data.version, 'update info (repo from package.json, off in tests)');
@@ -456,6 +471,35 @@ async function main() {
       const rec = recFolder && (await api(`/api/directory/${recFolder.id}`)).data.files;
       ok(rec && rec.length === 1 && /\.pdf$/.test(rec[0].filename), 'a readable lost file is recovered with its type');
       ok(!fs.existsSync(path.join(tmp, 'users', 'gone-user')), 'leftovers of deleted accounts are removed');
+
+      console.log('\nScheduled backups');
+      const putSchedule = (body) => api('/api/admin/backup/schedule', { method: 'PUT', body });
+      const sched0 = (await api('/api/admin/backup')).data.schedule;
+      ok(sched0 && !sched0.enabled && !sched0.has_passphrase && sched0.default_dir, 'scheduled backups start off');
+      ok((await putSchedule({ enabled: true })).status === 400, 'a schedule needs a passphrase');
+      ok((await putSchedule({ dir: 'relative/folder' })).status === 400, 'the folder must be a full path');
+      ok((await putSchedule({ dir: path.join(tmp, 'users', 'x') })).status === 400, 'the folder can’t be inside the data folders');
+      const schedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'akulavbox-sched-'));
+      const savedSchedule = await putSchedule({ enabled: true, every: 'weekly', weekday: 3, hour: 4, keep: 2, dir: schedDir, passphrase: 'scheduled pass 1' });
+      const next = savedSchedule.data.next_at && new Date(savedSchedule.data.next_at);
+      ok(savedSchedule.status === 200 && savedSchedule.data.enabled && savedSchedule.data.has_passphrase && next && next.getDay() === 3 && next.getHours() === 4 && next > Date.now(), 'save a weekly schedule: the next run is on that day and hour', JSON.stringify(savedSchedule.data));
+      ok(!JSON.stringify(savedSchedule.data).includes('scheduled pass 1'), 'the passphrase is never sent back');
+      const sdbS = new (require('node:sqlite').DatabaseSync)(path.join(tmp, 'akulavbox.db'), { readOnly: true });
+      const rawSchedule = sdbS.prepare("SELECT value FROM settings WHERE key = 'backup.schedule'").get()?.value || '';
+      sdbS.close();
+      ok(rawSchedule && !rawSchedule.includes('scheduled pass 1'), 'the passphrase is stored sealed');
+      let lastRun;
+      for (let i = 0; i < 3; i++) {
+        if (i) await new Promise(r => setTimeout(r, 1100)); // file names have second resolution
+        const r = await api('/api/admin/backup/schedule/run', { method: 'POST' });
+        for (let k = 0; k < 80; k++) { lastRun = (await api('/api/admin/backup')).data.schedule; if (!lastRun.running) break; await new Promise(res => setTimeout(res, 150)); }
+        if (r.status !== 200 || !lastRun.last?.ok) break;
+      }
+      const autoFiles = fs.readdirSync(schedDir).filter(n => n.endsWith('.akbx'));
+      ok(lastRun.last?.ok && lastRun.last_ok.bytes > 0, '“Back up now” writes a backup', JSON.stringify(lastRun.last));
+      ok(autoFiles.length === 2 && fs.readFileSync(path.join(schedDir, autoFiles[0])).subarray(0, 4).toString() === 'AKBX', 'only the newest backups are kept', autoFiles.join(', '));
+      ok(!fs.readdirSync(schedDir).some(n => n.endsWith('.part')), 'no half-written files are left');
+      ok((await act('?kind=backup')).items.some(a => a.action === 'backup.scheduled' && /by hand/.test(a.detail || '')), 'scheduled backups are recorded in the activity log');
 
       console.log('\nBackup and restore');
       const marker = crypto.randomBytes(300 * 1024);
@@ -526,6 +570,8 @@ async function main() {
         ok(restart.status === 200, 'restart to apply it');
         const st3 = (await api('/api/admin/backup')).data;
         ok(st3.restored && st3.restored.files > 0 && !st3.import.pending, 'restored on start');
+        ok(st3.schedule.enabled && st3.schedule.passphrase_unreadable && !st3.schedule.has_passphrase, 'a restored schedule asks for its passphrase again on a server with another key');
+        ok((await api('/api/admin/activity?kind=backup')).data.items.some(a => a.action === 'backup.restored'), 'the restore is recorded in the activity log');
         const back = await api(`/api/files/${kept.data.fileId}/view`, { raw: true });
         ok(back.status === 200 && Buffer.from(await back.arrayBuffer()).equals(marker), 'files open on a server with a different key');
         ok((await api('/api/music/playlists')).data.some(p => p.title === 'Road trip'), 'playlists and library details came along');

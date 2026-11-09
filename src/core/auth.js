@@ -65,4 +65,22 @@ async function verifyAdmin(request, reply) {
   if (problem) return reply.code(401).send({ error: 'Unauthorized access' });
 }
 
-module.exports = { verifyUser, verifyAdmin, readToken, signToken, authenticate, PASSWORD_MIN };
+/**
+ * For real form posts (zip and backup downloads must be navigations, so they can't
+ * set headers): the token comes in the `token` field instead.
+ */
+const fromForm = (verify) => async (request, reply) => {
+  if (!request.headers.authorization && typeof request.body?.token === 'string') request.headers.authorization = `Bearer ${request.body.token}`;
+  return verify(request, reply);
+};
+
+const bumpVersion = db.prepare('UPDATE users SET token_version = COALESCE(token_version, 0) + 1 WHERE id = ?');
+const setHash = db.prepare('UPDATE users SET password_hash = ? WHERE id = ?');
+
+/** Sign a user out on every device. Returns false when there's no such user. */
+const revokeSessions = (userId) => bumpVersion.run(userId).changes > 0;
+
+/** Store a new password hash; every existing session of that user stops working */
+const setPassword = (userId, hash) => db.tx(() => setHash.run(hash, userId).changes > 0 && revokeSessions(userId));
+
+module.exports = { verifyUser, verifyAdmin, readToken, signToken, authenticate, fromForm, revokeSessions, setPassword, PASSWORD_MIN };

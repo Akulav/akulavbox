@@ -1,5 +1,5 @@
 import { reactive, ref, markRaw } from 'vue';
-import { session, randomId } from './api.js';
+import { session, randomId, waitOnline } from './api.js';
 
 const CHUNK_SIZE = 16 * 1024 * 1024; // 16 MB
 const PARALLEL = 3;                  // files uploading at the same time
@@ -12,7 +12,6 @@ let seq = 0;
 
 class Cancelled extends Error { constructor() { super('Cancelled'); this.cancelled = true; } }
 
-const waitOnline = () => navigator.onLine ? Promise.resolve() : new Promise(r => window.addEventListener('online', r, { once: true }));
 
 function sendChunk(form, onProgress, item) {
   return new Promise((resolve, reject) => {

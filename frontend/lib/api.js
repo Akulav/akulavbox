@@ -1,4 +1,5 @@
 import { reactive } from 'vue';
+import { toast, confirmDialog } from './ui.js';
 
 const read = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
 const write = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) { /* ignore */ } };
@@ -141,6 +142,24 @@ export async function copyText(text) {
 }
 
 export const storage = { read, write };
+
+export const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+/** Resolves at once when online, otherwise when the connection comes back */
+export const waitOnline = () => navigator.onLine ? Promise.resolve() : new Promise(r => window.addEventListener('online', r, { once: true }));
+
+/** Restart the server (after a confirmation), then reload once it answers again */
+export async function restartServer() {
+  if (!await confirmDialog({ title: 'Restart AkulavBox now?', confirmText: 'Restart', danger: true, message: 'Everyone is disconnected for a moment. If no service manager restarts it, start the server again by hand.' })) return;
+  try { await api('/api/admin/restart', { method: 'POST' }); } catch (e) { toast.error(e.message); return; }
+  toast('Restarting… this page reloads when AkulavBox is back.', 'info', 10000);
+  // wait for the old process to go, then for a new one to answer (a big restore takes a while)
+  await sleep(1500);
+  for (let i = 0; i < 120; i++) {
+    try { if ((await fetch('/api/health', { cache: 'no-store' })).ok) break; } catch (e) { /* still down */ }
+    await sleep(1000);
+  }
+  location.reload();
+}
 
 /** A random id. crypto.randomUUID only exists on https and localhost; a server opened by its LAN address is neither */
 export function randomId() {

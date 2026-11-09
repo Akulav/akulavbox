@@ -5,7 +5,9 @@ const path = require('path');
 const bcrypt = require('../core/hash');
 const crypto = require('crypto');
 const config = require('../core/config');
-const { verifyAdmin, PASSWORD_MIN } = require('../core/auth');
+const { verifyAdmin, fromForm, revokeSessions, setPassword, PASSWORD_MIN } = require('../core/auth');
+const activity = require('../core/activity');
+const schedule = require('../core/schedule');
 const thumbs = require('../core/thumbs');
 const store = require('../core/storage');
 const cookies = require('../core/cookies');
@@ -22,6 +24,7 @@ module.exports = async function (fastify) {
 
   const adminCount = () => db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin'").get().n;
   const notFound = (reply) => reply.code(404).send({ error: 'User not found' });
+  const nameOf = (id) => db.prepare('SELECT username FROM users WHERE id = ?').get(id)?.username || id;
 
   // Create User & Provision Physical Encrypted Folder
   fastify.post('/api/admin/users', { preHandler: verifyAdmin }, async (request, reply) => {
@@ -38,6 +41,7 @@ module.exports = async function (fastify) {
     db.prepare("INSERT INTO users (id, username, password_hash, role, quota_bytes, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))")
       .run(id, username, hash, role, Number(quota) > 0 ? Math.floor(Number(quota)) : 5368709120);
     fs.mkdirSync(store.userDirOf(id), { recursive: true });
+    activity.log(request, 'admin.user_created', { target: username, detail: role === 'admin' ? 'Admin' : null });
     return { success: true, id, username };
   });
 
@@ -45,7 +49,7 @@ module.exports = async function (fastify) {
   fastify.delete('/api/admin/users/:id', { preHandler: verifyAdmin }, async (request, reply) => {
     const { id } = request.params;
     if (id === request.user.id) return reply.code(400).send({ error: 'You cannot delete your own account.' });
-    const target = db.prepare('SELECT role FROM users WHERE id = ?').get(id);
+    const target = db.prepare('SELECT role, username FROM users WHERE id = ?').get(id);
     if (!target) return notFound(reply);
 
     // temporary chat files they sent or received
@@ -70,6 +74,7 @@ module.exports = async function (fastify) {
       for (const sql of cleanup) db.prepare(sql).run(id);
       db.prepare('DELETE FROM friends WHERE user_id = ? OR friend_id = ?').run(id, id);
       db.prepare('DELETE FROM messages WHERE sender_id = ? OR receiver_id = ?').run(id, id);
+      activity.forgetUser(id);
       db.prepare('DELETE FROM users WHERE id = ?').run(id);
     });
 
@@ -77,6 +82,7 @@ module.exports = async function (fastify) {
     if (fs.existsSync(userDir)) fs.rmSync(userDir, { recursive: true, force: true });
     thumbs.purgeUser(id);
     cookies.remove(id);
+    activity.log(request, 'admin.user_deleted', { target: target.username });
     return { success: true };
   });
 
@@ -84,9 +90,9 @@ module.exports = async function (fastify) {
   fastify.patch('/api/admin/users/:id/password', { preHandler: verifyAdmin }, async (request, reply) => {
     const newPassword = String(request.body?.newPassword || '');
     if (newPassword.length < PASSWORD_MIN) return reply.code(400).send({ error: `Passwords need at least ${PASSWORD_MIN} characters.` });
-    const hash = await bcrypt.hash(newPassword, 10);
-    const r = db.prepare('UPDATE users SET password_hash = ?, token_version = COALESCE(token_version, 0) + 1 WHERE id = ?').run(hash, request.params.id);
-    return r.changes ? { success: true } : notFound(reply);
+    if (!setPassword(request.params.id, await bcrypt.hash(newPassword, 10))) return notFound(reply);
+    activity.log(request, 'admin.user_password_reset', { target: nameOf(request.params.id) });
+    return { success: true };
   });
 
   // Update quota
@@ -94,7 +100,9 @@ module.exports = async function (fastify) {
     const quota = Math.floor(Number(request.body?.quota));
     if (!(quota > 0)) return reply.code(400).send({ error: 'Invalid quota' });
     const r = db.prepare('UPDATE users SET quota_bytes = ? WHERE id = ?').run(quota, request.params.id);
-    return r.changes ? { success: true } : notFound(reply);
+    if (!r.changes) return notFound(reply);
+    activity.log(request, 'admin.user_quota', { target: nameOf(request.params.id), detail: `${(quota / 1024 ** 3).toFixed(2).replace(/\.?0+$/, '')} GB` });
+    return { success: true };
   });
 
   // Promote / demote. The last admin can't be demoted, and you can't demote yourself.
@@ -107,13 +115,15 @@ module.exports = async function (fastify) {
       if (adminCount() <= 1) return reply.code(400).send({ error: 'There must be at least one admin.' });
     }
     db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, request.params.id);
+    if (role !== target.role) activity.log(request, 'admin.user_role', { target: nameOf(request.params.id), detail: role === 'admin' ? 'Made admin' : 'Admin rights removed' });
     return { success: true };
   });
 
   // Sign a user out on every device
   fastify.post('/api/admin/users/:id/signout', { preHandler: verifyAdmin }, async (request, reply) => {
-    const r = db.prepare('UPDATE users SET token_version = COALESCE(token_version, 0) + 1 WHERE id = ?').run(request.params.id);
-    return r.changes ? { success: true } : notFound(reply);
+    if (!revokeSessions(request.params.id)) return notFound(reply);
+    activity.log(request, 'admin.user_signed_out', { target: nameOf(request.params.id) });
+    return { success: true };
   });
 
   // Get all users
@@ -174,27 +184,43 @@ module.exports = async function (fastify) {
     const b = request.body || {};
     const done = maintenance.clean({ orphans: b.orphans !== false, missing: b.missing !== false, usage: b.usage !== false });
     breakdownCache = null;
+    activity.log(request, 'admin.storage_cleaned', { detail: `${done.deleted || 0} deleted, ${done.recovered || 0} recovered, ${(done.repaired || 0) + (done.removed_rows || 0)} listings fixed` });
     return { success: true, ...done };
   });
 
-  // --- Full backup and restore ---
-  // Export is a form post (token, passphrase) so the browser streams the file straight to disk.
-  fastify.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string', bodyLimit: 64 * 1024 },
-    (req, body, done) => done(null, Object.fromEntries(new URLSearchParams(body))));
-  const formAdmin = async (request, reply) => {
-    if (!request.headers.authorization && request.body?.token) request.headers.authorization = `Bearer ${request.body.token}`;
-    return verifyAdmin(request, reply);
-  };
+  // --- Activity log ---
+  fastify.get('/api/admin/activity', { preHandler: verifyAdmin }, async (request) => {
+    const q = request.query;
+    return { ...activity.list({ before: Number(q.before) || null, userId: q.user ? String(q.user) : null, kind: q.kind ? String(q.kind) : null, q: q.q ? String(q.q) : null, limit: Number(q.limit) || 100 }), keep_days: activity.DAYS };
+  });
 
+  // --- Full backup and restore ---
   fastify.get('/api/admin/backup', { preHandler: verifyAdmin }, async () => ({
     estimate: backup.estimate(db), import: { ...backup.state, staging: backup.stagingBy(), pending: backup.pending() }, restored: db.restored || null,
+    schedule: schedule.status(),
   }));
 
-  fastify.post('/api/admin/backup/export', { preHandler: formAdmin }, async (request, reply) => {
+  // Scheduled backups: { enabled, every, hour, weekday, keep, dir, passphrase? }
+  fastify.put('/api/admin/backup/schedule', { preHandler: verifyAdmin }, async (request, reply) => {
+    let s;
+    try { s = schedule.save(request.body); } catch (e) { return reply.code(400).send({ error: e.message }); }
+    activity.log(request, 'backup.schedule_changed', { detail: s.enabled ? `${s.every === 'weekly' ? 'Weekly' : 'Daily'} at ${String(s.hour).padStart(2, '0')}:00, keep ${s.keep}, in ${s.dir || s.default_dir}` : 'Off' });
+    return s;
+  });
+  // Make a scheduled-style backup now; poll GET /api/admin/backup for progress
+  fastify.post('/api/admin/backup/schedule/run', { preHandler: verifyAdmin }, async (request, reply) => {
+    if (schedule.state.running) return reply.code(409).send({ error: 'A scheduled backup is already running.' });
+    schedule.run({ request }).catch(() => { /* recorded in the status */ });
+    return { success: true, started: true };
+  });
+
+  // Export is a form post (token, passphrase) so the browser streams the file straight to disk.
+  fastify.post('/api/admin/backup/export', { preHandler: fromForm(verifyAdmin) }, async (request, reply) => {
     let stream;
     try { stream = backup.exportStream(db, request.body?.passphrase); }
     catch (e) { return reply.code(400).type('text/plain; charset=utf-8').send(e.message); }
     const name = `akulavbox-backup-${new Date().toISOString().slice(0, 10)}.akbx`;
+    activity.log(request, 'backup.exported', { target: name });
     stream.on('error', (e) => fastify.log.error(e, 'backup export failed'));
     reply.header('Content-Type', 'application/octet-stream');
     reply.header('Content-Disposition', `attachment; filename="${name}"`);
@@ -241,16 +267,23 @@ module.exports = async function (fastify) {
     // the upload is kept when the check fails (full disk, say), so a retry needn't send it again;
     // the hourly temp sweep removes it after a day
     backup.stageImport(file, passphrase, { currentSchema: LATEST })
-      .then(() => { if (!serverPath) fs.rmSync(file, { force: true }); })
+      .then((r) => {
+        if (!serverPath) fs.rmSync(file, { force: true });
+        activity.log(request, 'backup.import_staged', { detail: `Backup from ${r.created_at}: ${r.users} accounts, ${r.files} files. Applied at the next restart.` });
+      })
       .catch((e) => {
         fastify.log.warn(`backup import failed: ${e.message}`);
+        activity.log(request, 'backup.import_failed', { detail: e.message });
         if (!serverPath && /damaged|incomplete|changed/.test(e.message)) fs.rmSync(file, { force: true }); // bad bytes: a retry must upload again
       });
     return { success: true, started: true };
   });
 
-  fastify.delete('/api/admin/backup/import', { preHandler: verifyAdmin }, async (request, reply) => (
-    backup.cancelPending() ? { success: true } : reply.code(409).send({ error: 'The import is still running.' })));
+  fastify.delete('/api/admin/backup/import', { preHandler: verifyAdmin }, async (request, reply) => {
+    if (!backup.cancelPending()) return reply.code(409).send({ error: 'The import is still running.' });
+    activity.log(request, 'backup.import_cancelled');
+    return { success: true };
+  });
 
   // --- Updates from GitHub ---
   fastify.get('/api/admin/updates', { preHandler: verifyAdmin }, async (request, reply) => {
@@ -264,18 +297,24 @@ module.exports = async function (fastify) {
     const i = updater.info();
     if (i.applying) return reply.code(409).send({ error: 'An update is already running.' });
     if (!i.available) return reply.code(400).send({ error: 'There is no newer version to install. Check again first.' });
-    updater.apply().catch((e) => fastify.log.warn(`update failed: ${e.message}`));
+    updater.apply()
+      .then(() => activity.log(request, 'admin.update_installed', { detail: `v${config.version} → v${i.latest.version}` }))
+      .catch((e) => { fastify.log.warn(`update failed: ${e.message}`); activity.log(request, 'admin.update_failed', { detail: e.message }); });
     return { success: true, started: true };
   });
   fastify.post('/api/admin/updates/rollback', { preHandler: verifyAdmin }, async (request, reply) => {
-    try { return { success: true, ...(await updater.rollback()) }; }
-    catch (e) { return reply.code(400).send({ error: e.message }); }
+    try {
+      const r = await updater.rollback();
+      activity.log(request, 'admin.update_rolled_back', { detail: r?.ready?.version ? `Back to v${r.ready.version}` : null });
+      return { success: true, ...r };
+    } catch (e) { return reply.code(400).send({ error: e.message }); }
   });
-  fastify.addHook('onReady', async () => { updater.start(); });
+  fastify.addHook('onReady', async () => { updater.start(); schedule.start(); });
 
   // Restart so a staged restore is applied. Needs a service manager (systemd, pm2, Docker) to start
   // the process again; the page says so before offering it.
-  fastify.post('/api/admin/restart', { preHandler: verifyAdmin }, async () => {
+  fastify.post('/api/admin/restart', { preHandler: verifyAdmin }, async (request) => {
+    activity.log(request, 'admin.server_restart');
     // after the answer is sent; server.js closes the database first (plain exit when run without it)
     setTimeout(() => { if (!process.emit('akulavbox:restart')) process.exit(0); }, 300).unref();
     return { success: true };

@@ -23,6 +23,8 @@ const fastify = require('fastify')({
 
 const db = require('./core/db');
 const instance = require('./core/instance');
+const activity = require('./core/activity');
+const backup = require('./core/backup');
 
 // The app is served from this same origin, so other sites get no CORS access by default.
 // CORS_ORIGIN=https://a.example,https://b.example opens the API to those origins (e.g. a separate client).
@@ -68,6 +70,11 @@ fastify.register(require('@fastify/static'), {
   },
 });
 
+// Plain HTML form posts (zip and backup downloads are real navigations, so the browser
+// streams them to disk). On the root, so every module below gets it.
+fastify.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string', bodyLimit: 4 * 1024 * 1024 },
+  (req, body, done) => done(null, Object.fromEntries(new URLSearchParams(body))));
+
 // API routes
 fastify.register(require('./modules/auth'));
 fastify.register(require('./modules/admin'));
@@ -96,6 +103,10 @@ const start = async () => {
     console.log(`${config.name} v${config.version} by ${config.author} is running on http://localhost:${config.port}`);
     console.log(`  storage: ${config.storageDir}`);
     if (schema && schema.backup) console.log(`  database upgraded from schema ${schema.from} to ${schema.to} (backup: ${schema.backup})`);
+    // the swap ran before anything could log: record its outcome now
+    if (db.restored) activity.log(null, 'backup.restored', { detail: `Backup from ${db.restored.created_at}: ${db.restored.users} accounts, ${db.restored.files} files. The replaced data is in ${db.restored.previous}` });
+    const failed = backup.pending()?.failed;
+    if (failed && Date.now() - Date.parse(failed.at) < 60e3) activity.log(null, 'backup.restore_failed', { detail: failed.error });
   } catch (err) {
     fastify.log.error(err);
     console.error(err.code === 'EADDRINUSE' ? `Port ${config.port} is already in use. Set PORT in .env to use another one.` : err.message);

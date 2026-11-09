@@ -7,7 +7,8 @@ const { Transform } = require('stream');
 const bcrypt = require('../core/hash');
 const { ZipArchive } = require('archiver');
 const config = require('../core/config');
-const { verifyUser, signToken, PASSWORD_MIN } = require('../core/auth');
+const { verifyUser, signToken, fromForm, setPassword, PASSWORD_MIN } = require('../core/auth');
+const activity = require('../core/activity');
 const { guessMime, fileCsp } = require('../core/mime');
 const lib = require('../core/library');
 const thumbs = require('../core/thumbs');
@@ -35,9 +36,6 @@ module.exports = async function (fastify) {
     limits: { fileSize: 50 * 1024 * 1024 * 1024 } // 50 GB per file
   });
 
-  // Plain HTML form posts (used by "download selection as zip", which must be a real navigation)
-  fastify.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string', bodyLimit: 4 * 1024 * 1024 },
-    (req, body, done) => done(null, Object.fromEntries(new URLSearchParams(body))));
 
   const tempDir = config.tempDir;
 
@@ -403,6 +401,7 @@ module.exports = async function (fastify) {
         fs.renameSync(tmp, plainPath);
         db.prepare('UPDATE files SET is_encrypted = 0, public_hash = ? WHERE id = ?').run(publicHash, file.id);
         try { fs.unlinkSync(encPath); } catch (e) { /* ignore */ }
+        activity.log(request, 'share.created', { target: file.filename });
         return { success: true, public_hash: publicHash };
       } else if (!is_shared && !file.is_encrypted) {
         const iv = crypto.randomBytes(16).toString('hex');
@@ -410,11 +409,13 @@ module.exports = async function (fastify) {
         fs.renameSync(tmp, encPath);
         db.prepare('UPDATE files SET is_encrypted = 1, public_hash = NULL, iv_hex = ? WHERE id = ?').run(iv, file.id);
         try { fs.unlinkSync(plainPath); } catch (e) { /* ignore */ }
+        activity.log(request, 'share.removed', { target: file.filename });
         return { success: true };
       } else if (is_shared && !file.public_hash) {
         // already stored plain (e.g. recovered by the storage check): only the link is missing
         const publicHash = crypto.randomBytes(12).toString('hex');
         db.prepare('UPDATE files SET public_hash = ? WHERE id = ?').run(publicHash, file.id);
+        activity.log(request, 'share.created', { target: file.filename });
         return { success: true, public_hash: publicHash };
       }
     } catch (err) {
@@ -508,10 +509,11 @@ module.exports = async function (fastify) {
     if (!newPassword || String(newPassword).length < PASSWORD_MIN) return reply.code(400).send({ error: `New password must be at least ${PASSWORD_MIN} characters.` });
     const user = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(request.user.id);
     if (!user || !(await bcrypt.compare(String(currentPassword || ''), user.password_hash))) {
+      activity.log(request, 'account.password_change_failed', { detail: 'Wrong current password' });
       return reply.code(400).send({ error: 'Current password is incorrect' });
     }
-    const hash = await bcrypt.hash(String(newPassword), 10);
-    db.prepare('UPDATE users SET password_hash = ?, token_version = COALESCE(token_version, 0) + 1 WHERE id = ?').run(hash, request.user.id);
+    setPassword(request.user.id, await bcrypt.hash(String(newPassword), 10));
+    activity.log(request, 'account.password_changed');
     const fresh = db.prepare('SELECT id, username, role, token_version FROM users WHERE id = ?').get(request.user.id);
     return { success: true, token: signToken(fresh) };
   });
@@ -667,11 +669,7 @@ module.exports = async function (fastify) {
 
   // Download a selection (files and folders) as one zip. A form POST, so the
   // browser streams it straight to disk: fields token, files, folders (comma separated), name.
-  const formAuth = async (request, reply) => {
-    if (!request.headers.authorization && request.body?.token) request.headers.authorization = `Bearer ${request.body.token}`;
-    return verifyUser(request, reply);
-  };
-  fastify.post('/api/zip', { preHandler: formAuth }, async (request, reply) => {
+  fastify.post('/api/zip', { preHandler: fromForm(verifyUser) }, async (request, reply) => {
     const ids = (v) => String(v || '').split(',').map(s => s.trim()).filter(Boolean).slice(0, 10000);
     const uid = request.user.id;
     const entries = [];

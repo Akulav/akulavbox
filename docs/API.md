@@ -95,7 +95,10 @@ All endpoints are JSON unless noted. Authenticate with `Authorization: Bearer <t
 | GET | `/api/admin/system` | Disk `{ total, free, used }`, storage breakdown, totals, overcommit, version, schema, Node, uptime (`?fresh=1` re-measures) |
 | GET | `/api/admin/storage-check` | Files on disk vs. the database: `orphans` (no row), `missing` (row, no data), `usage` (drifted counters), with byte totals |
 | POST | `/api/admin/storage-check/clean` | `{ orphans?, missing?, usage? }` (all on by default) → `{ deleted, freed_bytes, recovered, repaired, removed_rows, usage_fixed }` |
-| GET | `/api/admin/backup` | `{ estimate, import: { running, step, done, total, error, staging, pending }, restored }`. `staging` is the id of another process (the command line) unpacking a backup; `pending.failed` is `{ error, at }` when the last start couldn't swap the restore in |
+| GET | `/api/admin/activity?kind=&user=&q=&before=&limit=` | `{ items: [{ id, at, user_id, username, action, target, detail, ip }], next, keep_days }`, newest first. `kind`: `signin`, `failed`, `account`, `share`, `backup`, `server`. `before=<next>` loads older rows |
+| PUT | `/api/admin/backup/schedule` | `{ enabled, every: daily\|weekly, hour, weekday, keep, dir, passphrase? }` → the schedule status (never the passphrase) |
+| POST | `/api/admin/backup/schedule/run` | Make a scheduled backup now (in the background; see `schedule` in `GET /api/admin/backup`) |
+| GET | `/api/admin/backup` | `{ estimate, import: { running, step, done, total, error, staging, pending }, restored, schedule: { enabled, every, hour, weekday, keep, dir, default_dir, has_passphrase, passphrase_from_env, passphrase_unreadable, next_at, last, last_ok, running, done, total, timezone } }`. `staging` is the id of another process (the command line) unpacking a backup; `pending.failed` is `{ error, at }` when the last start couldn't swap the restore in |
 | POST | `/api/admin/backup/export` | Form post: `token, passphrase` (8+ characters). Streams an `.akbx` file |
 | GET | `/api/admin/backup/upload?id=` | `{ size }`: how much of that upload the server has, to resume it |
 | PUT | `/api/admin/backup/upload?id=&offset=` | Raw `application/octet-stream` chunk of a backup (≤ 32 MB each). A chunk past the end → 409 `{ error, size }` |

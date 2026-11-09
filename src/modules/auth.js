@@ -2,6 +2,7 @@ const db = require('../core/db');
 const bcrypt = require('../core/hash');
 const config = require('../core/config');
 const { signToken, PASSWORD_MIN } = require('../core/auth');
+const activity = require('../core/activity');
 
 // A real hash to compare against when the username doesn't exist, so a wrong
 // username takes as long as a wrong password (no account discovery by timing).
@@ -52,10 +53,14 @@ module.exports = async function (fastify) {
     const ok = await bcrypt.compare(password, user ? user.password_hash : DUMMY_HASH);
     if (!user || !ok) {
       fail(ipKey); fail(userKey);
+      // the name as typed, so guesses at accounts that don't exist show up too
+      activity.log(request, 'auth.login_failed', { user: { id: user?.id, username: user ? user.username : username }, detail: user ? 'Wrong password' : 'No such account' });
+      if (blocked(ipKey) || blocked(userKey)) activity.log(request, 'auth.locked', { user: { id: user?.id, username: user ? user.username : username }, detail: '10 failed sign-ins: blocked for 15 minutes' });
       return reply.code(401).send({ error: 'Invalid credentials' });
     }
     failures.delete(userKey);
     db.prepare("UPDATE users SET last_login_at = datetime('now') WHERE id = ?").run(user.id);
+    activity.log(request, 'auth.login', { user, detail: String(request.headers['user-agent'] || '').slice(0, 200) || null });
 
     // older accounts may still have a password shorter than today's minimum: nudge them to change it
     const weak = WEAK.has(password.toLowerCase()) || password.toLowerCase() === user.username.toLowerCase() || password.length < PASSWORD_MIN;

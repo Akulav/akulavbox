@@ -1,7 +1,9 @@
 import { ref, reactive, computed, onMounted } from 'vue';
 import Icon from '../components/Icon.js';
 import { Avatar } from '../components/Shell.js';
-import { api, formatBytes, formatRelative, session, randomId } from '../lib/api.js';
+import BackupPanel from '../components/BackupPanel.js';
+import ActivityLog from '../components/ActivityLog.js';
+import { api, formatBytes, formatRelative, session, restartServer } from '../lib/api.js';
 import { toast, confirmDialog, promptDialog, attempt } from '../lib/ui.js';
 
 const GB = 1024 ** 3;
@@ -11,11 +13,11 @@ const PART_LABEL = {
   database: ['Database', 'Accounts, folders, albums, chat', '#6ea8e6'],
   chat_files: ['Chat files', 'Temporary, deleted after 10 minutes', '#c78bd8'],
   uploads_in_progress: ['Uploads in progress', 'Unfinished uploads, cleared after 24 h', '#d0806b'],
-  backups: ['Backups', 'Database snapshots made before upgrades', '#8ea1a4'],
+  backups: ['Backups', 'Scheduled backups, snapshots before upgrades, data replaced by a restore', '#8ea1a4'],
 };
 
 export default {
-  components: { Icon, Avatar },
+  components: { Icon, Avatar, BackupPanel, ActivityLog },
   template: /*html*/`
     <div class="max-w-6xl mx-auto">
       <div class="flex flex-wrap items-end gap-3 mb-6">
@@ -118,7 +120,7 @@ export default {
           <div class="flex flex-wrap gap-2">
             <button class="btn btn-sm" :disabled="upd.checking || upd.applying" @click="checkUpdates"><Icon :name="upd.checking ? 'loader' : 'rotate'" :size="14" />Check now</button>
             <button v-if="upd.available && !upd.ready" class="btn btn-primary btn-sm" :disabled="upd.applying || (upd.latest && !upd.latest.node_ok)" @click="applyUpdate"><Icon :name="upd.applying ? 'loader' : 'download'" :size="14" />{{ upd.applying ? 'Updating…' : 'Update to v' + upd.latest.version }}</button>
-            <button v-if="upd.ready" class="btn btn-primary btn-sm" @click="restartNow"><Icon name="rotate" :size="14" />Restart now</button>
+            <button v-if="upd.ready" class="btn btn-primary btn-sm" @click="restartServer"><Icon name="rotate" :size="14" />Restart now</button>
             <button v-if="upd.rollback && !upd.applying" class="btn btn-ghost btn-sm" @click="rollbackUpdate" :title="'Go back to v' + upd.rollback.version"><Icon name="undo" :size="14" />Roll back to v{{ upd.rollback.version }}</button>
           </div>
         </div>
@@ -166,52 +168,7 @@ export default {
           </template>
         </div>
 
-        <div class="panel p-5 md:p-6 min-w-0">
-          <div class="flex items-center gap-3 mb-3">
-            <span class="w-10 h-10 rounded-xl bg-info/15 text-info grid place-items-center"><Icon name="database" :size="20" /></span>
-            <div class="flex-1 min-w-0"><h2 class="font-semibold">Backup and restore</h2><p class="text-xs text-muted">Everything in one encrypted file: accounts, passwords, files, albums, playlists, chat</p></div>
-          </div>
-          <p v-if="bk.restored" class="rounded-xl bg-ok/10 text-[13px] px-3.5 py-2.5 mb-3"><Icon name="check" :size="14" class="inline text-ok mr-1" />Restored the backup from {{ formatRelative(bk.restored.created_at) }}. The data it replaced is in <span class="font-mono text-[12px] break-all">{{ bk.restored.previous }}</span>.</p>
-
-          <form class="space-y-2" @submit.prevent="exportBackup">
-            <p class="text-[13px] font-medium">Export<span v-if="bk.estimate" class="text-muted font-normal"> · about {{ formatBytes(bk.estimate.bytes) }}</span></p>
-            <div class="flex flex-col sm:flex-row gap-2">
-              <input v-model="bk.pass" type="password" class="input flex-1" placeholder="Passphrase (8+ characters)" autocomplete="new-password" minlength="8" required aria-label="Backup passphrase">
-              <button class="btn shrink-0" :disabled="bk.pass.length < 8"><Icon name="download" :size="15" />Download backup</button>
-            </div>
-            <p class="text-[11.5px] text-faint">Keep the passphrase safe: without it the backup can’t be opened. Stored files are already encrypted, so they’re copied as-is; the database is compressed. It restores on any AkulavBox server, even one with a different MASTER_KEY.</p>
-          </form>
-
-          <div class="border-t border-line mt-4 pt-4 space-y-2">
-            <p class="text-[13px] font-medium">Restore</p>
-            <template v-if="bk.import.pending">
-              <p class="text-[13px]">Ready to restore the backup from {{ formatRelative(bk.import.pending.created_at) }}: {{ bk.import.pending.users }} account{{ bk.import.pending.users === 1 ? '' : 's' }}, {{ (bk.import.pending.files || 0).toLocaleString() }} files. It replaces <b>everything</b> on this server when AkulavBox restarts. Anything changed before then is lost.</p>
-              <div v-if="bk.import.pending.failed" class="rounded-xl bg-danger/10 text-[12.5px] px-3.5 py-2.5" role="alert">
-                <p class="font-medium text-danger">The restart {{ formatRelative(bk.import.pending.failed.at) }} couldn’t apply it, so this server still runs on its old data.</p>
-                <p class="mt-1 break-words">{{ bk.import.pending.failed.error }}</p>
-              </div>
-              <div class="flex flex-wrap gap-2">
-                <button class="btn btn-primary btn-sm" @click="restartNow"><Icon name="rotate" :size="14" />Restart now</button>
-                <button class="btn btn-ghost btn-sm" @click="cancelImport">Cancel restore</button>
-              </div>
-              <p class="text-[11.5px] text-faint">“Restart now” stops the server. It starts again on its own under systemd, pm2, Docker or a similar service manager; otherwise start it again yourself.</p>
-            </template>
-            <template v-else-if="bk.import.running || bk.uploading">
-              <p class="text-[13px] flex items-center gap-2"><Icon name="loader" :size="14" class="text-accent" />{{ bk.uploading ? 'Uploading' : bk.import.step }} {{ Math.round(importPct) }}%</p>
-              <div class="meter"><span :style="{ width: importPct + '%' }"></span></div>
-            </template>
-            <p v-else-if="bk.import.staging" class="text-[13px] flex items-center gap-2"><Icon name="loader" :size="14" class="text-accent" />A backup is being unpacked from the command line. <button class="btn btn-ghost btn-sm" @click="pollImport">Refresh</button></p>
-            <form v-else class="space-y-2" @submit.prevent="importBackup">
-              <input ref="bkFile" type="file" accept=".akbx" class="input !h-auto py-1.5 text-[13px]" @change="e => bk.file = e.target.files[0] || null" aria-label="Backup file">
-              <div class="flex flex-col sm:flex-row gap-2">
-                <input v-model="bk.importPass" type="password" class="input flex-1" placeholder="The backup’s passphrase" autocomplete="off" required aria-label="Passphrase of the backup">
-                <button class="btn shrink-0" :disabled="!bk.file || !bk.importPass"><Icon name="upload" :size="15" />Restore</button>
-              </div>
-              <p v-if="bk.import.error" class="text-danger text-[12.5px]">{{ bk.import.error }}</p>
-              <p class="text-[11.5px] text-faint">Very large backups: copy the file to the server and run <span class="font-mono">node scripts/backup.js import &lt;file&gt;</span> instead.</p>
-            </form>
-          </div>
-        </div>
+        <BackupPanel />
       </section>
 
       <!-- ===== New account ===== -->
@@ -263,6 +220,9 @@ export default {
           <p v-if="!filtered.length" class="px-5 py-8 text-center text-muted text-[13.5px]">No account matches “{{ search }}”.</p>
         </div>
       </section>
+
+      <!-- ===== Activity ===== -->
+      <ActivityLog :users="users" />
     </div>
   `,
   setup() {
@@ -381,96 +341,6 @@ export default {
       await Promise.all([runCheck(), refresh(true)]);
     }
 
-    // ---------- backup and restore ----------
-    const bk = reactive({ pass: '', importPass: '', file: null, uploading: false, sent: 0, estimate: null, restored: null, import: { running: false, staging: null, pending: null, error: null, done: 0, total: 0, step: '' } });
-    const bkFile = ref(null);
-    const importPct = computed(() => bk.uploading ? (bk.file ? (bk.sent / bk.file.size) * 100 : 0) : (bk.import.total ? (bk.import.done / bk.import.total) * 100 : 0));
-    const loadBackup = async () => { try { Object.assign(bk, await api('/api/admin/backup')); } catch (e) { /* older server */ } };
-    function exportBackup() {
-      // a real form post, so the browser streams the (possibly huge) file straight to disk
-      const f = document.createElement('form');
-      f.method = 'POST'; f.action = '/api/admin/backup/export'; f.style.display = 'none';
-      for (const [k, v] of Object.entries({ token: session.token, passphrase: bk.pass })) { const i = document.createElement('input'); i.type = 'hidden'; i.name = k; i.value = v; f.appendChild(i); }
-      document.body.appendChild(f); f.submit(); f.remove();
-      bk.pass = '';
-      toast('Preparing the backup. The download starts in a moment.');
-    }
-    // The same file picked again (after a dropped connection, a reload or a failed check)
-    // keeps its upload id, so only the missing part is sent
-    const uploadKey = (f) => `akb-restore-upload:${f.name}:${f.size}:${f.lastModified}`;
-    const local = {
-      get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } },
-      set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* private window */ } },
-      del: (k) => { try { localStorage.removeItem(k); } catch (e) { /* private window */ } },
-    };
-    const wait = (ms) => new Promise(r => setTimeout(r, ms));
-    const waitOnline = () => navigator.onLine ? Promise.resolve() : new Promise(r => window.addEventListener('online', r, { once: true }));
-
-    async function uploadBackup(file, id) {
-      let chunk = 16 * 1024 * 1024, fails = 0;
-      let off = 0;
-      try { off = Math.min((await api(`/api/admin/backup/upload?id=${id}`)).size || 0, file.size); } catch (e) { /* older server: from the start */ }
-      bk.sent = off;
-      while (off < file.size) {
-        let status = 0, data = {};
-        try {
-          const res = await fetch(`/api/admin/backup/upload?id=${id}&offset=${off}`, { method: 'PUT', headers: { Authorization: `Bearer ${session.token}`, 'Content-Type': 'application/octet-stream' }, body: file.slice(off, off + chunk) });
-          status = res.status; data = await res.json().catch(() => ({}));
-        } catch (e) { /* network: retried below */ }
-        if (status === 200) { off = data.size; bk.sent = off; fails = 0; continue; }
-        if (status === 409 && Number.isFinite(data.size)) { off = data.size; bk.sent = off; continue; } // the server has less than we thought
-        // a proxy with a small request limit (nginx allows 1 MB unless told otherwise): smaller pieces
-        if (status === 413 && chunk > 256 * 1024) { chunk = Math.max(256 * 1024, chunk / 4); continue; }
-        if (status === 413) throw new Error('A proxy in front of AkulavBox refuses the upload (413). Raise its request size limit (nginx: client_max_body_size) or copy the file to the server and use node scripts/backup.js import.');
-        if (status === 401) throw new Error('Your session expired. Sign in again; the upload carries on where it stopped.');
-        if (status >= 400 && status < 500 || status === 507) throw new Error(data.error || `Upload failed (${status})`);
-        if (++fails > 8) throw new Error(data.error || (status ? `Upload failed (${status})` : 'Lost the connection to the server. Try again; the upload carries on where it stopped.'));
-        await waitOnline();
-        await wait(Math.min(30000, 1000 * 2 ** fails));
-      }
-    }
-
-    async function pollImport() {
-      for (;;) {
-        await loadBackup();
-        if (!bk.import.running && !bk.import.staging) break;
-        await wait(1500);
-      }
-      if (bk.import.pending && !bk.import.pending.failed) toast.success('Backup checked. Restart to restore it.');
-      else if (bk.import.error) toast.error(bk.import.error);
-    }
-
-    async function importBackup() {
-      if (!await confirmDialog({ title: 'Restore this backup?', danger: true, confirmText: 'Upload and check',
-        message: 'After it is uploaded and checked, AkulavBox replaces ALL accounts and files on this server with the backup’s at the next restart. The current data is moved to storage/backups/.' })) return;
-      const file = bk.file, key = uploadKey(file);
-      const id = local.get(key) || randomId();
-      local.set(key, id);
-      bk.uploading = true; bk.sent = 0; bk.import.error = null;
-      try {
-        await uploadBackup(file, id);
-        bk.uploading = false;
-        await api('/api/admin/backup/import', { method: 'POST', body: { id, passphrase: bk.importPass } });
-        bk.importPass = '';
-        await pollImport();
-        // checked: the server dropped its copy, so a later restore of this file uploads again
-        if (bk.import.pending) local.del(key);
-      } catch (e) { bk.uploading = false; bk.import.error = e.message; toast.error(e.message); }
-    }
-    async function cancelImport() { await attempt(async () => { await api('/api/admin/backup/import', { method: 'DELETE' }); await loadBackup(); }, 'Restore cancelled'); }
-    async function restartNow() {
-      if (!await confirmDialog({ title: 'Restart AkulavBox now?', confirmText: 'Restart', danger: true, message: 'Everyone is disconnected for a moment. If no service manager restarts it, start the server again by hand.' })) return;
-      if (!await attempt(() => api('/api/admin/restart', { method: 'POST' }))) return;
-      toast('Restarting… this page reloads when AkulavBox is back.', 'info', 10000);
-      // wait for the old process to go, then for a new one to answer (a big restore takes a while)
-      await wait(1500);
-      for (let i = 0; i < 120; i++) {
-        try { if ((await fetch('/api/health', { cache: 'no-store' })).ok) break; } catch (e) { /* still down */ }
-        await wait(1000);
-      }
-      location.reload();
-    }
-
     // ---------- updates from GitHub ----------
     const upd = ref(null);
     const loadUpdates = async (check = false) => { try { upd.value = await api(`/api/admin/updates${check ? '?check=1' : ''}`); } catch (e) { /* older server */ } };
@@ -499,13 +369,13 @@ export default {
     }).join(''));
 
     onMounted(async () => {
-      refresh(false); loadBackup();
+      refresh(false);
       await loadUpdates();
       if (upd.value?.applying) pollUpdate();
       if (location.hash.includes('updates')) document.getElementById('updates')?.scrollIntoView({ behavior: 'smooth' });
     });
     return { users, sys, sysBusy, busy, form, search, filtered, totalUsed, totalQuota, pctOf, otherBytes, pct, freePct, parts, stats, GB,
       refresh, toolAction, createUser, editQuota, resetPassword, toggleRole, signOut, deleteUser, formatBytes, formatRelative, session,
-      check, checkIssues, runCheck, cleanUp, upd, checkUpdates, applyUpdate, rollbackUpdate, notesHtml, bk, bkFile, importPct, exportBackup, importBackup, pollImport, cancelImport, restartNow };
+      check, checkIssues, runCheck, cleanUp, upd, checkUpdates, applyUpdate, rollbackUpdate, notesHtml, restartServer };
   },
 };

@@ -293,6 +293,33 @@ const MIGRATIONS = [
       addColumn(db, 'users', 'show_xxx', 'INTEGER DEFAULT 0');
     },
   },
+  {
+    name: 'server settings and activity log',
+    up(db) {
+      // settings: server-wide options set from Admin (JSON values), e.g. the backup schedule.
+      // activity: who did what and from where. username is copied so rows stay readable.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS settings (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL,
+          updated_at TEXT
+        );
+        CREATE TABLE IF NOT EXISTS activity (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          at TEXT NOT NULL,
+          user_id TEXT,
+          username TEXT,
+          action TEXT NOT NULL,
+          target TEXT,
+          detail TEXT,
+          ip TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_activity_at ON activity(at);
+        CREATE INDEX IF NOT EXISTS idx_activity_user ON activity(user_id, id);
+        CREATE INDEX IF NOT EXISTS idx_activity_action ON activity(action, id);
+      `);
+    },
+  },
 ];
 
 const LATEST = MIGRATIONS.length;
