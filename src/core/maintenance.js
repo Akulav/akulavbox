@@ -7,7 +7,7 @@ const store = require('./storage');
 const { guessMime } = require('./mime');
 
 // ---------------------------------------------------------------------------
-// Storage check: compares storage/users/ with the database.
+// Storage check: compares data/users/ with the database.
 //  - orphans:  files on disk that no file row points to (left by crashes, old
 //              versions or deleted accounts). Encrypted ones can't be opened
 //              any more (their IV was in the missing row), so they are deleted.
@@ -71,12 +71,9 @@ function scan() {
       trashed: !!r.trashed_at, repairable: fs.existsSync(other) && (r.is_encrypted || !!r.iv_hex) });
   }
 
-  // real usage: every file row (trash included, as quotas count it) + chat files still on disk
+  // real usage: every file row (trash included, as quotas count it)
   const actual = new Map();
   for (const r of rows) actual.set(r.owner_id, (actual.get(r.owner_id) || 0) + (r.size_bytes || 0));
-  for (const m of db.prepare("SELECT sender_id, file_size, file_path FROM messages WHERE type = 'file' AND file_path IS NOT NULL").all()) {
-    if (m.file_path && fs.existsSync(store.chatFileOf(m.file_path))) actual.set(m.sender_id, (actual.get(m.sender_id) || 0) + (m.file_size || 0));
-  }
   const usage = [...users.values()].map(u => ({ id: u.id, username: u.username, recorded: u.used_bytes || 0, actual: actual.get(u.id) || 0 }))
     .filter(u => u.recorded !== u.actual);
 

@@ -4,7 +4,7 @@
 
 # AkulavBox
 
-**Your files, your cloud.** A self-hosted personal cloud for encrypted files, photos, music, videos, books, and chat with voice calls. It's one Node.js server with a no-build browser frontend.
+**Your files, your cloud.** A self-hosted personal cloud for encrypted files, photos, music, videos, and books. It's one Node.js server with a no-build browser frontend.
 
 ![Node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-5fb3a1)
 ![License](https://img.shields.io/badge/license-source--available-8ea1a4)
@@ -26,10 +26,9 @@ Made with ♥ by **Akulav**
 | **Music** | Library, playlists you can reorder by dragging, an Artists view, tag filters, trimming, favorites, artwork, shuffle everywhere, multi-select (shift-click ranges) to play, file, remove or delete songs, a player that keeps playing while you browse, and media-key support |
 | **Download from a link** | Paste a YouTube, Vimeo, SoundCloud or other link (playlists and channels too). Title, creator, date, cover and length are filled in, videos are filed into a collection per channel and songs into a playlist per artist, and video is kept as space-efficient AV1. Age-restricted videos work with your saved sign-in cookies. yt-dlp and ffmpeg install themselves |
 | **Videos and books** | Video collections with play-all and shuffle, a Creators view, **save any video as a song** (same details and artwork), **trim** (fast lossless or frame-exact, in place or as a copy), covers generated automatically, participants, tags, series, and ratings. The EPUB reader remembers your page |
-| **Chat and calls** | Real-time messaging between friends, unread counts that survive reloads, deleting your own messages, files that disappear after 10 minutes, and WebRTC voice calls with optional TURN relay |
 | **Multi-user** | Per-user storage quotas. The admin panel shows **free disk space on the server**, a storage breakdown, a warning when quotas promise more than the disk can hold, roles, password resets, and "sign out everywhere" |
 | **Backup and upkeep** | **Full backup and restore** of every account, password and file in one passphrase-protected file (restores onto a new server, even with a different key), **scheduled backups** (daily or weekly, into any folder, keeping the newest N), an **activity log** (sign-ins and failed sign-ins, account changes, shares, backups), and a **storage check** that finds and cleans files on disk that belong to nothing |
-| **Security** | Revocable sessions (a password change signs out other devices), sign-in rate limiting, timing-safe login, tokens kept out of logs and `Referer` headers, and a sandbox for uploaded HTML and SVG |
+| **Security** | Revocable sessions (a password change signs out other devices, or sign out other devices from Profile), your recent sign-ins in Profile, sign-in rate limiting, timing-safe login, tokens kept out of logs and `Referer` headers, and a sandbox for uploaded HTML and SVG |
 | **Polish** | Light, dark, and system themes, a subtle animated background (can be turned off), keyboard shortcuts (press `?`), installable as an app (PWA manifest), offline and update banners |
 
 ## Requirements
@@ -64,19 +63,15 @@ All settings live in `.env` (see [.env.example](.env.example)).
 | `JWT_SECRET` | *required* | Secret for signing login tokens. Use a long random string |
 | `MASTER_KEY` | *required* | File encryption key, **exactly 32 characters**. Losing or changing it makes stored files unreadable |
 | `PORT` / `HOST` | `3000` / `0.0.0.0` | Where the server listens |
-| `STORAGE_DIR` | `./storage` | Where the database and files live |
+| `STORAGE_DIR` (or `DATA_DIR`) | `./data` | Where the database and files live. An older install with `./storage` and no `./data` keeps using it |
 | `TRASH_DAYS` | `30` | How long deleted items stay in the trash |
 | `DISK_RESERVE_MB` | `512` | Uploads are refused when they would leave less free disk than this |
 | `TOKEN_TTL` | `7d` | Sign-in lifetime. Active sessions renew themselves daily |
 | `TRUST_PROXY` | off | Set to `1` behind a reverse proxy so rate limiting sees real client IPs |
 | `SQLITE_WAL` | on | Set to `0` if storage is on a network drive |
 | `LOG_LEVEL` | `warn` | Fastify log level (`info` logs every request) |
-| `TURN_URLS`, `TURN_USERNAME`, `TURN_CREDENTIAL` | | Static TURN relay for calls |
-| `TURN_SECRET` | | coturn `static-auth-secret` (short-lived credentials) |
-| `CF_TURN_KEY_ID`, `CF_TURN_API_TOKEN` | | Cloudflare Realtime TURN |
-| `STUN_URLS` | Cloudflare + Google | Override the STUN servers |
 | `DOWNLOADS` | on | `off` turns link downloads off |
-| `AUTO_INSTALL_TOOLS` | on | `0` stops AkulavBox installing yt-dlp and ffmpeg into `storage/tools/` |
+| `AUTO_INSTALL_TOOLS` | on | `0` stops AkulavBox installing yt-dlp and ffmpeg into `data/tools/` |
 | `YTDLP_PATH` / `FFMPEG_PATH` | auto | Use your own copies instead |
 | `VIDEO_AV1` | on | `off` keeps downloaded video in whatever format the site serves |
 | `DOWNLOAD_PARALLEL` | `3` | Downloads running at the same time |
@@ -92,8 +87,6 @@ All settings live in `.env` (see [.env.example](.env.example)).
 
 The server refuses to start if `MASTER_KEY` or `JWT_SECRET` is missing or invalid, and warns you if they are still the example values.
 
-Calls only need a TURN relay when they fail to connect peer-to-peer (strict NATs, privacy-hardened browsers such as Brave).
-
 ## Upgrading
 
 The easy way: **Admin → Updates → Update**, then **Restart now**. AkulavBox downloads the new version from GitHub, installs dependencies if they changed, and can roll back. Restarting by itself needs a service manager (systemd, pm2, Docker…); otherwise start it again yourself.
@@ -101,22 +94,21 @@ The easy way: **Admin → Updates → Update**, then **Restart now**. AkulavBox 
 By hand, upgrade in place. Your existing data keeps working:
 
 1. Stop the server, update the code, and run `npm install`.
-2. Start it. Pending database migrations run automatically, and **the database is snapshotted to `storage/backups/` first**.
+2. Start it. Pending database migrations run automatically, and **the database is snapshotted to `data/backups/` first**.
 3. Encrypted files on disk use the same format as 1.x and are never rewritten.
 
 See [CHANGELOG.md](CHANGELOG.md) for what changed in each version.
 
 ## Data and backups
 
-Everything lives in `storage/`:
+Everything lives in `data/` (installs from before 3.0 may still use `storage/`; move it to `data/` while the server is stopped):
 
 ```
-storage/
+data/
   akulavbox.db (+ -wal, -shm)   SQLite database
   users/<id>/<file>.enc         encrypted files (.plain while shared publicly)
   thumbs/                       encrypted thumbnail cache (safe to delete)
   temp/                         unfinished uploads (cleared after 24 h)
-  chat_temp/                    chat files (deleted after 10 minutes)
   private/cookies/              users' saved sign-in cookies for downloads (encrypted)
   tools/                        yt-dlp and ffmpeg, installed automatically (safe to delete)
   backups/                      database snapshots taken before upgrades, and data replaced by a restore
@@ -130,20 +122,20 @@ AKB_PASSPHRASE='your passphrase' node scripts/backup.js import backup.akbx   # a
 node scripts/backup.js check --fix                                           # the storage check
 ```
 
-You can also stop the server and copy `storage/` **together with your `MASTER_KEY`**. Files can't be decrypted without the key.
+You can also stop the server and copy `data/` **together with your `MASTER_KEY`**. Files can't be decrypted without the key.
 
 **Age-restricted downloads:** each person can save their browser's sign-in cookies in Profile → Link downloads (export them with an extension such as "Get cookies.txt LOCALLY").
 
 ## Documentation
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how the server, storage, encryption, and frontend fit together
-- [docs/API.md](docs/API.md): HTTP and Socket.IO reference
+- [docs/API.md](docs/API.md): HTTP API reference
 - [CLAUDE.md](CLAUDE.md): conventions for working on the code
 - [CHANGELOG.md](CHANGELOG.md): release notes
 
 ## Tech stack
 
-- **Backend:** [Fastify](https://fastify.dev/) 4, Socket.IO, the built-in `node:sqlite`, JWT, bcrypt, archiver, and sharp
+- **Backend:** [Fastify](https://fastify.dev/) 4, the built-in `node:sqlite`, JWT, bcrypt, archiver, and sharp
 - **Frontend:** Vue 3 and Tailwind from CDNs, written as plain ES modules in `frontend/` with no build step
 
 ## License

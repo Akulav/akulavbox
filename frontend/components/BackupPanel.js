@@ -14,7 +14,7 @@ export default {
     <div class="panel p-5 md:p-6 min-w-0">
       <div class="flex items-center gap-3 mb-3">
         <span class="w-10 h-10 rounded-xl bg-info/15 text-info grid place-items-center"><Icon name="database" :size="20" /></span>
-        <div class="flex-1 min-w-0"><h2 class="font-semibold">Backup and restore</h2><p class="text-xs text-muted">Everything in one encrypted file: accounts, passwords, files, albums, playlists, chat</p></div>
+        <div class="flex-1 min-w-0"><h2 class="font-semibold">Backup and restore</h2><p class="text-xs text-muted">Everything in one encrypted file: accounts, passwords, files, albums, playlists, collections</p></div>
       </div>
       <p v-if="bk.restored" class="rounded-xl bg-ok/10 text-[13px] px-3.5 py-2.5 mb-3"><Icon name="check" :size="14" class="inline text-ok mr-1" />Restored the backup from {{ formatRelative(bk.restored.created_at) }}. The data it replaced is in <span class="font-mono text-[12px] break-all">{{ bk.restored.previous }}</span>.</p>
 
@@ -186,7 +186,7 @@ export default {
 
     async function importBackup() {
       if (!await confirmDialog({ title: 'Restore this backup?', danger: true, confirmText: 'Upload and check',
-        message: 'After it is uploaded and checked, AkulavBox replaces ALL accounts and files on this server with the backup’s at the next restart. The current data is moved to storage/backups/.' })) return;
+        message: 'After it is uploaded and checked, AkulavBox replaces ALL accounts and files on this server with the backup’s at the next restart. The current data is moved to data/backups/.' })) return;
       const file = bk.file, key = uploadKey(file);
       const id = storage.read(key) || randomId();
       storage.write(key, id);

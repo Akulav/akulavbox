@@ -55,8 +55,10 @@ module.exports = async function (fastify) {
 
   fastify.delete('/api/music/playlists/:id', { preHandler: verifyUser }, async (request, reply) => {
     if (!ownsPlaylist(request.params.id, request.user.id)) return notFound(reply);
-    db.prepare('DELETE FROM playlist_songs WHERE playlist_id = ?').run(request.params.id);
-    db.prepare('DELETE FROM playlists WHERE id = ? AND owner_id = ?').run(request.params.id, request.user.id);
+    db.tx(() => {
+      db.prepare('DELETE FROM playlist_songs WHERE playlist_id = ?').run(request.params.id);
+      db.prepare('DELETE FROM playlists WHERE id = ? AND owner_id = ?').run(request.params.id, request.user.id);
+    });
     return { success: true };
   });
 

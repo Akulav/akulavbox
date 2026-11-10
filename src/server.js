@@ -40,7 +40,13 @@ fastify.addHook('onSend', async (request, reply, payload) => {
     // a page opened from here (a shared link, a file) can't reach back into the signed-in window
     reply.header('Cross-Origin-Opener-Policy', 'same-origin');
   }
-  reply.header('X-Powered-By', `${config.name}/${config.version}`);
+  // the app itself (user files carry their own sandbox CSP from mime.fileCsp): no plugins,
+  // no <base> hijacking, forms only post back here, and no framing by other sites
+  if (!reply.hasHeader('Content-Security-Policy') && /^text\/html/.test(String(reply.getHeader('content-type') || ''))) {
+    reply.header('Content-Security-Policy', "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'");
+  }
+  // nothing in the app needs these (calls were removed in 3.0)
+  reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=()');
   return payload;
 });
 
@@ -81,7 +87,6 @@ fastify.register(require('./modules/admin'));
 fastify.register(require('./modules/files'));
 fastify.register(require('./modules/trash'));
 fastify.register(require('./modules/albums'));
-fastify.register(require('./modules/chat'));
 fastify.register(require('./modules/music'));
 fastify.register(require('./modules/library'));
 fastify.register(require('./modules/collections'));

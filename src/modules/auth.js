@@ -13,6 +13,8 @@ const DUMMY_HASH = bcrypt.hashSync('not-a-real-password', 10);
 const WINDOW_MS = 15 * 60 * 1000;
 const MAX_FAILS = 10;
 const failures = new Map(); // key -> { count, first }
+// a flood of made-up usernames must not grow the map without bound
+const MAX_KEYS = 20000;
 function blocked(key) {
   const f = failures.get(key);
   if (!f) return 0;
@@ -21,20 +23,26 @@ function blocked(key) {
 }
 function fail(key) {
   const f = failures.get(key);
-  if (!f || Date.now() - f.first > WINDOW_MS) failures.set(key, { count: 1, first: Date.now() });
-  else f.count++;
+  if (!f || Date.now() - f.first > WINDOW_MS) {
+    if (failures.size >= MAX_KEYS) failures.delete(failures.keys().next().value); // oldest first (Map keeps insertion order)
+    failures.set(key, { count: 1, first: Date.now() });
+  } else f.count++;
 }
 setInterval(() => { for (const [k, f] of failures) if (Date.now() - f.first > WINDOW_MS) failures.delete(k); }, WINDOW_MS).unref();
 
 const WEAK = new Set(['admin', 'password', '1234', '12345', '123456', 'qwerty', 'letmein']);
 
+const exactUser = db.prepare('SELECT * FROM users WHERE username = ?');
+const looseUser = db.prepare('SELECT * FROM users WHERE username = ? COLLATE NOCASE LIMIT 2');
 function findUser(username) {
   // exact match first; otherwise a case-insensitive match if it is unambiguous
-  const exact = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+  const exact = exactUser.get(username);
   if (exact) return exact;
-  const loose = db.prepare('SELECT * FROM users WHERE username = ? COLLATE NOCASE').all(username);
+  const loose = looseUser.all(username);
   return loose.length === 1 ? loose[0] : null;
 }
+// usernames are at most 32 characters; bcrypt only reads the first 72 bytes of a password
+const USERNAME_MAX = 64, PASSWORD_MAX = 1024;
 
 module.exports = async function (fastify) {
   // Public: lets the sign-in page show the version and check the server is up
@@ -44,6 +52,7 @@ module.exports = async function (fastify) {
     const username = String(request.body?.username || '').trim();
     const password = String(request.body?.password || '');
     if (!username || !password) return reply.code(400).send({ error: 'Username and password are required' });
+    if (username.length > USERNAME_MAX || password.length > PASSWORD_MAX) return reply.code(401).send({ error: 'Invalid credentials' });
 
     const ipKey = `ip:${request.ip}`, userKey = `user:${username.toLowerCase()}`;
     const wait = Math.max(blocked(ipKey), blocked(userKey));

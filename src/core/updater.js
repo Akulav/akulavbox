@@ -14,8 +14,8 @@ const config = require('./config');
 //   git      the app folder is a git clone and git works: fetch, then a
 //            fast-forward merge. Refused if tracked files were edited by hand.
 //   archive  anything else (a copied folder, a zip): download the commit's
-//            tarball, back the current code up to storage/updates/, copy the new
-//            code over. storage/, .env, node_modules and .git are never touched.
+//            tarball, back the current code up to data/updates/, copy the new
+//            code over. The data folder, .env, node_modules and .git are never touched.
 // Then `npm install` runs when dependencies changed. A failure puts the old code
 // back. The new code runs after a restart; Roll back undoes the last update.
 //
@@ -30,8 +30,10 @@ const ENABLED = process.env.UPDATES !== 'off';
 const BRANCH = (process.env.UPDATE_BRANCH || 'main').trim();
 const TOKEN = (process.env.GITHUB_TOKEN || '').trim();
 const GIT = process.env.GIT_PATH || 'git';
-// never replaced or deleted by an update
-const KEEP = new Set(['storage', 'node_modules', '.git', '.env', 'logs', '.claude']);
+// never replaced or deleted by an update (data/ and the older storage/, plus STORAGE_DIR when it sits in the app folder)
+const KEEP = new Set(['data', 'storage', 'node_modules', '.git', '.env', 'logs', '.claude']);
+const insideApp = path.relative(APP_DIR, config.storageDir);
+if (insideApp && !insideApp.startsWith('..') && !path.isAbsolute(insideApp)) KEEP.add(insideApp.split(path.sep)[0]);
 // folders that hold only shipped code: files missing from the new version are removed
 const CODE_DIRS = ['src', 'frontend', 'scripts', 'docs'];
 

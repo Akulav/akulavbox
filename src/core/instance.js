@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const config = require('./config');
 
-// storage/akulavbox.pid names the server that is using this storage folder. A second
+// data/akulavbox.pid names the server that is using this storage folder. A second
 // copy started on the same folder (a leftover window, a service plus a manual start)
 // must not swap a restore in under the running one.
 const pidFile = path.join(config.storageDir, 'akulavbox.pid');

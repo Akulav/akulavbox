@@ -65,6 +65,31 @@ export default {
         </form>
       </section>
 
+      <section class="panel p-5 md:p-6">
+        <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
+          <div class="min-w-0">
+            <h2 class="title text-lg mb-1">Sign-ins</h2>
+            <p class="text-muted text-[13.5px]">Recent sign-ins to your account. If one wasn’t you, sign out the other devices and change your password.</p>
+          </div>
+          <button class="btn btn-sm" :disabled="signingOut" @click="signOutOthers"><Icon :name="signingOut ? 'loader' : 'logout'" :size="15" />Sign out other devices</button>
+        </div>
+        <p v-if="!logins.loaded" class="text-muted text-[13px]">Loading…</p>
+        <p v-else-if="!logins.items.length" class="text-muted text-[13px]">No sign-ins recorded yet.</p>
+        <ul v-else class="divide-y divide-line/70 -mx-1">
+          <li v-for="(l, i) in shownLogins" :key="i" class="flex items-center gap-3 px-1 py-2.5 text-[13px]">
+            <span class="w-8 h-8 rounded-lg grid place-items-center shrink-0" :class="l.action === 'auth.login' ? 'bg-ok/15 text-ok' : 'bg-danger/15 text-danger'">
+              <Icon :name="l.action === 'auth.login' ? 'check' : 'alert'" :size="15" />
+            </span>
+            <div class="min-w-0 flex-1">
+              <p class="truncate"><span class="font-medium">{{ l.action === 'auth.login' ? deviceOf(l.detail) : l.action === 'auth.locked' ? 'Sign-in blocked' : 'Failed sign-in' }}</span>
+                <span v-if="l.action !== 'auth.login' && l.detail" class="text-muted"> · {{ l.detail }}</span></p>
+              <p class="text-xs text-muted tabular-nums">{{ when(l.at) }}<template v-if="l.ip"> · {{ l.ip }}</template></p>
+            </div>
+          </li>
+        </ul>
+        <button v-if="logins.items.length > 6" class="btn btn-ghost btn-sm mt-2" @click="logins.all = !logins.all">{{ logins.all ? 'Show fewer' : 'Show all ' + logins.items.length }}</button>
+      </section>
+
       <section id="link-downloads" class="panel p-5 md:p-6">
         <h2 class="title text-lg mb-1 flex items-center gap-2">Link downloads<span v-if="ck.saved" class="chip chip-ok">Cookies saved</span></h2>
         <p class="text-muted text-[13.5px] mb-4">Age-restricted, members-only or sign-in videos (YouTube “Sign in to confirm your age”, and sites that check your age) need your browser’s sign-in cookies.
@@ -250,11 +275,34 @@ export default {
       await attempt(async () => { await api('/api/downloads/cookies', { method: 'DELETE' }); Object.assign(ck, { saved: false, sites: [], updated_at: null }); }, 'Cookies removed');
     }
 
+    // ---------- recent sign-ins ----------
+    const logins = reactive({ items: [], loaded: false, all: false });
+    const shownLogins = computed(() => (logins.all ? logins.items : logins.items.slice(0, 6)));
+    const loadLogins = async () => { try { logins.items = await api('/api/user/activity'); } catch (e) { /* older server */ } logins.loaded = true; };
+    // a readable name from the user agent: "Firefox on Windows"
+    const deviceOf = (ua) => {
+      const s = String(ua || '');
+      if (!s) return 'Signed in';
+      const browser = /Edg\//.test(s) ? 'Edge' : /OPR\/|Opera/.test(s) ? 'Opera' : /Firefox\//.test(s) ? 'Firefox' : /Chrome\//.test(s) ? 'Chrome' : /Safari\//.test(s) ? 'Safari' : /curl|node|python/i.test(s) ? 'A script' : 'A browser';
+      const os = /Android/.test(s) ? 'Android' : /iPhone|iPad|iPod/.test(s) ? 'iOS' : /Windows/.test(s) ? 'Windows' : /Mac OS X|Macintosh/.test(s) ? 'macOS' : /Linux/.test(s) ? 'Linux' : '';
+      return os ? `${browser} on ${os}` : browser;
+    };
+    const when = (s) => { const d = parseDbDate(s); return d ? d.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : ''; };
+    const signingOut = ref(false);
+    async function signOutOthers() {
+      signingOut.value = true;
+      const r = await attempt(() => api('/api/user/signout-others', { method: 'POST' }), 'Every other browser and device was signed out.');
+      signingOut.value = false;
+      if (r?.token) setSession(r.token);
+    }
+
     onMounted(() => {
       refreshAccount();
+      loadLogins();
       loadCookies().then(() => { if (location.hash.includes('cookies')) document.getElementById('link-downloads')?.scrollIntoView({ behavior: 'smooth' }); });
     });
     return { account, session, app, pct, pw, strength, themes, theme, setTheme, motion, setMotion, fileInputRef, cropImageSrc, cropperImageRef,
-      onFileSelected, cancelCrop, confirmCrop, removeAvatar, changePassword, setXxx, formatBytes, since, ck, cookieFile, saveCookies, onCookieFile, removeCookies };
+      onFileSelected, cancelCrop, confirmCrop, removeAvatar, changePassword, setXxx, formatBytes, since, ck, cookieFile, saveCookies, onCookieFile, removeCookies,
+      logins, shownLogins, deviceOf, when, signingOut, signOutOthers };
   },
 };

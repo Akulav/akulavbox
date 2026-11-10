@@ -1,4 +1,4 @@
-﻿const fs = require('fs');
+const fs = require('fs');
 const path = require('path');
 
 // ---------------------------------------------------------------------------
@@ -320,13 +320,37 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    name: 'remove chat, friends and calls',
+    up(db) {
+      const has = (t) => !!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(t);
+      // chat attachments still on disk counted towards the sender's quota
+      if (has('messages')) {
+        db.exec(`UPDATE users SET used_bytes = MAX(0, used_bytes - COALESCE((SELECT SUM(m.file_size) FROM messages m
+          WHERE m.sender_id = users.id AND m.type = 'file' AND m.file_path IS NOT NULL), 0))`);
+      }
+      db.exec(`
+        DROP TRIGGER IF EXISTS keep_1000_messages;
+        DROP TABLE IF EXISTS chat_reads;
+        DROP TABLE IF EXISTS messages;
+        DROP TABLE IF EXISTS friends;
+      `);
+    },
+  },
+  {
+    name: 'faster download queue lookups',
+    up(db) {
+      // the queue looks jobs up by status every few seconds while anything is running
+      db.exec('CREATE INDEX IF NOT EXISTS idx_downloads_status ON downloads(status)');
+    },
+  },
 ];
 
 const LATEST = MIGRATIONS.length;
 
 /**
  * Bring the database up to date. Existing databases are snapshotted to
- * storage/backups before the first pending step, so an upgrade can always be undone.
+ * data/backups before the first pending step, so an upgrade can always be undone.
  */
 function migrate(db, { backupsDir, version, log = console.log } = {}) {
   const current = db.prepare('PRAGMA user_version').get().user_version;

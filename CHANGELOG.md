@@ -2,6 +2,36 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 3.0.0 (2026-11-11)
+
+### Breaking
+- **Chat, friends and voice calls are gone.** The Chat section, friend requests, messages, temporary chat files, presence and WebRTC calls are removed, along with Socket.IO and the `TURN_*`, `CF_TURN_*` and `STUN_URLS` settings. Upgrading deletes the stored messages and friend lists, gives back the quota used by chat files, and removes `chat_temp/`.
+- **Data now lives in `data/`** in the app folder (or wherever `STORAGE_DIR`, or the new alias `DATA_DIR`, points). An install that still has the old `storage/` folder and no `data/` keeps using it and logs a reminder to move it. Updates from GitHub never touch either folder.
+
+### Added
+- **XXX on phones.** When the section is on, it has its own slot in the bottom bar instead of hiding in the account menu.
+- **Videos pick up where you stopped.** Videos longer than two minutes reopen at the point you left them (remembered in this browser), with a **Start over** button. Space plays and pauses.
+- **Sign-ins in Profile.** See recent sign-ins to your account, failed ones included, with the browser, device and IP, and **sign out other devices** without changing your password.
+- The browser tab shows the section you're in ("Videos · AkulavBox").
+
+### Changed
+- **New sign-in page.** One balanced card: the brand and features on one half, the form on the other, the same height and padding on both sides, a single card on phones. Fields have icons, errors are clearer (and a server that can't be reached says so), and there's a note on what to do about a forgotten password.
+- **Creators and collections in Videos use 16:9 tiles**, so video covers are no longer cropped into squares.
+
+### Fixed
+- **Vertical videos overflowed the viewer.** A portrait video (a phone recording) grew past the bottom of the screen outside full screen. Videos of any shape now fit inside the viewer with black bars.
+- Moving or trashing many items at once runs in one transaction, and ids that aren't strings are skipped instead of causing a server error.
+- Deleting a playlist or an album removes its rows in one transaction.
+
+### Security
+- The app page gets a Content-Security-Policy (`object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, `frame-ancestors 'self'`) and a `Permissions-Policy` that turns off camera, microphone and location.
+- Responses no longer announce the server version in `X-Powered-By`.
+- Very long usernames or passwords on sign-in are refused before any work, and the failed-sign-in tracker has a size cap, so a flood of made-up names can't grow memory without end.
+- Profile photos must be PNG, JPEG, WebP or GIF (no SVG).
+
+### Performance
+- Folder listings, moves and zip downloads reuse prepared statements instead of preparing one per folder visited. The download queue's status lookups have an index.
+
 ## 2.10.0 (2026-11-09)
 
 ### Added

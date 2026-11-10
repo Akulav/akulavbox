@@ -154,8 +154,10 @@ module.exports = async function (fastify) {
 
   fastify.delete('/api/albums/:id', { preHandler: verifyUser }, async (request, reply) => {
     if (!ownsAlbum(request.params.id, request.user.id)) return reply.code(404).send({ error: 'Album not found' });
-    db.prepare('DELETE FROM album_images WHERE album_id = ?').run(request.params.id);
-    db.prepare('DELETE FROM albums WHERE id = ?').run(request.params.id);
+    db.tx(() => {
+      db.prepare('DELETE FROM album_images WHERE album_id = ?').run(request.params.id);
+      db.prepare('DELETE FROM albums WHERE id = ?').run(request.params.id);
+    });
     return { success: true };
   });
 

@@ -9,7 +9,7 @@ const activity = require('./activity');
 
 // ---------------------------------------------------------------------------
 // Scheduled full backups: daily or weekly at a set hour (server time), written as
-// akulavbox-auto-<date>-<time>.akbx into a folder (storage/backups/scheduled unless
+// akulavbox-auto-<date>-<time>.akbx into a folder (data/backups/scheduled unless
 // set; another drive is better), keeping the newest `keep`. A missed slot (server
 // off at the time) runs once at the next start. A failed run waits for the next slot.
 //
@@ -152,7 +152,7 @@ function save(input) {
       if (!path.isAbsolute(raw)) throw new Error('Use a full folder path, like D:\\Backups or /mnt/backup/akulavbox.');
       const dir = path.resolve(raw);
       const inside = (p) => dir === p || dir.startsWith(p + path.sep);
-      if ([config.usersDir, config.importDir, config.tempDir, config.chatDir, config.thumbsDir].some(inside)) throw new Error('Pick a folder outside AkulavBox’s own data folders.');
+      if ([config.usersDir, config.importDir, config.tempDir, config.thumbsDir].some(inside)) throw new Error('Pick a folder outside AkulavBox’s own data folders.');
       try {
         fs.mkdirSync(dir, { recursive: true });
         const probe = path.join(dir, `.akulavbox-write-test-${process.pid}`);

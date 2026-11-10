@@ -42,9 +42,11 @@ All endpoints are JSON unless noted. Authenticate with `Authorization: Bearer <t
 | Method | Path | |
 | --- | --- | --- |
 | GET | `/api/user/profile` | Includes `used_bytes`, `quota_bytes`, `trash_bytes`, `show_xxx` |
-| PATCH | `/api/user/profile` | `{ profile_image: dataUrl \| null }` |
+| PATCH | `/api/user/profile` | `{ profile_image: dataUrl \| null }` (PNG, JPEG, WebP or GIF) |
 | PATCH | `/api/user/settings` | `{ show_xxx: boolean }`: turn the XXX section on or off for the account |
 | PATCH | `/api/user/password` | `{ currentPassword, newPassword }` → `{ token }`. At least 8 characters. Other sessions are revoked |
+| POST | `/api/user/signout-others` | Revoke every other session → `{ token }` for this one |
+| GET | `/api/user/activity` | My 25 latest sign-in events: `[{ at, action, detail, ip }]` (`auth.login` with the user agent in `detail`, `auth.login_failed`, `auth.locked`) |
 
 ## Library (photos, music, videos, books)
 | Method | Path | |
@@ -76,13 +78,6 @@ All endpoints are JSON unless noted. Authenticate with `Authorization: Bearer <t
 
 ## Music
 `/api/music/songs` (GET), `/api/music/playlists` (GET: with `song_count`, `total_duration`, `display_cover_id`; POST `{ title }`), `/api/music/playlists/:id` (DELETE), `/:id/title`, `/:id/favorite`, `/:id/cover` (PATCH), `/:id/songs` (GET, POST `{ file_id }`), `/:id/songs/bulk` and `/:id/songs/remove` (POST `{ file_ids }`), `/:id/order` (PUT `{ file_ids }`), `/:id/songs/:file_id` (DELETE), `/api/music/songs/:id/cover` (POST `{ cover_file_id }`).
-
-## Chat
-`/api/chat/users`, `/api/chat/friends` (includes `unread` and `online`), `/api/chat/friends/add | accept | remove` (POST `{ friend_id }`), `/api/chat/messages/:friendId` (GET), `/api/chat/messages/:id` (DELETE, own messages), `/api/chat/read/:friendId` (POST), `/api/chat/upload` (multipart `receiver_id, file`, ≤ 50 MB), `/api/chat/download/:msgId`, `/api/rtc/config`.
-
-**Socket.IO** (auth: `{ token }`)
-- client → server: `send_message { receiver_id, content }` (ack `{ ok, error? }`), `typing`, `call_user`, `answer_call`, `reject_call`, `end_call`, `webrtc_offer`, `webrtc_answer`, `webrtc_ice_candidate` (all with `target_id`)
-- server → client: `online_list`, `user_online`, `user_offline`, `receive_message`, `message_deleted`, `file_expired`, `friends_changed`, `typing`, `incoming_call`, `call_answered`, `call_rejected`, `call_ended`, and the WebRTC events
 
 ## Admin (admins only)
 | Method | Path | |

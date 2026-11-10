@@ -1,11 +1,11 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted, markRaw, nextTick } from 'vue';
 import Icon from './Icon.js';
-import { fileUrl, sharedUrl, formatBytes, formatDate, copyText, downloadUrl } from '../lib/api.js';
+import { fileUrl, sharedUrl, formatBytes, formatDate, copyText, downloadUrl, storage } from '../lib/api.js';
 import { kindOf, kindLabel, iconFor, tintFor, languageFor, isTextual, extOf } from '../lib/filetypes.js';
 import { toast, confirmDialog } from '../lib/ui.js';
 import { api } from '../lib/api.js';
 import { lib, sanitize } from '../lib/cdn.js';
-import { thumbUrl, displayTitle } from '../lib/library.js';
+import { thumbUrl, displayTitle, formatDuration } from '../lib/library.js';
 import EpubReader from './EpubReader.js';
 
 const TEXT_LIMIT = 3 * 1024 * 1024;      // show at most the first 3 MB of a text file
@@ -154,7 +154,9 @@ export default {
 
             <!-- VIDEO -->
             <div v-else-if="kind === 'video'" class="absolute inset-0 bg-black grid place-items-center">
-              <video :key="file.id" :src="url" controls autoplay playsinline class="max-w-full max-h-full" @ended="onMediaEnded" @error="fail('Your browser can’t play this video format. Download it to watch with a media player.')"></video>
+              <!-- fills the stage and letterboxes: a grid cell has no definite height, so max-h-full let tall (phone) videos overflow it -->
+              <video ref="videoEl" :key="file.id" :src="url" controls autoplay playsinline class="absolute inset-0 w-full h-full object-contain"
+                     @loadedmetadata="onVideoMeta" @timeupdate="onVideoTime" @ended="onMediaEnded" @error="fail('Your browser can’t play this video format. Download it to watch with a media player.')"></video>
               <span v-if="autoplayNext && index < files.length - 1" class="absolute top-3 left-1/2 -translate-x-1/2 chip !bg-black/60 !text-white backdrop-blur pointer-events-none">Up next: {{ displayTitle(files[index + 1]) }}</span>
             </div>
 
@@ -602,7 +604,37 @@ export default {
       index.value = n;
     }
 
-    const onMediaEnded = () => { if (props.autoplayNext && index.value < props.files.length - 1) go(1); };
+    // ---------- videos pick up where you stopped (remembered in this browser) ----------
+    const RESUME_KEY = 'akulavResume', RESUME_MIN = 120, RESUME_MAX_ITEMS = 300;
+    const videoEl = ref(null);
+    const readResume = () => { try { return JSON.parse(storage.read(RESUME_KEY) || '{}') || {}; } catch (e) { return {}; } };
+    const writeResume = (fn) => {
+      const m = readResume();
+      fn(m);
+      const ids = Object.keys(m);
+      for (const id of ids.slice(0, Math.max(0, ids.length - RESUME_MAX_ITEMS))) delete m[id];
+      storage.write(RESUME_KEY, Object.keys(m).length ? JSON.stringify(m) : null);
+    };
+    let lastSaved = 0;
+    function onVideoMeta(e) {
+      const v = e.target, at = readResume()[file.value.id];
+      // only longer videos, and not when you were near the start or the end
+      if (!(v.duration > RESUME_MIN) || !(at > 15) || at > v.duration - 20) return;
+      v.currentTime = at;
+      const id = file.value.id;
+      toast(`Resumed at ${formatDuration(at)}`, 'info', 5000, { label: 'Start over', run: () => { if (videoEl.value && file.value.id === id) videoEl.value.currentTime = 0; } });
+    }
+    function onVideoTime(e) {
+      const v = e.target;
+      if (!(v.duration > RESUME_MIN) || Date.now() - lastSaved < 4000) return;
+      lastSaved = Date.now();
+      const id = file.value.id, t = Math.floor(v.currentTime);
+      writeResume((m) => { delete m[id]; if (t > 15 && t < v.duration - 20) m[id] = t; });
+    }
+    const onMediaEnded = () => {
+      if (kind.value === 'video') writeResume((m) => { delete m[file.value.id]; });
+      if (props.autoplayNext && index.value < props.files.length - 1) go(1);
+    };
     const download = () => downloadUrl(fileUrl(file.value.id, { download: true }));
     const copyLink = async () => { if (await copyText(sharedUrl(file.value.public_hash))) toast.success('Public link copied'); };
     const copyContents = async () => { if (await copyText(state.text || '')) toast.success('Copied to clipboard'); };
@@ -620,6 +652,11 @@ export default {
       else if (e.key.toLowerCase() === 'i') showInfo.value = !showInfo.value;
       else if (e.key.toLowerCase() === 'f') toggleFullscreen();
       else if (e.key === ' ' && isImageView.value && imageCount.value > 1) { e.preventDefault(); toggleSlideshow(); }
+      // Space plays and pauses even when the video itself doesn't have focus (when it does, the browser handles it)
+      else if (e.key === ' ' && kind.value === 'video' && videoEl.value && e.target !== videoEl.value) {
+        e.preventDefault();
+        if (videoEl.value.paused) videoEl.value.play().catch(() => {}); else videoEl.value.pause();
+      }
     };
 
     watch(index, () => load());
@@ -650,7 +687,7 @@ export default {
       isShared, epubRef, thumbUrl, displayTitle, rootEl, slideshow, imageCount, toggleSlideshow, toggleFullscreen,
       index, file, kind, ext, tint, url, state, mode, modes, wrap, showInfo, showsCode, isImageView, lineCount, gutter, tableWidth,
       zoom, drag, zoomBy, resetZoom, toggleZoom, onWheel, onPointerDown, onPointerMove, onPointerUp, onTouchStart, onTouchEnd,
-      go, load, fail, download, onMediaEnded, imgEl, onImgLoad, copyLink, copyContents, showSheet, openEntry, closeEntry, entry, dims,
+      go, load, fail, download, onMediaEnded, videoEl, onVideoMeta, onVideoTime, imgEl, onImgLoad, copyLink, copyContents, showSheet, openEntry, closeEntry, entry, dims,
       iconFor, kindLabel, formatBytes, formatDate, TEXT_LIMIT, ROW_LIMIT,
     };
   },

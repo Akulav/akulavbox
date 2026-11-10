@@ -43,7 +43,7 @@ async function main() {
     try {
       const r = await backup.stageImport(path.resolve(arg), pass, { currentSchema: LATEST });
       console.log(`\rReady: ${r.users} accounts and ${r.files} files from ${r.created_at}${r.rekeyed ? ' (re-encrypted for this server’s key)' : ''}.`);
-      console.log('Restart the server (stop it, then npm start) to apply it. The current data is kept in storage/backups/pre-import-*.');
+      console.log('Restart the server (stop it, then npm start) to apply it. The current data is kept in data/backups/pre-import-*.');
       console.log('If the Admin page still says “Ready to restore” afterwards, it shows why the swap failed.');
     } finally { clearInterval(timer); }
   } else if (cmd === 'check') {

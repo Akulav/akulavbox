@@ -36,7 +36,8 @@ const CONFIG = {
     sorts: [['recent', 'Recently read'], ['added', 'Recently added'], ['title', 'Title'], ['people', 'Author'], ['series', 'Series'], ['date', 'Published'], ['rating', 'Rating'], ['size', 'Largest file']],
   },
 };
-const TILE_GRID = 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3 stagger';
+// creators and collections show video covers, so their tiles are 16:9 like the videos themselves
+const TILE_GRID = 'grid grid-cols-1 min-[420px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 stagger';
 
 export default {
   components: { Icon, FileViewer, Thumb, Stars, MetaEditor, LibraryFilters, Downloads, TrimPanel },
@@ -95,7 +96,7 @@ export default {
 
       <!-- ===== Collections ===== -->
       <template v-if="view === 'collections' && !openCol">
-        <div v-if="!collectionsLoaded" :class="TILE_GRID"><div v-for="i in 8" :key="i" class="aspect-square rounded-xl skeleton"></div></div>
+        <div v-if="!collectionsLoaded" :class="TILE_GRID"><div v-for="i in 8" :key="i" class="aspect-video rounded-xl skeleton"></div></div>
         <div v-else-if="!collections.length" class="panel py-16 px-6 text-center rise">
           <span class="w-14 h-14 rounded-2xl bg-accent/10 text-accent grid place-items-center mx-auto mb-4"><Icon name="list-music" :size="24" /></span>
           <p class="title text-lg mb-1">No collections yet</p>
@@ -103,7 +104,7 @@ export default {
           <button class="btn btn-primary" @click="newCollection()"><Icon name="plus" :size="16" />New collection</button>
         </div>
         <div v-else :class="TILE_GRID">
-          <a v-for="c in shownCollections" :key="c.id" :href="'#/' + kind + '/collections/' + c.id" class="group tile lift" :class="c.display_cover_id ? 'tile-media tile-cap-on' : 'tile-folder'" :title="c.title">
+          <a v-for="c in shownCollections" :key="c.id" :href="'#/' + kind + '/collections/' + c.id" class="group tile tile-wide lift" :class="c.display_cover_id ? 'tile-media tile-cap-on' : 'tile-folder'" :title="c.title">
             <div v-if="c.display_cover_id" class="absolute inset-0 zoom-media"><Thumb :file-id="c.display_cover_id" :w="480" :icon="C.icon" /></div>
             <Icon v-else name="list-music" size="100%" :stroke="1.25" class="tile-mark" />
             <span v-if="!c.display_cover_id" class="tile-count">{{ c.item_count }}</span>
@@ -125,14 +126,14 @@ export default {
 
       <!-- ===== Creators ===== -->
       <template v-else-if="view === 'creators'">
-        <div v-if="!loaded" :class="TILE_GRID"><div v-for="i in 8" :key="i" class="aspect-square rounded-xl skeleton"></div></div>
+        <div v-if="!loaded" :class="TILE_GRID"><div v-for="i in 8" :key="i" class="aspect-video rounded-xl skeleton"></div></div>
         <div v-else-if="!creators.length" class="panel py-16 px-6 text-center rise">
           <span class="w-14 h-14 rounded-2xl bg-accent/10 text-accent grid place-items-center mx-auto mb-4"><Icon name="users" :size="24" /></span>
           <p class="title text-lg mb-1">No creators yet</p>
           <p class="text-muted text-[13.5px] max-w-md mx-auto">Creators come from the {{ L.people.toLowerCase() }} on your {{ C.nouns }}. Downloads from a link fill this in for you.</p>
         </div>
         <div v-else :class="TILE_GRID">
-          <a v-for="p in shownCreators" :key="p.value" :href="allHref" class="group tile lift" :class="p.cover ? 'tile-media tile-cap-on' : ''" :style="p.cover ? '' : { '--tint': p.tint }" :title="p.value" @click="showCreator(p.value)">
+          <a v-for="p in shownCreators" :key="p.value" :href="allHref" class="group tile tile-wide lift" :class="p.cover ? 'tile-media tile-cap-on' : ''" :style="p.cover ? '' : { '--tint': p.tint }" :title="p.value" @click="showCreator(p.value)">
             <div v-if="p.cover" class="absolute inset-0 zoom-media"><Thumb :file-id="p.cover" :w="480" :icon="C.icon" /></div>
             <template v-else>
               <Icon name="user" size="100%" :stroke="1.25" class="tile-mark" />

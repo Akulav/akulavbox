@@ -52,10 +52,6 @@ module.exports = async function (fastify) {
     const target = db.prepare('SELECT role, username FROM users WHERE id = ?').get(id);
     if (!target) return notFound(reply);
 
-    // temporary chat files they sent or received
-    for (const m of db.prepare("SELECT file_path FROM messages WHERE type = 'file' AND (sender_id = ? OR receiver_id = ?)").all(id, id)) {
-      if (m.file_path) { try { fs.unlinkSync(store.chatFileOf(m.file_path)); } catch (e) { /* gone */ } }
-    }
     db.tx(() => {
       const cleanup = [
         'DELETE FROM album_images WHERE album_id IN (SELECT id FROM albums WHERE owner_id = ?)',
@@ -72,8 +68,6 @@ module.exports = async function (fastify) {
         'DELETE FROM folders WHERE owner_id = ?',
       ];
       for (const sql of cleanup) db.prepare(sql).run(id);
-      db.prepare('DELETE FROM friends WHERE user_id = ? OR friend_id = ?').run(id, id);
-      db.prepare('DELETE FROM messages WHERE sender_id = ? OR receiver_id = ?').run(id, id);
       activity.forgetUser(id);
       db.prepare('DELETE FROM users WHERE id = ?').run(id);
     });
@@ -141,11 +135,11 @@ module.exports = async function (fastify) {
   fastify.get('/api/admin/system', { preHandler: verifyAdmin }, async (request) => {
     const disk = store.diskSpace();
     if (!breakdownCache || Date.now() - breakdownCache.at > 30_000 || request.query.fresh === '1') {
-      const [users, thumbsDir, temp, chat, backups] = await Promise.all(
-        [config.usersDir, config.thumbsDir, config.tempDir, config.chatDir, config.backupsDir].map(d => store.dirSize(d)));
+      const [users, thumbsDir, temp, backups] = await Promise.all(
+        [config.usersDir, config.thumbsDir, config.tempDir, config.backupsDir].map(d => store.dirSize(d)));
       let dbBytes = 0;
       for (const suffix of ['', '-wal', '-shm']) { try { dbBytes += fs.statSync(config.dbPath + suffix).size; } catch (e) { /* none */ } }
-      breakdownCache = { at: Date.now(), parts: { files: users, thumbnails: thumbsDir, uploads_in_progress: temp, chat_files: chat, backups, database: { bytes: dbBytes, files: 1 } } };
+      breakdownCache = { at: Date.now(), parts: { files: users, thumbnails: thumbsDir, uploads_in_progress: temp, backups, database: { bytes: dbBytes, files: 1 } } };
     }
     const totals = db.prepare(`SELECT
         (SELECT COUNT(*) FROM users) AS users,
@@ -156,7 +150,7 @@ module.exports = async function (fastify) {
     const parts = breakdownCache.parts;
     const appBytes = Object.values(parts).reduce((s, p) => s + p.bytes, 0);
     return {
-      disk,                                     // { total, free, used } of the drive holding storage/
+      disk,                                     // { total, free, used } of the drive holding data/
       storage_dir: config.storageDir,
       app_bytes: appBytes,
       parts,

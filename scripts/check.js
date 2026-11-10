@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // End-to-end smoke test. Boots a throwaway server (temporary storage, random
 // port, test keys), exercises the API like the app does, then cleans up.
-// Your real storage/ folder is never touched.
+// Your real data/ folder is never touched.
 //
 //   npm run check
 //   node scripts/check.js --db path/to/copy.db   also run read-only checks against a copy of a real database
@@ -93,7 +93,7 @@ async function main() {
       ok(db.prepare('PRAGMA user_version').get().user_version >= 6, 'migrated to the latest schema');
       const admin = db.prepare("SELECT id, username, role, token_version FROM users WHERE role = 'admin' LIMIT 1").get();
       token = require('jsonwebtoken').sign({ id: admin.id, username: admin.username, role: admin.role, tv: admin.token_version || 0 }, env.JWT_SECRET);
-      for (const p of ['/api/directory', '/api/library/photos', '/api/library/videos', '/api/library/books', '/api/music/songs', '/api/music/playlists', '/api/collections', '/api/trash', '/api/admin/users', '/api/admin/system', '/api/chat/friends']) {
+      for (const p of ['/api/directory', '/api/library/photos', '/api/library/videos', '/api/library/books', '/api/music/songs', '/api/music/playlists', '/api/collections', '/api/trash', '/api/admin/users', '/api/admin/system', '/api/user/activity']) {
         const r = await api(p);
         ok(r.status === 200, `GET ${p}`, `${r.status} ${JSON.stringify(r.data).slice(0, 120)}`);
       }
@@ -386,6 +386,17 @@ async function main() {
       ok((await api('/api/downloads', { method: 'POST', body: { url: 'http://[::ffff:127.0.0.1]/x', kind: 'video' } })).status === 400, 'IPv4-mapped loopback links are refused');
       ok((await api('/api/downloads', { method: 'POST', body: { url: 'http://100.64.0.1/x', kind: 'video' } })).status === 400, 'shared-address-space links are refused');
       ok((await api('/api/downloads', { method: 'POST', body: { url: 'http://router.lan/x', kind: 'video' } })).status === 400, 'LAN names are refused');
+      const page = await api('/', { raw: true, auth: false });
+      ok(/object-src 'none'/.test(page.headers.get('content-security-policy') || '') && /frame-ancestors/.test(page.headers.get('content-security-policy') || ''), 'the app page has a restrictive CSP');
+      ok(!page.headers.get('x-powered-by'), 'the server doesn’t announce its version on every response');
+      ok((await api('/api/items/move', { method: 'POST', body: { files: [{ id: 1 }], folders: [[1]], folder_id: { x: 1 } } })).status === 200, 'malformed ids in a bulk move are ignored, not a server error');
+      ok((await api('/api/user/profile', { method: 'PATCH', body: { profile_image: 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=' } })).status === 400, 'SVG profile photos are refused');
+      ok((await api('/api/login', { method: 'POST', body: { username: 'x'.repeat(5000), password: 'y' }, auth: false })).status === 401, 'absurdly long usernames are refused cheaply');
+      const sock = await api('/socket.io/?EIO=4&transport=polling', { auth: false });
+      ok((await api('/api/chat/friends')).status === 404 && !/"sid"/.test(String(sock.data)), 'chat and its socket are gone');
+      const chatDb = new (require('node:sqlite').DatabaseSync)(path.join(tmp, 'akulavbox.db'));
+      ok(!chatDb.prepare("SELECT 1 FROM sqlite_master WHERE name IN ('messages', 'friends', 'chat_reads')").get(), 'the chat tables are removed by the migration');
+      chatDb.close();
 
       console.log('\nAccounts');
       const u = await api('/api/admin/users', { method: 'POST', body: { username: 'checker', password: 'secret123', quota: 1024 * 1024 } });
@@ -406,6 +417,14 @@ async function main() {
       ok((await api('/api/user/profile')).status === 401, 'old sessions are signed out after a password change');
       token = pw.data.token;
       ok((await api('/api/user/profile')).status === 200, 'the new token works');
+      const myLogins = await api('/api/user/activity');
+      ok(myLogins.status === 200 && myLogins.data.some(a => a.action === 'auth.login') && myLogins.data.every(a => !('user_id' in a)), 'users see their own recent sign-ins');
+      const others = await api('/api/user/signout-others', { method: 'POST' });
+      ok(others.status === 200 && others.data.token, 'sign out other devices returns a fresh token');
+      ok((await api('/api/user/profile')).status === 401, 'the other sessions stop working');
+      token = others.data.token;
+      ok((await api('/api/user/profile')).status === 200, 'this session keeps working');
+      pw.data.token = others.data.token;
       token = adminToken;
       ok((await api(`/api/admin/users/${u.data.id}/role`, { method: 'PATCH', body: { role: 'user' } })).status === 200, 'change a role');
       ok((await api('/api/admin/users/admin-uuid-0000/role', { method: 'PATCH', body: { role: 'user' } })).status === 400, 'can’t demote yourself');
@@ -438,7 +457,7 @@ async function main() {
       ok(upd.status === 200 && upd.data.enabled === false && upd.data.repo === 'Akulav/akulavbox' && upd.data.current === health.data.version, 'update info (repo from package.json, off in tests)');
       ok((await api('/api/admin/updates/apply', { method: 'POST' })).status === 400, 'nothing to install without a newer version');
       ok((await api('/api/admin/updates/rollback', { method: 'POST' })).status === 400, 'no rollback before an update');
-      process.env.STORAGE_DIR = tmp; // the module loads config, which must not touch the real storage/
+      process.env.STORAGE_DIR = tmp; // the module loads config, which must not touch the real data/
       const { newer, notesSince } = require('../src/core/updater');
       ok(newer('2.10.0', '2.9.9') && !newer('2.2.0', '2.2.0') && !newer('1.9.9', '2.0.0'), 'version comparison');
       ok(notesSince('# C\n\n## 2.3.0 (x)\n- new\n\n## 2.2.0 (y)\n- old\n', '2.2.0') === '## 2.3.0 (x)\n- new', 'release notes since the installed version');

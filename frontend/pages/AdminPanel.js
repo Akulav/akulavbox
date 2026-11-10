@@ -10,8 +10,7 @@ const GB = 1024 ** 3;
 const PART_LABEL = {
   files: ['Files', 'Everyone’s encrypted files', '#E8A33D'],
   thumbnails: ['Thumbnails', 'Photo previews cache', '#5fb3a1'],
-  database: ['Database', 'Accounts, folders, albums, chat', '#6ea8e6'],
-  chat_files: ['Chat files', 'Temporary, deleted after 10 minutes', '#c78bd8'],
+  database: ['Database', 'Accounts, folders, albums, playlists', '#6ea8e6'],
   uploads_in_progress: ['Uploads in progress', 'Unfinished uploads, cleared after 24 h', '#d0806b'],
   backups: ['Backups', 'Scheduled backups, snapshots before upgrades, data replaced by a restore', '#8ea1a4'],
 };
@@ -315,7 +314,7 @@ export default {
     }
 
     async function deleteUser(u) {
-      const ok = await confirmDialog({ title: `Delete ${u.username}?`, message: `All of their files (${formatBytes(u.used_bytes)}), albums, playlists and messages are permanently deleted. This can’t be undone.`, confirmText: 'Delete account', danger: true });
+      const ok = await confirmDialog({ title: `Delete ${u.username}?`, message: `All of their files (${formatBytes(u.used_bytes)}), albums, playlists and collections are permanently deleted. This can’t be undone.`, confirmText: 'Delete account', danger: true });
       if (!ok) return;
       await attempt(async () => { await api(`/api/admin/users/${u.id}`, { method: 'DELETE' }); await refresh(true); }, 'Account deleted');
     }

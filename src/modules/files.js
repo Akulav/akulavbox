@@ -7,7 +7,7 @@ const { Transform } = require('stream');
 const bcrypt = require('../core/hash');
 const { ZipArchive } = require('archiver');
 const config = require('../core/config');
-const { verifyUser, signToken, fromForm, setPassword, PASSWORD_MIN } = require('../core/auth');
+const { verifyUser, signToken, fromForm, setPassword, revokeSessions, PASSWORD_MIN } = require('../core/auth');
 const activity = require('../core/activity');
 const { guessMime, fileCsp } = require('../core/mime');
 const lib = require('../core/library');
@@ -57,8 +57,12 @@ module.exports = async function (fastify) {
   setTimeout(sweepTrash, 30 * 1000).unref();
   setInterval(sweepTrash, 60 * 60 * 1000).unref();
 
-  const ownsFolder = (folderId, userId) =>
-    !!db.prepare('SELECT 1 FROM folders WHERE id = ? AND owner_id = ? AND trashed_at IS NULL').get(folderId, userId);
+  // prepared once: these run for every listing, move and upload chunk
+  const ownedFolder = db.prepare('SELECT 1 FROM folders WHERE id = ? AND owner_id = ? AND trashed_at IS NULL');
+  const parentOf = db.prepare('SELECT parent_id FROM folders WHERE id = ?');
+  const crumbOf = db.prepare('SELECT id, name, parent_id, system_key FROM folders WHERE id = ? AND owner_id = ?');
+  const quotaOf = db.prepare('SELECT quota_bytes, used_bytes FROM users WHERE id = ?');
+  const ownsFolder = (folderId, userId) => typeof folderId === 'string' && !!ownedFolder.get(folderId, userId);
 
   // Returns true if `candidateId` is `folderId` itself or one of its descendants
   const isSelfOrDescendant = (folderId, candidateId) => {
@@ -67,14 +71,14 @@ module.exports = async function (fastify) {
     while (scan && !seen.has(scan)) {
       if (scan === folderId) return true;
       seen.add(scan);
-      const row = db.prepare('SELECT parent_id FROM folders WHERE id = ?').get(scan);
+      const row = parentOf.get(scan);
       scan = row ? row.parent_id : null;
     }
     return false;
   };
 
   const quotaLeft = (userId) => {
-    const u = db.prepare('SELECT quota_bytes, used_bytes FROM users WHERE id = ?').get(userId);
+    const u = quotaOf.get(userId);
     return u ? u.quota_bytes - u.used_bytes : 0;
   };
 
@@ -217,7 +221,7 @@ module.exports = async function (fastify) {
       const seen = new Set();
       while (scan && !seen.has(scan)) {
         seen.add(scan);
-        const doc = db.prepare('SELECT id, name, parent_id, system_key FROM folders WHERE id = ? AND owner_id = ?').get(scan, uid);
+        const doc = crumbOf.get(scan, uid);
         if (!doc) break;
         currentPath.unshift({ id: doc.id, name: doc.name, system_key: doc.system_key || null, ...(doc.system_key ? sysInfo(doc.system_key) : {}) });
         scan = doc.parent_id;
@@ -342,13 +346,18 @@ module.exports = async function (fastify) {
     return err ? reply.code(errCode(err)).send({ error: err }) : { success: true };
   });
 
+  // ids from a request body: anything but a string (an object, a number) would make SQLite throw
+  const idList = (v) => [].concat(v || []).filter(x => typeof x === 'string' && x).slice(0, 5000);
+
   // Move many files and folders in one request: { files: [], folders: [], folder_id }
   fastify.post('/api/items/move', { preHandler: verifyUser }, async (request) => {
-    const target = request.body?.folder_id || null;
+    const target = typeof request.body?.folder_id === 'string' ? request.body.folder_id : null;
     const errors = [];
     let moved = 0;
-    for (const id of [].concat(request.body?.files || []).slice(0, 5000)) { const e = moveFile(request.user.id, id, target); if (e) errors.push(e); else moved++; }
-    for (const id of [].concat(request.body?.folders || []).slice(0, 5000)) { const e = moveFolder(request.user.id, id, target); if (e) errors.push(e); else moved++; }
+    db.tx(() => {
+      for (const id of idList(request.body?.files)) { const e = moveFile(request.user.id, id, target); if (e) errors.push(e); else moved++; }
+      for (const id of idList(request.body?.folders)) { const e = moveFolder(request.user.id, id, target); if (e) errors.push(e); else moved++; }
+    });
     return { success: !errors.length, moved, errors: [...new Set(errors)] };
   });
 
@@ -356,9 +365,9 @@ module.exports = async function (fastify) {
   fastify.post('/api/items/trash', { preHandler: verifyUser }, async (request) => {
     let n = 0;
     db.tx(() => {
-      for (const id of [].concat(request.body?.files || []).slice(0, 5000)) if (trash.trashFile(id, request.user.id)) n++;
+      for (const id of idList(request.body?.files)) if (trash.trashFile(id, request.user.id)) n++;
+      for (const id of idList(request.body?.folders)) if (trash.trashFolder(id, request.user.id)) n++;
     });
-    for (const id of [].concat(request.body?.folders || []).slice(0, 5000)) if (trash.trashFolder(id, request.user.id)) n++;
     return { success: true, trashed: n };
   });
 
@@ -496,12 +505,15 @@ module.exports = async function (fastify) {
 
   fastify.patch('/api/user/profile', { preHandler: verifyUser }, async (request, reply) => {
     const img = request.body?.profile_image;
-    if (img && (typeof img !== 'string' || !img.startsWith('data:image/') || img.length > 2_000_000)) {
+    // raster images only: an SVG avatar could carry script if it were ever opened directly
+    if (img && (typeof img !== 'string' || !/^data:image\/(png|jpeg|webp|gif);base64,/.test(img) || img.length > 2_000_000)) {
       return reply.code(400).send({ error: 'Invalid image' });
     }
     db.prepare('UPDATE users SET profile_image = ? WHERE id = ?').run(img || null, request.user.id);
     return { success: true };
   });
+
+  const tokenUser = db.prepare('SELECT id, username, role, token_version FROM users WHERE id = ?');
 
   // Changing the password signs out every other session; this one gets a fresh token
   fastify.patch('/api/user/password', { preHandler: verifyUser }, async (request, reply) => {
@@ -514,8 +526,20 @@ module.exports = async function (fastify) {
     }
     setPassword(request.user.id, await bcrypt.hash(String(newPassword), 10));
     activity.log(request, 'account.password_changed');
-    const fresh = db.prepare('SELECT id, username, role, token_version FROM users WHERE id = ?').get(request.user.id);
-    return { success: true, token: signToken(fresh) };
+    return { success: true, token: signToken(tokenUser.get(request.user.id)) };
+  });
+
+  // Sign out every other browser and device (a lost phone, a shared computer); this one gets a fresh token
+  fastify.post('/api/user/signout-others', { preHandler: verifyUser }, async (request) => {
+    revokeSessions(request.user.id);
+    activity.log(request, 'account.signed_out_others');
+    return { success: true, token: signToken(tokenUser.get(request.user.id)) };
+  });
+
+  // My recent sign-ins, failed ones included, so a stranger's attempt stands out
+  fastify.get('/api/user/activity', { preHandler: verifyUser }, async (request) => {
+    const { items } = activity.list({ userId: request.user.id, kind: 'signin', limit: 25 });
+    return items.map(({ at, action, detail, ip }) => ({ at, action, detail, ip }));
   });
 
   // Replace the contents of a text file in place. The file keeps its id, name, folder,
@@ -636,15 +660,14 @@ module.exports = async function (fastify) {
   });
 
   // --- ZIP DOWNLOADS ---
+  const filesIn = db.prepare('SELECT * FROM files WHERE folder_id = ? AND owner_id = ? AND trashed_at IS NULL');
+  const subfoldersOf = db.prepare('SELECT id, name FROM folders WHERE parent_id = ? AND owner_id = ? AND trashed_at IS NULL');
+  const liveFolderOf = db.prepare('SELECT id, name FROM folders WHERE id = ? AND owner_id = ? AND trashed_at IS NULL');
   function folderEntries(userId, rootId, prefix, out, seen = new Set()) {
     if (seen.has(rootId)) return;
     seen.add(rootId);
-    for (const f of db.prepare('SELECT * FROM files WHERE folder_id = ? AND owner_id = ? AND trashed_at IS NULL').all(rootId, userId)) {
-      out.push({ file: f, name: prefix + f.filename });
-    }
-    for (const sub of db.prepare('SELECT id, name FROM folders WHERE parent_id = ? AND owner_id = ? AND trashed_at IS NULL').all(rootId, userId)) {
-      folderEntries(userId, sub.id, `${prefix}${sub.name}/`, out, seen);
-    }
+    for (const f of filesIn.all(rootId, userId)) out.push({ file: f, name: prefix + f.filename });
+    for (const sub of subfoldersOf.all(rootId, userId)) folderEntries(userId, sub.id, `${prefix}${sub.name}/`, out, seen);
   }
 
   function sendZip(reply, name, entries) {
@@ -660,7 +683,7 @@ module.exports = async function (fastify) {
 
   // Download a whole folder (recursively) as a zip
   fastify.get('/api/folders/:id/download', { preHandler: verifyUser }, async (request, reply) => {
-    const root = db.prepare('SELECT id, name FROM folders WHERE id = ? AND owner_id = ? AND trashed_at IS NULL').get(request.params.id, request.user.id);
+    const root = liveFolderOf.get(request.params.id, request.user.id);
     if (!root) return reply.code(404).send({ error: 'Folder not found' });
     const entries = [];
     folderEntries(request.user.id, root.id, '', entries);
@@ -676,7 +699,7 @@ module.exports = async function (fastify) {
     const fileStmt = db.prepare('SELECT * FROM files WHERE id = ? AND owner_id = ? AND trashed_at IS NULL');
     for (const id of ids(request.body?.files)) { const f = fileStmt.get(id, uid); if (f) entries.push({ file: f, name: f.filename }); }
     for (const id of ids(request.body?.folders)) {
-      const d = db.prepare('SELECT id, name FROM folders WHERE id = ? AND owner_id = ? AND trashed_at IS NULL').get(id, uid);
+      const d = liveFolderOf.get(id, uid);
       if (d) folderEntries(uid, d.id, `${d.name}/`, entries);
     }
     if (!entries.length) return reply.code(404).send({ error: 'Nothing to download' });

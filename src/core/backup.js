@@ -9,7 +9,7 @@ const config = require('./config');
 const instance = require('./instance');
 
 // ---------------------------------------------------------------------------
-// Full backups (.akbx): every account, password hash, setting, chat, album,
+// Full backups (.akbx): every account, password hash, setting, album,
 // playlist and file, in one passphrase-protected file.
 //
 //   "AKBX" 0x01 | u32 header length | header JSON (salt, iv, scrypt cost, check)
@@ -26,10 +26,10 @@ const instance = require('./instance');
 // The export carries the MASTER_KEY inside the encrypted body, so it restores on
 // a server with a different key: .enc files are re-keyed on the way in.
 //
-// Importing stages everything in storage/import-staging/ and checks the HMAC.
+// Importing stages everything in data/import-staging/ and checks the HMAC.
 // The swap happens on the next start, before the database opens
 // (applyPending, called from db.js). The data it replaces goes to
-// storage/backups/pre-import-<time>/, so an import can be undone by hand.
+// data/backups/pre-import-<time>/, so an import can be undone by hand.
 //
 // The swap is a list of renames recorded in import-staging/swap.json as they
 // happen. A failed rename (Windows: a file held open by antivirus, Explorer or a
@@ -65,7 +65,7 @@ function snapshotDb(db, dest) {
   db.exec(`VACUUM INTO '${dest.replace(/'/g, "''")}'`);
 }
 
-/** Every file under storage/users that belongs to an existing account, plus saved cookies */
+/** Every file under data/users that belongs to an existing account, plus saved cookies */
 function listData(db) {
   const out = [];
   const users = new Set(db.prepare('SELECT id FROM users').all().map(u => u.id));
@@ -224,7 +224,7 @@ function rekey(oldKey, newKey, ivHex) {
 const state = { running: false, step: '', done: 0, total: 0, error: null, ready: null };
 
 /**
- * Unpack and verify a backup into storage/import-staging/. The swap happens on
+ * Unpack and verify a backup into data/import-staging/. The swap happens on
  * the next start. `currentSchema` refuses backups from newer versions.
  */
 async function stageImport(file, passphrase, { currentSchema }) {

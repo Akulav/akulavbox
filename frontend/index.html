@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>AkulavBox</title>
-  <meta name="description" content="AkulavBox: your private, encrypted personal cloud for files, photos, music, videos, books and chat. Made by Akulav.">
+  <meta name="description" content="AkulavBox: your private, encrypted personal cloud for files, photos, music, videos and books. Made by Akulav.">
   <meta name="author" content="Akulav">
   <meta name="application-name" content="AkulavBox">
   <meta name="apple-mobile-web-app-title" content="AkulavBox">
@@ -30,8 +30,7 @@
   <script type="importmap">
     {
       "imports": {
-        "vue": "https://unpkg.com/vue@3.5.13/dist/vue.esm-browser.prod.js",
-        "socket.io-client": "https://cdn.socket.io/4.7.5/socket.io.esm.min.js"
+        "vue": "https://unpkg.com/vue@3.5.13/dist/vue.esm-browser.prod.js"
       }
     }
   </script>
@@ -44,7 +43,6 @@
   <link rel="modulepreload" href="/lib/upload.js">
   <link rel="modulepreload" href="/lib/library.js">
   <link rel="modulepreload" href="/lib/player.js">
-  <link rel="modulepreload" href="/lib/realtime.js">
   <link rel="modulepreload" href="/lib/filetypes.js">
   <link rel="modulepreload" href="/lib/cdn.js">
   <link rel="modulepreload" href="/lib/trash.js">
@@ -64,12 +62,10 @@
   <link rel="modulepreload" href="/pages/CustomAlbums.js">
   <link rel="modulepreload" href="/pages/MediaLibrary.js">
   <link rel="modulepreload" href="/pages/MusicApp.js">
-  <link rel="modulepreload" href="/pages/ChatVoice.js">
   <link rel="modulepreload" href="/pages/Profile.js">
   <link rel="modulepreload" href="/pages/AdminPanel.js">
 
   <link rel="preconnect" href="https://unpkg.com" crossorigin>
-  <link rel="preconnect" href="https://cdn.socket.io" crossorigin>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,650;12..96,750&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -263,6 +259,8 @@
     .tile { --tint: rgb(var(--accent)); position: relative; aspect-ratio: 1; border-radius: 14px; overflow: hidden; isolation: isolate; cursor: pointer;
       border: 1px solid rgb(var(--line)); color: var(--tint);
       background: radial-gradient(120% 90% at 100% 100%, color-mix(in srgb, var(--tint) 16%, transparent), transparent 70%), rgb(var(--surface) / .92); }
+    /* video covers are 16:9: creator and collection tiles in Videos keep their shape instead of cropping them square */
+    .tile-wide { aspect-ratio: 16 / 9; }
     .tile-folder { --tint: rgb(var(--accent)); }
     .tile-system { --tint: rgb(var(--accent)); background: radial-gradient(120% 90% at 100% 100%, rgb(var(--accent) / .3), transparent 70%), rgb(var(--accent) / .08); border-color: rgb(var(--accent) / .35); }
     .tile-mark { position: absolute; right: -16%; bottom: -14%; width: 82% !important; height: 82% !important; opacity: .14; transform: rotate(-12deg); z-index: 0; pointer-events: none;
@@ -352,6 +350,9 @@
     /* XXX section: covers stay blurred until you point at (or tab to) them */
     .blur-covers .zoom-media img { filter: blur(22px) saturate(.7); transition: transform .6s cubic-bezier(.2,.8,.2,1), opacity .2s, filter .2s; }
     .blur-covers .group:hover .zoom-media img, .blur-covers .group:focus-within .zoom-media img { filter: none; }
+
+    /* sign-in: the brand half of the card */
+    .login-hero { background: radial-gradient(90% 70% at 0% 0%, rgb(var(--accent) / .16), transparent 70%), radial-gradient(80% 60% at 100% 100%, rgb(var(--teal) / .14), transparent 70%), rgb(var(--elevated) / .35); }
 
     /* brand */
     .brand-text { background: linear-gradient(100deg, rgb(var(--fg)) 30%, rgb(var(--accent-hi)) 75%, rgb(var(--accent))); -webkit-background-clip: text; background-clip: text; color: transparent; }

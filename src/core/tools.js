@@ -8,7 +8,7 @@ const config = require('./config');
 
 // ---------------------------------------------------------------------------
 // External tools for link downloads, installed by AkulavBox itself into
-// storage/tools/ so nothing has to be set up by hand, on Windows or Linux:
+// data/tools/ so nothing has to be set up by hand, on Windows or Linux:
 //   yt-dlp  official standalone build (github.com/yt-dlp/yt-dlp), kept up to date
 //   ffmpeg  static build from github.com/yt-dlp/FFmpeg-Builds (has the AV1 encoder)
 // Every download is checked against the SHA-256 list published with the release.

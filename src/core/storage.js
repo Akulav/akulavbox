@@ -8,8 +8,8 @@ const { pipeline } = require('stream/promises');
 
 // ---------------------------------------------------------------------------
 // On-disk layout and encryption (unchanged since 1.0, so old files keep working):
-//   storage/users/<owner>/<fileId>.enc     AES-256-CTR, IV in files.iv_hex
-//   storage/users/<owner>/<fileId>.plain   while the file has a public link
+//   data/users/<owner>/<fileId>.enc     AES-256-CTR, IV in files.iv_hex
+//   data/users/<owner>/<fileId>.plain   while the file has a public link
 // ---------------------------------------------------------------------------
 
 const MASTER_KEY = Buffer.from(process.env.MASTER_KEY || '', 'utf-8');
@@ -183,11 +183,4 @@ function appendToZip(archive, entries) {
   }
 }
 
-/**
- * Where a chat attachment lives. messages.file_path holds an absolute path, which is
- * wrong after STORAGE_DIR moves or a restore onto another server, and must never
- * reach outside chat_temp (a database from a backup is not to be trusted with paths).
- */
-const chatFileOf = (filePath) => (filePath ? path.join(config.chatDir, path.basename(String(filePath))) : null);
-
-module.exports = { MASTER_KEY, userDirOf, diskPathOf, ctrAt, readRange, readAll, diskSpace, hasRoomFor, dirSize, purgeFile, appendToZip, storeFile, replaceFile, chatFileOf };
+module.exports = { MASTER_KEY, userDirOf, diskPathOf, ctrAt, readRange, readAll, diskSpace, hasRoomFor, dirSize, purgeFile, appendToZip, storeFile, replaceFile };

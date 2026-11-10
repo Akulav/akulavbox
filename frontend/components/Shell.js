@@ -5,17 +5,14 @@ import { uploads, clearFinishedUploads, cancelUpload, cancelAllUploads, retryUpl
 import { formatBytes } from '../lib/api.js';
 import { thumbUrl } from '../lib/library.js';
 import { player, songTitle, toggle, next, prev, seek, setVolume, toggleMute, toggleShuffle, cycleRepeat, stop, formatTime } from '../lib/player.js';
-import { call, acceptCall, declineCall, endCall, toggleMuteCall, enableSound } from '../lib/realtime.js';
 
 export const Avatar = {
-  props: { name: String, src: String, size: { type: Number, default: 36 }, online: { type: Boolean, default: undefined } },
+  props: { name: String, src: String, size: { type: Number, default: 36 } },
   template: /*html*/`
     <span class="relative inline-flex shrink-0" :style="{ width: size + 'px', height: size + 'px' }">
       <img v-if="src" :src="src" alt="" class="w-full h-full rounded-full object-cover">
       <span v-else class="w-full h-full rounded-full grid place-items-center font-semibold text-accent-fg"
             :style="{ background: hue, fontSize: (size * 0.4) + 'px' }">{{ (name || '?').charAt(0).toUpperCase() }}</span>
-      <span v-if="online !== undefined" class="absolute -bottom-0.5 -right-0.5 rounded-full border-2 border-surface"
-            :class="online ? 'bg-ok' : 'bg-faint'" :style="{ width: size * 0.32 + 'px', height: size * 0.32 + 'px' }"></span>
     </span>`,
   computed: {
     hue() {
@@ -209,47 +206,5 @@ export const PlayerBar = {
     const cover = computed(() => player.current?.cover_file_id ? thumbUrl(player.current.cover_file_id, 240) : null);
     const title = computed(() => songTitle(player.current));
     return { player, pct, cover, title, toggle, next, prev, seek, setVolume, toggleMute, toggleShuffle, cycleRepeat, stop, formatTime };
-  },
-};
-
-export const CallOverlay = {
-  components: { Icon, Avatar },
-  template: /*html*/`
-    <Transition name="pop">
-      <div v-if="call.state !== 'idle'" class="fixed z-[260] top-4 right-4 left-4 sm:left-auto sm:w-80 panel p-4">
-        <div class="flex items-center gap-3">
-          <Avatar :name="call.peerName" :size="44" />
-          <div class="flex-1 min-w-0">
-            <p class="font-semibold truncate">{{ call.peerName }}</p>
-            <p class="text-muted text-[13px]">{{ status }}</p>
-          </div>
-        </div>
-        <button v-if="call.needsSound" class="btn btn-primary w-full mt-3" @click="enableSound"><Icon name="volume" :size="16" />Turn on sound</button>
-        <div class="flex gap-2 mt-4">
-          <template v-if="call.state === 'ringing'">
-            <button class="btn flex-1" @click="declineCall"><Icon name="phone-off" :size="16" />Decline</button>
-            <button class="btn flex-1 !bg-ok !text-white !border-transparent" @click="acceptCall"><Icon name="phone" :size="16" />Answer</button>
-          </template>
-          <template v-else>
-            <button class="btn flex-1" @click="toggleMuteCall" :disabled="call.state !== 'active'">
-              <Icon :name="call.muted ? 'mic-off' : 'mic'" :size="16" />{{ call.muted ? 'Unmute' : 'Mute' }}
-            </button>
-            <button class="btn btn-danger flex-1" @click="endCall"><Icon name="phone-off" :size="16" />Hang up</button>
-          </template>
-        </div>
-      </div>
-    </Transition>`,
-  setup() {
-    const now = ref(Date.now());
-    let t = setInterval(() => { now.value = Date.now(); }, 1000);
-    onUnmounted(() => clearInterval(t));
-    const status = computed(() => {
-      if (call.state === 'ringing') return 'Incoming voice call';
-      if (call.state === 'calling') return 'Calling…';
-      if (call.state === 'connecting') return 'Connecting…';
-      const s = Math.floor((now.value - (call.startedAt || now.value)) / 1000);
-      return `On call ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}${call.relayed ? ' (via relay)' : ''}`;
-    });
-    return { call, status, acceptCall, declineCall, endCall, toggleMuteCall, enableSound };
   },
 };
