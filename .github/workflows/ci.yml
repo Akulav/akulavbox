@@ -24,19 +24,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       # no dependencies needed: syntax, index.html preloads, one version everywhere
       - run: npm run lint
+      # `npm ci` refuses a lockfile that doesn't match package.json. Regenerating the lockfile
+      # and diffing it would also flag harmless format differences between npm versions
+      # (npm 11 records `libc` for sharp's Linux builds, npm 10 drops it).
       - name: Lockfile matches package.json
         run: |
-          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-          git diff --exit-code package-lock.json || { echo "::error::package-lock.json is out of date. Run: npm install --package-lock-only --ignore-scripts"; exit 1; }
+          npm ci --dry-run --ignore-scripts --no-audit --no-fund || { echo "::error::package-lock.json doesn't match package.json. Run: npm install --package-lock-only --ignore-scripts"; exit 1; }
 
   test:
-    name: Test (${{ matrix.os }}, Node ${{ matrix.node }}${{ matrix.optional && '' || ', no native modules' }})
+    # a fixed label: a skipped matrix job would otherwise show the raw expression
+    name: Test (${{ matrix.label }})
     needs: lint
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
@@ -45,14 +48,14 @@ jobs:
       matrix:
         include:
           # the oldest supported Node (node:sqlite) and the current LTS, with sharp and bcrypt
-          - { os: ubuntu-latest, node: '22.13', optional: true }
-          - { os: ubuntu-latest, node: 24, optional: true }
+          - { label: 'Linux, Node 22.13', os: ubuntu-latest, node: '22.13', optional: true }
+          - { label: 'Linux, Node 24', os: ubuntu-latest, node: 24, optional: true }
           # without the optional native modules: bcryptjs and browser-made thumbnails
-          - { os: ubuntu-latest, node: 24, optional: false }
-          - { os: windows-latest, node: 24, optional: true }
+          - { label: 'Linux, Node 24, no native modules', os: ubuntu-latest, node: 24, optional: false }
+          - { label: 'Windows, Node 24', os: windows-latest, node: 24, optional: true }
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
           cache: npm
@@ -60,14 +63,15 @@ jobs:
         run: npm ci --no-audit --no-fund ${{ !matrix.optional && '--omit=optional' || '' }}
       - name: End-to-end check
         run: npm run check
+
   audit:
     name: Dependency audit
     runs-on: ubuntu-latest
     timeout-minutes: 5
     # high and critical advisories in production dependencies fail the build
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
       - name: npm audit (production dependencies)

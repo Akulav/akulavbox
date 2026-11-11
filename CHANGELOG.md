@@ -12,6 +12,7 @@ All notable changes to AkulavBox. Versions follow [semantic versioning](https://
 
 ### Changed
 - When `CORS_ORIGIN` is set, the listed sites may use every method the API needs (`@fastify/cors` 10+ only allows GET, HEAD and POST by default).
+- CI: the lockfile check uses `npm ci --dry-run`, so a lockfile written by a newer npm (which records `libc` for sharp's Linux builds) no longer fails it. The workflow uses `actions/checkout` and `actions/setup-node` v7, which run on Node 24, and the test jobs have readable names.
 
 ## 3.1.2 (2026-11-11)
 
