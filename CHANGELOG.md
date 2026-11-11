@@ -2,6 +2,17 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 3.1.3 (2026-11-11)
+
+### Security
+- **Fastify 5** (5.12.8) replaces Fastify 4, which no longer gets fixes. This closes several high-severity advisories, among them an authentication bypass through malformed URLs reaching not-found handlers, plus header and body validation bypasses. The plugins move with it: `@fastify/static` 10 (closes a route-guard bypass via path traversal), `@fastify/multipart` 10 and `@fastify/cors` 11.
+- **sharp 0.35.5**, which makes photo thumbnails on the server, bundles libvips, libheif and librsvg versions with the image-parsing flaws fixed (CVE-2026-33327, CVE-2026-33328, CVE-2026-35590, CVE-2026-35591, CVE-2026-96889 and two libheif advisories). Every uploaded photo goes through it.
+- **bcrypt 6** no longer installs through node-pre-gyp, which pulled in a critical `tar` advisory. Password hashes are unchanged.
+- `minimatch` under `archiver` is pinned to a fixed version. `npm audit` now finds no advisories in production dependencies, and CI fails on any new high or critical one.
+
+### Changed
+- When `CORS_ORIGIN` is set, the listed sites may use every method the API needs (`@fastify/cors` 10+ only allows GET, HEAD and POST by default).
+
 ## 3.1.2 (2026-11-11)
 
 ### Added

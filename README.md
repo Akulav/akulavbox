@@ -55,7 +55,7 @@ To check that everything works, run the built-in test suite. It starts a throwaw
 npm run check
 ```
 
-`npm run lint` is the fast part: every file parses, `index.html` preloads every module, and the version matches across `package.json`, the lockfile and the changelog. GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs both on every push and pull request, on Linux (Node 22.13 and 24, with and without the optional native modules) and Windows, plus a report-only `npm audit`.
+`npm run lint` is the fast part: every file parses, `index.html` preloads every module, and the version matches across `package.json`, the lockfile and the changelog. GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs both on every push and pull request, on Linux (Node 22.13 and 24, with and without the optional native modules) and Windows, plus `npm audit`, which fails the build on high or critical advisories in production dependencies.
 
 ## Configuration
 

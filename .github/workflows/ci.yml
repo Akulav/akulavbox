@@ -64,9 +64,7 @@ jobs:
     name: Dependency audit
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # report only for now: the remaining advisories need major upgrades (Fastify 5, sharp 0.35).
-    # Remove continue-on-error once they're done, so new advisories fail the build.
-    continue-on-error: true
+    # high and critical advisories in production dependencies fail the build
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -74,4 +72,4 @@ jobs:
           node-version: 24
       - name: npm audit (production dependencies)
         run: |
-          npm audit --omit=dev --audit-level=high || { echo "::warning::npm audit found high or critical advisories in production dependencies (see the log)."; exit 1; }
+          npm audit --omit=dev --audit-level=high || { echo "::error::npm audit found high or critical advisories in production dependencies (see the log)."; exit 1; }

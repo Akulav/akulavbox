@@ -28,7 +28,12 @@ const backup = require('./core/backup');
 
 // The app is served from this same origin, so other sites get no CORS access by default.
 // CORS_ORIGIN=https://a.example,https://b.example opens the API to those origins (e.g. a separate client).
-fastify.register(require('@fastify/cors'), { origin: config.corsOrigins.length ? config.corsOrigins : false, exposedHeaders: ['X-Refresh-Token'] });
+// @fastify/cors 10+ only allows GET, HEAD and POST unless told otherwise; the API uses the rest too.
+fastify.register(require('@fastify/cors'), {
+  origin: config.corsOrigins.length ? config.corsOrigins : false,
+  methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'],
+  exposedHeaders: ['X-Refresh-Token'],
+});
 
 // Baseline security headers for every response
 fastify.addHook('onSend', async (request, reply, payload) => {
