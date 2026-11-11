@@ -6,6 +6,7 @@
 
 **Your files, your cloud.** A self-hosted personal cloud for encrypted files, photos, music, videos, and books. It's one Node.js server with a no-build browser frontend.
 
+[![CI](https://github.com/Akulav/akulavbox/actions/workflows/ci.yml/badge.svg)](https://github.com/Akulav/akulavbox/actions/workflows/ci.yml)
 ![Node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-5fb3a1)
 ![License](https://img.shields.io/badge/license-source--available-8ea1a4)
 
@@ -53,6 +54,8 @@ To check that everything works, run the built-in test suite. It starts a throwaw
 ```bash
 npm run check
 ```
+
+`npm run lint` is the fast part: every file parses, `index.html` preloads every module, and the version matches across `package.json`, the lockfile and the changelog. GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs both on every push and pull request, on Linux (Node 22.13 and 24, with and without the optional native modules) and Windows, plus a report-only `npm audit`.
 
 ## Configuration
 

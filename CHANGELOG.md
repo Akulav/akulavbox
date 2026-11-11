@@ -2,6 +2,15 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 3.1.2 (2026-11-11)
+
+### Added
+- **Continuous integration** on GitHub Actions: every push and pull request runs the static checks, then the full end-to-end test on Linux (Node 22.13 and 24, with and without the optional native modules) and on Windows. The lockfile must match `package.json`. A dependency audit runs alongside and reports without failing the build for now.
+- `npm run lint`: checks that every file parses, that `index.html` preloads every frontend module below the import map, and that `package.json`, the lockfile and the newest changelog entry have the same version.
+
+### Security
+- Dependencies updated within their current versions, fixing the critical `proxy-addr` advisory and advisories in `@fastify/busboy` (uploads), `fast-uri` and `brace-expansion`.
+
 ## 3.1.1 (2026-11-11)
 
 ### Changed

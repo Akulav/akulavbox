@@ -1,0 +1,77 @@
+# CI: static checks, then the end-to-end test (scripts/check.js) on Linux and Windows.
+# The test boots a throwaway server with a temporary data folder and stand-ins for
+# yt-dlp and ffmpeg, so it needs no secrets and no network beyond npm.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# a newer push to the same branch or PR replaces the run still going
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # no dependencies needed: syntax, index.html preloads, one version everywhere
+      - run: npm run lint
+      - name: Lockfile matches package.json
+        run: |
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          git diff --exit-code package-lock.json || { echo "::error::package-lock.json is out of date. Run: npm install --package-lock-only --ignore-scripts"; exit 1; }
+
+  test:
+    name: Test (${{ matrix.os }}, Node ${{ matrix.node }}${{ matrix.optional && '' || ', no native modules' }})
+    needs: lint
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # the oldest supported Node (node:sqlite) and the current LTS, with sharp and bcrypt
+          - { os: ubuntu-latest, node: '22.13', optional: true }
+          - { os: ubuntu-latest, node: 24, optional: true }
+          # without the optional native modules: bcryptjs and browser-made thumbnails
+          - { os: ubuntu-latest, node: 24, optional: false }
+          - { os: windows-latest, node: 24, optional: true }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - name: Install
+        run: npm ci --no-audit --no-fund ${{ !matrix.optional && '--omit=optional' || '' }}
+      - name: End-to-end check
+        run: npm run check
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # report only for now: the remaining advisories need major upgrades (Fastify 5, sharp 0.35).
+    # Remove continue-on-error once they're done, so new advisories fail the build.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: npm audit (production dependencies)
+        run: |
+          npm audit --omit=dev --audit-level=high || { echo "::warning::npm audit found high or critical advisories in production dependencies (see the log)."; exit 1; }
