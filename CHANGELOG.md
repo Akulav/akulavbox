@@ -2,6 +2,12 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 3.1.4 (2026-11-12)
+
+### Fixed
+- **On Node 22, deleting files for good failed** (since 3.1.1): emptying the trash, deleting items from it, the automatic clean-up of old trash, and the storage check's clean-up answered with a server error and left everything in place. The database statements behind it used numbered placeholders, which Node 22's SQLite module can't bind (newer Node versions can). Nothing was lost: the files just stayed in the trash.
+- `npm run lint` now refuses numbered SQL placeholders, and the test suite passes on Node 22.13, the oldest supported version.
+
 ## 3.1.3 (2026-11-11)
 
 ### Security

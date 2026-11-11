@@ -39,6 +39,15 @@ for (const f of backend) check(f, false);
 for (const f of frontend) check(f, true);
 fs.rmSync(tmp, { recursive: true, force: true });
 
+// 1b. SQL: no numbered placeholders (?1). Node 22's node:sqlite can't bind them
+//     ("column index out of range"), while newer Node versions can, so tests on a new Node miss it.
+for (const f of backend) {
+  if (rel(f) === 'scripts/lint.js') continue;
+  fs.readFileSync(f, 'utf-8').split('\n').forEach((line, i) => {
+    if (/\b(SELECT|INSERT|UPDATE|DELETE|WHERE|VALUES)\b.*\?\d/.test(line)) problems.push(`${rel(f)}:${i + 1} uses a numbered SQL placeholder (?1). Use plain ? and pass the value again.`);
+  });
+}
+
 // 2. index.html: the import map must come first, and every module needs a preload
 const html = fs.readFileSync(path.join(root, 'frontend', 'index.html'), 'utf-8');
 const mapAt = html.indexOf('<script type="importmap">');

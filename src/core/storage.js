@@ -90,26 +90,27 @@ async function dirSize(dir) {
 // Permanent deletion (the trash calls this when it is emptied)
 // ---------------------------------------------------------------------------
 // Foreign keys aren't enforced, so every reference is cleaned up by hand. Prepared once:
-// emptying a big trash runs these for thousands of files.
+// emptying a big trash runs these for thousands of files. Plain `?` placeholders only:
+// Node 22's node:sqlite can't bind numbered ones (?1) at all (npm run lint checks this).
 const PURGE = [
-  'DELETE FROM files WHERE id = ?1',
-  'DELETE FROM album_images WHERE file_id = ?1',
-  'DELETE FROM playlist_songs WHERE file_id = ?1',
-  'DELETE FROM song_covers WHERE file_id = ?1 OR cover_file_id = ?1',
-  'UPDATE albums SET cover_file_id = NULL WHERE cover_file_id = ?1',
-  'UPDATE collections SET cover_file_id = NULL WHERE cover_file_id = ?1',
-  'UPDATE playlists SET cover_file_id = NULL WHERE cover_file_id = ?1',
-  'DELETE FROM media_collection_items WHERE file_id = ?1',
-  'UPDATE media_collections SET cover_file_id = NULL WHERE cover_file_id = ?1',
-  'DELETE FROM media_meta WHERE file_id = ?1',
-  'UPDATE media_meta SET thumb_file_id = NULL WHERE thumb_file_id = ?1',
-].map(sql => db.prepare(sql));
+  'DELETE FROM files WHERE id = ?',
+  'DELETE FROM album_images WHERE file_id = ?',
+  'DELETE FROM playlist_songs WHERE file_id = ?',
+  'DELETE FROM song_covers WHERE file_id = ? OR cover_file_id = ?',
+  'UPDATE albums SET cover_file_id = NULL WHERE cover_file_id = ?',
+  'UPDATE collections SET cover_file_id = NULL WHERE cover_file_id = ?',
+  'UPDATE playlists SET cover_file_id = NULL WHERE cover_file_id = ?',
+  'DELETE FROM media_collection_items WHERE file_id = ?',
+  'UPDATE media_collections SET cover_file_id = NULL WHERE cover_file_id = ?',
+  'DELETE FROM media_meta WHERE file_id = ?',
+  'UPDATE media_meta SET thumb_file_id = NULL WHERE thumb_file_id = ?',
+].map(sql => ({ st: db.prepare(sql), n: sql.split('?').length - 1 }));
 const giveBack = db.prepare('UPDATE users SET used_bytes = MAX(0, used_bytes - ?) WHERE id = ?');
 
 function purgeFile(file) {
   // one transaction: a crash halfway must not leave references to a deleted row or a wrong quota
   db.tx(() => {
-    for (const st of PURGE) st.run(file.id);
+    for (const { st, n } of PURGE) st.run(...Array(n).fill(file.id));
     giveBack.run(file.size_bytes, file.owner_id);
   });
   // the data goes once the row is gone (a leftover file is an orphan the storage check removes)
