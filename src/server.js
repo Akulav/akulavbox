@@ -92,6 +92,17 @@ fastify.register(require('./modules/library'));
 fastify.register(require('./modules/collections'));
 fastify.register(require('./modules/downloads'));
 
+// Errors nobody caught: client mistakes (bad JSON, too large, wrong type) keep their
+// message; anything else is logged and answered with a plain sentence, so internal
+// details (SQL, paths) never reach the browser.
+fastify.setErrorHandler((err, request, reply) => {
+  const code = err.statusCode >= 400 && err.statusCode < 500 ? err.statusCode : 500;
+  if (code >= 500) request.log.error({ err, url: redact(request.url) }, 'request failed');
+  if (reply.sent) return;
+  const message = code < 500 ? (err.code === 'FST_ERR_CTP_BODY_TOO_LARGE' ? 'That request is too large.' : err.message || 'Bad request') : 'Something went wrong on the server. Try again.';
+  reply.code(code).send({ error: message });
+});
+
 // Unknown /api routes answer in JSON; anything else falls back to the app
 fastify.setNotFoundHandler((request, reply) => {
   if (request.url.startsWith('/api/')) return reply.code(404).send({ error: 'Not found' });

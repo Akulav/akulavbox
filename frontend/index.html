@@ -26,17 +26,22 @@
     })();
   </script>
 
-  <!-- One shared copy of Vue for every module (an import map must come before any module or preload) -->
+  <!-- One shared copy of Vue for every module (an import map must come before any module or preload).
+       CDN files carry a sha384 (integrity): a changed copy is refused. Tailwind's CDN sends no CORS header, so it can't be pinned this way. -->
+
   <script type="importmap">
     {
       "imports": {
         "vue": "https://unpkg.com/vue@3.5.13/dist/vue.esm-browser.prod.js"
+      },
+      "integrity": {
+        "https://unpkg.com/vue@3.5.13/dist/vue.esm-browser.prod.js": "sha384-UD4WWwnzOnT68QK9Dgf/jMrAGH2xuXyfIF9zzlFbWOL8MSrADyQ5BTgs9Kct5Izy"
       }
     }
   </script>
 
   <!-- Fetch every app module in parallel instead of discovering them one import at a time -->
-  <link rel="modulepreload" href="https://unpkg.com/vue@3.5.13/dist/vue.esm-browser.prod.js" crossorigin>
+  <link rel="modulepreload" href="https://unpkg.com/vue@3.5.13/dist/vue.esm-browser.prod.js" crossorigin integrity="sha384-UD4WWwnzOnT68QK9Dgf/jMrAGH2xuXyfIF9zzlFbWOL8MSrADyQ5BTgs9Kct5Izy">
   <link rel="modulepreload" href="/app.js">
   <link rel="modulepreload" href="/lib/api.js">
   <link rel="modulepreload" href="/lib/ui.js">
@@ -71,8 +76,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,650;12..96,750&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 
   <!-- Cropper.js (avatar editor) -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" />
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" crossorigin="anonymous" integrity="sha384-AMJcAgMUmNt1Zo4ranquGLeT5m7yOrVbtNsNk0oZohvxqKk6RRzXHqlEaS9gFXR7" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js" crossorigin="anonymous" integrity="sha384-jzwsV9ieM/KUDMeo+d8dc+jm0GEl7ywPNwg10alB5BodVuC/Kx9RpEnyrl2Om9zH"></script>
 
   <script src="https://cdn.tailwindcss.com/3.4.16"></script>
   <script>

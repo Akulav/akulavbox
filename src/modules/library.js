@@ -65,6 +65,7 @@ function applyPatch(m, body, userId) {
   if (body.thumb_file_id !== undefined) {
     if (body.thumb_file_id === null) m.thumb_file_id = null;
     else {
+      if (typeof body.thumb_file_id !== 'string') return 'Cover must be one of your images';
       const img = db.prepare('SELECT filename, mime_type FROM files WHERE id = ? AND owner_id = ?').get(body.thumb_file_id, userId);
       if (!img || lib.categoryOf(img.filename, img.mime_type) !== 'image') return 'Cover must be one of your images';
       m.thumb_file_id = body.thumb_file_id;
@@ -110,7 +111,7 @@ module.exports = async function (fastify) {
   // Bulk edit: add/remove participants & tags, or set shared fields, on many files at once
   fastify.post('/api/library/meta/bulk', { preHandler: verifyUser }, async (request, reply) => {
     const b = request.body || {};
-    const ids = Array.isArray(b.file_ids) ? b.file_ids.slice(0, 2000) : [];
+    const ids = Array.isArray(b.file_ids) ? b.file_ids.filter(x => typeof x === 'string').slice(0, 2000) : [];
     if (!ids.length) return reply.code(400).send({ error: 'No files selected' });
     const addP = cleanList(b.add_participants) || [], remP = (cleanList(b.remove_participants) || []).map(s => s.toLowerCase());
     const addT = cleanList(b.add_tags) || [], remT = (cleanList(b.remove_tags) || []).map(s => s.toLowerCase());

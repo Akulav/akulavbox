@@ -124,7 +124,8 @@ export default {
     }
     function schedule() {
       clearTimeout(timer);
-      if (alive && jobs.value.some(active)) timer = setTimeout(refresh, 1200);
+      // a hidden tab checks in less often: a long playlist or AV1 encode can run for hours
+      if (alive && jobs.value.some(active)) timer = setTimeout(refresh, document.hidden ? 10000 : 1200);
     }
 
     async function submit() {

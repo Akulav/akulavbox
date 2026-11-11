@@ -2,6 +2,26 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 3.1.1 (2026-11-11)
+
+### Changed
+- The video format badge sits on the same dark pill as the resolution and length, so it can be read on any cover, even a white one.
+- The background check that reads a video's format now records its resolution in the same pass, so browsers no longer download the start of every video to measure it.
+
+### Fixed
+- Requests with ids that aren't text (an object or a number where an id belongs) in bulk actions such as editing details, removing photos from an album, adding songs to a playlist, or creating a collection no longer cause a server error.
+- Broken JSON and requests that are too large get a readable 400 or 413 answer.
+
+### Security
+- **File ids and account ids from the database are never used as paths outside `data/users/`** (or the thumbnail cache). A database restored from a crafted backup could otherwise make the server read files elsewhere on the disk.
+- **Every library loaded from a CDN is pinned by its hash** (Subresource Integrity): Vue, the photo cropper, and the viewers for code, Markdown, Word, Excel, EPUB and PDF. A changed copy on the CDN is refused instead of running next to your sign-in. Tailwind's CDN can't be pinned this way, since it doesn't send CORS headers.
+- **The spreadsheet viewer uses SheetJS 0.20.3** from SheetJS's own CDN. The 0.18.5 build had a prototype-pollution flaw (CVE-2023-30533) that a crafted spreadsheet could trigger.
+- Unexpected server errors are logged and answered with a plain sentence, so internal details (SQL, file paths) never reach the browser.
+
+### Performance
+- Permanently deleting files (emptying the trash) and the locked-folder lookups behind every listing, upload and move reuse prepared statements.
+- The downloads list checks in every 10 seconds instead of every 1.2 while its tab is in the background.
+
 ## 3.1.0 (2026-11-11)
 
 ### Added

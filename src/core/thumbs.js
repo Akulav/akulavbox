@@ -20,7 +20,9 @@ const pickWidth = (w) => {
   const n = parseInt(w, 10) || 480;
   return WIDTHS.find(x => x >= n) || WIDTHS[WIDTHS.length - 1];
 };
-const cachePath = (ownerId, fileId, width) => path.join(cacheRoot, ownerId, `${fileId}_${width}.bin`);
+// ids come from the database; one that isn't a plain name must not become a path elsewhere (see storage.segment)
+const seg = (s) => { const v = String(s ?? ''); return v && v !== '.' && v !== '..' && !/[\\/\u0000]/.test(v) ? v : '_invalid_'; };
+const cachePath = (ownerId, fileId, width) => path.join(cacheRoot, seg(ownerId), `${seg(fileId)}_${width}.bin`);
 
 let running = 0;
 const waiting = [];
@@ -44,12 +46,13 @@ function decrypt(buf, key) {
 const typeOf = (buf) => (buf[0] === 0xFF && buf[1] === 0xD8 ? 'image/jpeg' : buf.subarray(8, 12).toString() === 'WEBP' ? 'image/webp' : buf[0] === 0x89 ? 'image/png' : 'image/webp');
 
 /** Remember an image's real size (used to lay photos out at their natural shape) */
+const upsertDims = db.prepare(`
+  INSERT INTO media_meta (file_id, owner_id, width, height, participants, tags) VALUES (?, ?, ?, ?, '[]', '[]')
+  ON CONFLICT(file_id) DO UPDATE SET width = excluded.width, height = excluded.height
+`);
 function saveDims(fileId, ownerId, width, height) {
   if (!(width > 0 && height > 0)) return;
-  db.prepare(`
-    INSERT INTO media_meta (file_id, owner_id, width, height, participants, tags) VALUES (?, ?, ?, ?, '[]', '[]')
-    ON CONFLICT(file_id) DO UPDATE SET width = excluded.width, height = excluded.height
-  `).run(fileId, ownerId, Math.round(width), Math.round(height));
+  upsertDims.run(fileId, ownerId, Math.round(width), Math.round(height));
 }
 
 async function readSource(file, filePath, key) {
@@ -116,7 +119,7 @@ function purge(ownerId, fileId) {
   for (const w of WIDTHS) { try { fs.unlinkSync(cachePath(ownerId, fileId, w)); } catch (e) { /* none */ } }
 }
 function purgeUser(ownerId) {
-  try { fs.rmSync(path.join(cacheRoot, ownerId), { recursive: true, force: true }); } catch (e) { /* none */ }
+  try { fs.rmSync(path.join(cacheRoot, seg(ownerId)), { recursive: true, force: true }); } catch (e) { /* none */ }
 }
 
 module.exports = { get, cached, store, warm, saveDims, purge, purgeUser, pickWidth, available: () => !!sharp, WIDTHS };

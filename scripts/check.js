@@ -299,6 +299,8 @@ async function main() {
       let handCodec = null;
       for (let i = 0; i < 60 && !handCodec; i++) { await new Promise(r => setTimeout(r, 250)); handCodec = (await api('/api/library/videos')).data.items.find(x => x.id === handUp.data.fileId)?.video_codec; }
       ok(handCodec === 'h264', 'an uploaded video’s codec is read in the background', String(handCodec));
+      const handItem = (await api('/api/library/videos')).data.items.find(x => x.id === handUp.data.fileId);
+      ok(handItem?.width === 640 && handItem?.height === 360, 'and its resolution with it', JSON.stringify(handItem));
       ok((await api('/api/downloads/av1', { method: 'POST', body: { file_ids: [v.id] } })).status === 503, 'convert to AV1 needs an AV1 encoder');
       fs.writeFileSync(path.join(tmp, 'fake-av1'), '');
       await api('/api/admin/system?fresh=1');
@@ -419,6 +421,22 @@ async function main() {
       ok(!page.headers.get('x-powered-by'), 'the server doesn’t announce its version on every response');
       ok((await api('/api/items/move', { method: 'POST', body: { files: [{ id: 1 }], folders: [[1]], folder_id: { x: 1 } } })).status === 200, 'malformed ids in a bulk move are ignored, not a server error');
       ok((await api('/api/user/profile', { method: 'PATCH', body: { profile_image: 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=' } })).status === 400, 'SVG profile photos are refused');
+      const badJson = await api('/api/folders', { method: 'POST', body: '{"name":', headers: { 'Content-Type': 'application/json' } });
+      ok(badJson.status === 400 && typeof badJson.data.error === 'string', 'broken JSON gets a 400 with a readable error');
+      for (const [p, body] of [['/api/library/meta/bulk', { file_ids: [{ a: 1 }], add_tags: ['x'] }], ['/api/albums/nope/images/remove', { file_ids: [{}] }], ['/api/media-collections', { kind: 'videos', title: 'X', file_ids: [{}, 1] }]]) {
+        const r = await api(p, { method: 'POST', body });
+        ok(r.status < 500, `odd ids don’t crash ${p}`, `${r.status} ${JSON.stringify(r.data)}`);
+      }
+      // a restored database could hold ids that are paths: they must not reach files outside data/users
+      fs.writeFileSync(path.join(tmp, 'outside.plain'), 'secret');
+      const evilDb = new (require('node:sqlite').DatabaseSync)(path.join(tmp, 'akulavbox.db'));
+      evilDb.prepare("INSERT INTO files (id, owner_id, filename, size_bytes, mime_type, is_encrypted, created_at) VALUES ('../../outside', 'admin-uuid-0000', 'x.txt', 6, 'text/plain', 0, datetime('now'))").run();
+      evilDb.close();
+      const evil = await api(`/api/files/${encodeURIComponent('../../outside')}/view`, { raw: true });
+      ok(evil.status === 404, 'file ids from the database never become paths outside data/users', String(evil.status));
+      const evilDb2 = new (require('node:sqlite').DatabaseSync)(path.join(tmp, 'akulavbox.db'));
+      evilDb2.prepare("DELETE FROM files WHERE id = '../../outside'").run();
+      evilDb2.close();
       ok((await api('/api/login', { method: 'POST', body: { username: 'x'.repeat(5000), password: 'y' }, auth: false })).status === 401, 'absurdly long usernames are refused cheaply');
       const sock = await api('/socket.io/?EIO=4&transport=polling', { auth: false });
       ok((await api('/api/chat/friends')).status === 404 && !/"sid"/.test(String(sock.data)), 'chat and its socket are gone');

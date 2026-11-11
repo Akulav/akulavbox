@@ -180,10 +180,10 @@ export default {
             <div class="relative rounded-xl overflow-hidden ring-2 lift zoom-media" :class="[C.aspect, isSel(it.id) ? 'ring-accent' : 'ring-transparent']">
               <Thumb :file-id="it.id" :w="480" :version="it.thumb_file_id || 'none'" :icon="C.icon" />
               <span v-if="openCol" class="absolute top-2 left-2 min-w-[22px] h-[22px] px-1.5 rounded-full bg-black/65 text-white text-[11px] font-semibold grid place-items-center tabular-nums">{{ i + 1 }}</span>
-              <!-- small watermark, resolution and length along the bottom edge -->
-              <span v-if="isVideo" class="absolute bottom-2 left-2 h-5 flex items-center gap-1 text-white/75 drop-shadow pointer-events-none text-[10.5px] font-bold tracking-wide"
-                    :title="it.video_codec ? 'Video format: ' + videoFormat(it) : null" aria-hidden="true">
-                <Icon :name="C.icon" :size="13" :stroke="2" /><span v-if="videoFormat(it)" :class="it.video_codec === 'av1' ? 'text-accent-hi' : ''">{{ videoFormat(it) }}</span>
+              <!-- format, resolution and length along the bottom edge, on the same dark pills so they read on any cover -->
+              <span v-if="isVideo" class="absolute bottom-2 left-2 h-5 px-1.5 rounded bg-black/75 text-white flex items-center gap-1 text-[10.5px] font-bold tracking-wide"
+                    :title="it.video_codec ? 'Video format: ' + videoFormat(it) : 'File type: ' + videoFormat(it)">
+                <Icon :name="C.icon" :size="12" :stroke="2.2" class="opacity-80" /><span v-if="videoFormat(it)" :class="it.video_codec === 'av1' ? 'text-accent-hi' : ''">{{ videoFormat(it) }}</span>
               </span>
               <span v-if="isVideo" class="absolute bottom-2 right-2 flex gap-1">
                 <span v-if="resolutionLabel(it.width, it.height)" class="px-1.5 h-5 rounded text-[10.5px] font-bold tracking-wide grid place-items-center"

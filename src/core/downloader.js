@@ -768,9 +768,11 @@ function toAv1(jobId, src, duration, { strict = false } = {}) {
 }
 
 /** Remember a video's codec (videos uploaded by hand have no details row yet) */
+const metaRow = db.prepare("INSERT OR IGNORE INTO media_meta (file_id, owner_id, updated_at) VALUES (?, ?, datetime('now'))");
+const codecRow = db.prepare('UPDATE media_meta SET video_codec = ? WHERE file_id = ?');
+const stillThere = db.prepare('SELECT 1 FROM files WHERE id = ?');
 function setCodec(fileId, ownerId, codec) {
-  db.prepare("INSERT OR IGNORE INTO media_meta (file_id, owner_id, updated_at) VALUES (?, ?, datetime('now'))").run(fileId, ownerId);
-  db.prepare('UPDATE media_meta SET video_codec = ? WHERE file_id = ?').run(codec, fileId);
+  db.tx(() => { metaRow.run(fileId, ownerId); codecRow.run(codec, fileId); });
 }
 
 const fmtBytes = (n) => (n >= 1024 ** 3 ? `${(n / 1024 ** 3).toFixed(1)} GB` : n >= 1024 ** 2 ? `${(n / 1024 ** 2).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
@@ -828,7 +830,8 @@ function probeStream(stream) {
   const t = detect();
   return new Promise((resolve) => {
     const [cmd, pre] = command(t.ffprobe);
-    const child = spawn(cmd, [...pre, '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=codec_name', '-of', 'csv=p=0', 'pipe:0'],
+    // the size comes along in the same read, so browsers needn't fetch the video to measure it
+    const child = spawn(cmd, [...pre, '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=codec_name,width,height', '-of', 'csv=p=0', 'pipe:0'],
       { stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true });
     let out = '';
     const timer = setTimeout(() => child.kill(), 5 * 60 * 1000);
@@ -839,9 +842,13 @@ function probeStream(stream) {
     stream.pipe(child.stdin);
     const done = (codec) => { clearTimeout(timer); stream.unpipe(child.stdin); stream.destroy(); resolve(codec); };
     child.on('error', () => done(null));
-    child.on('close', () => done(out.split('\n')[0].trim().slice(0, 32)));
+    child.on('close', () => {
+      const [codec = '', w, h] = out.split('\n')[0].trim().split(',');
+      done({ codec: codec.slice(0, 32), width: Number(w) > 0 ? Number(w) : null, height: Number(h) > 0 ? Number(h) : null });
+    });
   });
 }
+const fillSize = db.prepare('UPDATE media_meta SET width = COALESCE(width, ?), height = COALESCE(height, ?) WHERE file_id = ?');
 
 async function probeMissing() {
   if (probing || !detect().ffVersion) return;
@@ -852,9 +859,11 @@ async function probeMissing() {
     for (const f of todo) {
       const stream = store.readAll(f);
       if (!stream) { setCodec(f.id, f.owner_id, ''); continue; }
-      const codec = await probeStream(stream);
-      if (codec === null) break; // ffprobe can't run: try again later
-      if (db.prepare('SELECT 1 FROM files WHERE id = ?').get(f.id)) setCodec(f.id, f.owner_id, codec);
+      const probe = await probeStream(stream);
+      if (probe === null) break; // ffprobe can't run: try again later
+      if (!stillThere.get(f.id)) continue;
+      setCodec(f.id, f.owner_id, probe.codec);
+      if (probe.width && probe.height) fillSize.run(probe.width, probe.height, f.id);
     }
   } catch (e) { console.warn(`[downloads] codec check failed: ${e.message}`); }
   finally { probing = false; }

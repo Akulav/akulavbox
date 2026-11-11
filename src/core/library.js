@@ -33,7 +33,8 @@ const HIDDEN_SQL = sqlList(HIDDEN);
 const OPT_IN = Object.keys(SYSTEM).filter(k => SYSTEM[k].optIn);
 
 /** Has this user turned the XXX section on? */
-const showsXxx = (userId) => !!db.prepare('SELECT show_xxx FROM users WHERE id = ?').get(userId)?.show_xxx;
+const xxxOf = db.prepare('SELECT show_xxx FROM users WHERE id = ?');
+const showsXxx = (userId) => !!xxxOf.get(userId)?.show_xxx;
 
 /** System folders Files, search and the Move picker leave out for this user */
 function hiddenKeys(userId) {
@@ -58,20 +59,27 @@ function categoryOf(filename, mime = '') {
 
 // (schema lives in core/migrations.js)
 
+// prepared once: these run on every library listing, upload and move
+const sysFolder = db.prepare('SELECT id, parent_id, trashed_at FROM folders WHERE owner_id = ? AND system_key = ?');
+const reparent = db.prepare('UPDATE folders SET parent_id = ? WHERE id = ?');
+const untrash = db.prepare('UPDATE folders SET trashed_at = NULL, trash_root = NULL WHERE id = ?');
+const insertSys = db.prepare('INSERT INTO folders (id, owner_id, parent_id, name, system_key) VALUES (?, ?, ?, ?, ?)');
+const keyOf = db.prepare('SELECT system_key FROM folders WHERE id = ?');
+
 function ensureSystemFolder(userId, key) {
   const def = SYSTEM[key];
   if (!def) throw new Error('Unknown system folder');
   const parentId = def.parent ? ensureSystemFolder(userId, def.parent) : null;
-  const row = db.prepare('SELECT id, parent_id, trashed_at FROM folders WHERE owner_id = ? AND system_key = ?').get(userId, key);
+  const row = sysFolder.get(userId, key);
   if (row) {
     // keep it where it belongs (older versions put everything at the top level)
-    if ((row.parent_id || null) !== parentId) db.prepare('UPDATE folders SET parent_id = ? WHERE id = ?').run(parentId, row.id);
+    if ((row.parent_id || null) !== parentId) reparent.run(parentId, row.id);
     // locked folders can't be trashed; heal anything an older build may have done
-    if (row.trashed_at) db.prepare('UPDATE folders SET trashed_at = NULL, trash_root = NULL WHERE id = ?').run(row.id);
+    if (row.trashed_at) untrash.run(row.id);
     return row.id;
   }
   const id = crypto.randomUUID();
-  db.prepare('INSERT INTO folders (id, owner_id, parent_id, name, system_key) VALUES (?, ?, ?, ?, ?)').run(id, userId, parentId, def.name, key);
+  insertSys.run(id, userId, parentId, def.name, key);
   return id;
 }
 
@@ -120,8 +128,8 @@ function ensureSystemFolder(userId, key) {
 })();
 
 function systemKeyOf(folderId) {
-  if (!folderId) return null;
-  const row = db.prepare('SELECT system_key FROM folders WHERE id = ?').get(folderId);
+  if (!folderId || typeof folderId !== 'string') return null;
+  const row = keyOf.get(folderId);
   return row ? row.system_key : null;
 }
 

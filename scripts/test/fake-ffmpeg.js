@@ -24,7 +24,9 @@ if (args.includes('-encoders')) { console.log(` A....D aac   AAC (Advanced Audio
 if (args.includes('-show_entries')) {
   // ffprobe: codec of the first audio or video stream
   const sel = args[args.indexOf('-select_streams') + 1] || '';
-  console.log(sel.startsWith('a') ? 'aac' : head(args[args.length - 1]) === 'AV1F' ? 'av1' : 'h264');
+  const codec = sel.startsWith('a') ? 'aac' : head(args[args.length - 1]) === 'AV1F' ? 'av1' : 'h264';
+  const what = args[args.indexOf('-show_entries') + 1] || '';
+  console.log(what === 'stream=codec_name,width,height' ? `${codec},640,360` : codec);
   process.exit(0);
 }
 const out = args[args.length - 1];

@@ -14,7 +14,7 @@ const IMG_COLS = 'f.id, f.filename, f.size_bytes, f.mime_type, f.is_encrypted, f
 module.exports = async function (fastify) {
   const ownsAlbum = (albumId, userId) => !!db.prepare('SELECT 1 FROM albums WHERE id = ? AND owner_id = ?').get(albumId, userId);
   const ownsCollection = (id, userId) => !!db.prepare('SELECT 1 FROM collections WHERE id = ? AND owner_id = ?').get(id, userId);
-  const ownsImage = (id, userId) => !!id && !!db.prepare('SELECT 1 FROM files WHERE id = ? AND owner_id = ? AND trashed_at IS NULL').get(id, userId);
+  const ownsImage = (id, userId) => typeof id === 'string' && !!db.prepare('SELECT 1 FROM files WHERE id = ? AND owner_id = ? AND trashed_at IS NULL').get(id, userId);
 
   function sendZip(reply, title, images) {
     reply.header('Content-Type', 'application/zip');
@@ -193,7 +193,7 @@ module.exports = async function (fastify) {
 
   fastify.post('/api/albums/:id/images/remove', { preHandler: verifyUser }, async (request, reply) => {
     if (!ownsAlbum(request.params.id, request.user.id)) return reply.code(404).send({ error: 'Album not found' });
-    const ids = Array.isArray(request.body?.file_ids) ? request.body.file_ids : [];
+    const ids = Array.isArray(request.body?.file_ids) ? request.body.file_ids.filter(x => typeof x === 'string') : [];
     const del = db.prepare('DELETE FROM album_images WHERE album_id = ? AND file_id = ?');
     db.tx(() => { for (const id of ids.slice(0, 5000)) del.run(request.params.id, id); });
     return { success: true };

@@ -10,7 +10,7 @@ module.exports = async function (fastify) {
 
   const ownsPlaylist = (id, userId) => !!db.prepare('SELECT 1 FROM playlists WHERE id = ? AND owner_id = ?').get(id, userId);
   // trashed files can't be added to playlists or used as artwork (they'd vanish again)
-  const ownsFile = (id, userId) => !!id && !!db.prepare('SELECT 1 FROM files WHERE id = ? AND owner_id = ? AND trashed_at IS NULL').get(id, userId);
+  const ownsFile = (id, userId) => typeof id === 'string' && !!db.prepare('SELECT 1 FROM files WHERE id = ? AND owner_id = ? AND trashed_at IS NULL').get(id, userId);
   const notFound = (reply) => reply.code(404).send({ error: 'Playlist not found' });
 
   const SONG_COLS = `f.id, f.filename, f.size_bytes, f.mime_type, f.is_encrypted, f.public_hash, f.created_at, sc.cover_file_id, ${lib.META_COLS}`;

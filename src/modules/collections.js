@@ -8,7 +8,7 @@ const cleanTitle = (v) => String(v ?? '').trim().slice(0, col.TITLE_MAX);
 module.exports = async function (fastify) {
   const owned = (id, userId) => db.prepare('SELECT * FROM media_collections WHERE id = ? AND owner_id = ?').get(id, userId);
   const notFound = (reply) => reply.code(404).send({ error: 'Collection not found' });
-  const ids = (v) => (Array.isArray(v) ? v.map(String).slice(0, 5000) : []);
+  const ids = (v) => (Array.isArray(v) ? v.filter(x => typeof x === 'string').slice(0, 5000) : []);
 
   // Collections of one kind, with counts, total length and a cover to show
   fastify.get('/api/media-collections', { preHandler: verifyUser }, async (request, reply) => {
@@ -48,7 +48,7 @@ module.exports = async function (fastify) {
     }
     if (b.notes !== undefined) db.prepare('UPDATE media_collections SET notes = ? WHERE id = ?').run(String(b.notes ?? '').slice(0, 10000), c.id);
     if (b.cover_file_id !== undefined) {
-      const fid = b.cover_file_id || null;
+      const fid = typeof b.cover_file_id === 'string' && b.cover_file_id ? b.cover_file_id : null;
       if (fid && !db.prepare('SELECT 1 FROM files WHERE id = ? AND owner_id = ? AND trashed_at IS NULL').get(fid, request.user.id)) return reply.code(404).send({ error: 'File not found' });
       db.prepare('UPDATE media_collections SET cover_file_id = ? WHERE id = ?').run(fid, c.id);
     }
