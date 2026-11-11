@@ -57,6 +57,16 @@ module.exports = async function (fastify) {
     return { success: true, id: r.id };
   });
 
+  // Re-encode my videos to AV1 in place: { file_ids }. Ones already in AV1 are skipped.
+  fastify.post('/api/downloads/av1', { preHandler: verifyUser }, async (request, reply) => {
+    const s = dl.status();
+    if (!s.encode_av1) return reply.code(503).send({ error: s.installing ? 'ffmpeg is still being set up. Try again in a minute.' : 'Converting to AV1 needs ffmpeg with an AV1 encoder, which isn’t available on this server.' });
+    const { ids, skipped } = dl.addAv1(request.user.id, [].concat(request.body?.file_ids || []));
+    if (!ids.length) return reply.code(400).send({ error: skipped ? 'Those videos are already AV1 or already converting.' : 'Pick one or more videos from your library.' });
+    dl.pump();
+    return { success: true, ids, skipped };
+  });
+
   // Cancel a running download, or remove a finished one from the list
   fastify.delete('/api/downloads/:id', { preHandler: verifyUser }, async (request, reply) => {
     return dl.cancel(request.params.id, request.user.id) ? { success: true } : reply.code(404).send({ error: 'Download not found' });

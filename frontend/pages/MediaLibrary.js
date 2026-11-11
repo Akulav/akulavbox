@@ -7,7 +7,7 @@ import { Thumb, Stars, MetaEditor, LibraryFilters, labelsFor } from '../componen
 import { api, fileUrl, formatBytes, formatDate, downloadUrl, refreshAccount, storage } from '../lib/api.js';
 import { toast, confirmDialog, promptDialog, attempt } from '../lib/ui.js';
 import { uploadMany } from '../lib/upload.js';
-import { useLibraryFilter, displayTitle, formatDuration, autoCover, backfillCovers, backfillSizes, resolutionLabel, setCover, thumbUrl, preload, groupByPerson } from '../lib/library.js';
+import { useLibraryFilter, displayTitle, formatDuration, autoCover, backfillCovers, backfillSizes, resolutionLabel, setCover, thumbUrl, preload, groupByPerson, videoFormat } from '../lib/library.js';
 import { useRenderLimit, useSelection } from '../lib/lists.js';
 import { kindOf } from '../lib/filetypes.js';
 import { moveToTrash } from '../lib/trash.js';
@@ -181,7 +181,10 @@ export default {
               <Thumb :file-id="it.id" :w="480" :version="it.thumb_file_id || 'none'" :icon="C.icon" />
               <span v-if="openCol" class="absolute top-2 left-2 min-w-[22px] h-[22px] px-1.5 rounded-full bg-black/65 text-white text-[11px] font-semibold grid place-items-center tabular-nums">{{ i + 1 }}</span>
               <!-- small watermark, resolution and length along the bottom edge -->
-              <span v-if="isVideo" class="absolute bottom-2 left-2 w-5 h-5 grid place-items-center text-white/70 drop-shadow pointer-events-none" aria-hidden="true"><Icon :name="C.icon" :size="14" :stroke="2" /></span>
+              <span v-if="isVideo" class="absolute bottom-2 left-2 h-5 flex items-center gap-1 text-white/75 drop-shadow pointer-events-none text-[10.5px] font-bold tracking-wide"
+                    :title="it.video_codec ? 'Video format: ' + videoFormat(it) : null" aria-hidden="true">
+                <Icon :name="C.icon" :size="13" :stroke="2" /><span v-if="videoFormat(it)" :class="it.video_codec === 'av1' ? 'text-accent-hi' : ''">{{ videoFormat(it) }}</span>
+              </span>
               <span v-if="isVideo" class="absolute bottom-2 right-2 flex gap-1">
                 <span v-if="resolutionLabel(it.width, it.height)" class="px-1.5 h-5 rounded text-[10.5px] font-bold tracking-wide grid place-items-center"
                       :class="Math.min(it.width, it.height) >= 2000 ? 'bg-accent text-accent-fg' : 'bg-black/75 text-white'" :title="it.width + ' × ' + it.height">{{ resolutionLabel(it.width, it.height) }}</span>
@@ -223,6 +226,7 @@ export default {
           <button class="btn btn-ghost btn-sm" @click="selectAll">All</button>
           <button v-if="C.collections" class="btn btn-ghost btn-sm" @click="openPicker($event, selected)"><Icon name="list-music" :size="15" /><span class="whitespace-nowrap">Add to collection</span></button>
           <button v-if="canSongs" class="btn btn-ghost btn-sm" @click="toSongs(selected)" title="Save the sound as songs in Music"><Icon name="music" :size="15" /><span class="whitespace-nowrap">Save as songs</span></button>
+          <button v-if="canAv1 && selectedNotAv1.length" class="btn btn-ghost btn-sm" @click="toAv1(selectedNotAv1)" title="Re-encode to AV1 to save space"><Icon name="zap" :size="15" /><span class="whitespace-nowrap">Convert to AV1</span></button>
           <button class="btn btn-ghost btn-sm" @click="editSelected"><Icon name="pencil" :size="15" /><span class="hidden sm:inline">Edit details</span></button>
           <button class="btn btn-ghost btn-sm !text-danger" @click="deleteSelected"><Icon name="trash" :size="15" /><span class="hidden sm:inline">Delete</span></button>
           <button class="icon-btn icon-btn-sm shrink-0" @click="selected = []; selecting = false" title="Clear"><Icon name="x" :size="15" /></button>
@@ -236,6 +240,7 @@ export default {
           <button class="menu-item" @click="run(it => editors = [it])"><Icon name="pencil" :size="16" />Edit details</button>
           <button v-if="C.collections" class="menu-item" @click="pickerFromMenu($event)"><Icon name="list-music" :size="16" />Add to collection<Icon name="chevron-right" :size="15" class="ml-auto text-faint" /></button>
           <button v-if="canSongs" class="menu-item" @click="run(it => toSongs([it.id]))"><Icon name="music" :size="16" />Save as song</button>
+          <button v-if="canAv1 && menu.item && menu.item.video_codec !== 'av1'" class="menu-item" @click="run(it => toAv1([it.id]))"><Icon name="zap" :size="16" />Convert to AV1</button>
           <template v-if="openCol">
             <button class="menu-item" @click="run(setColCover)"><Icon name="image" :size="16" />Use as collection cover</button>
             <button class="menu-item" @click="run(removeFromCol)"><Icon name="x" :size="16" />Remove from collection</button>
@@ -305,12 +310,15 @@ export default {
               <template v-if="file.date"><dt class="text-muted">{{ L.date }}</dt><dd>{{ file.date }}</dd></template>
               <template v-if="file.duration"><dt class="text-muted">Length</dt><dd class="tabular-nums">{{ formatDuration(file.duration) }}</dd></template>
               <template v-if="file.width && isVideo"><dt class="text-muted">Resolution</dt><dd class="tabular-nums">{{ file.width }} × {{ file.height }} <span class="text-muted">({{ resolutionLabel(file.width, file.height) }})</span></dd></template>
+              <template v-if="isVideo && videoFormat(file)"><dt class="text-muted">Format</dt><dd>{{ videoFormat(file) }}<span v-if="!file.video_codec" class="text-muted"> (codec not read yet)</span></dd></template>
               <template v-if="file.rating"><dt class="text-muted">Rating</dt><dd><Stars :model-value="file.rating" :size="14" readonly /></dd></template>
             </dl>
             <p v-if="file.details" class="text-[13.5px] whitespace-pre-line leading-relaxed">{{ file.details }}</p>
             <p v-if="!file.participants?.length && !file.tags?.length && !file.details && !file.series && !file.date" class="text-muted text-[13px]">No details yet. Add {{ L.people.toLowerCase() }}, tags and notes to sort and find this later.</p>
             <button v-if="isVideo" class="btn btn-sm w-full" @click="frameAsCover(file)"><Icon name="image" :size="14" />Use current frame as cover</button>
             <button v-if="isVideo && canConvert && !(trim && trim.id === file.id)" class="btn btn-sm w-full" @click="openTrim(file)"><Icon name="zoom-out" :size="14" />Trim</button>
+            <button v-if="canAv1 && file.video_codec !== 'av1'" class="btn btn-sm w-full" @click="toAv1([file.id], true)" title="Re-encode in place to save space; the details, cover and collections stay">
+              <Icon name="zap" :size="14" />Convert to AV1</button>
 
             <!-- Trim: keep start..end -->
             <TrimPanel v-if="trim && trim.id === file.id" :item="{ id: file.id, duration: file.duration || videoDuration() }" kind="video"
@@ -457,7 +465,19 @@ export default {
     // ---------- save as song (the sound goes to Music with the same details) ----------
     const canConvert = ref(false); // ffmpeg is there: trim (and save as song, where that applies)
     const canSongs = computed(() => canConvert.value && !!C.value.songs);
-    if (isVideo.value) api('/api/downloads/status').then(s => { canConvert.value = !!s.convert; }).catch(() => {});
+    const canAv1 = ref(false);     // ffmpeg has an AV1 encoder: "Convert to AV1"
+    if (isVideo.value) api('/api/downloads/status').then(s => { canConvert.value = !!s.convert; canAv1.value = !!s.encode_av1; }).catch(() => {});
+    const selectedNotAv1 = computed(() => { const ids = new Set(selected.value); return items.value.filter(it => ids.has(it.id) && it.video_codec !== 'av1').map(it => it.id); });
+    // ---------- convert to AV1 (in place: same id, details, cover and collections) ----------
+    async function toAv1(ids, fromViewer = false) {
+      const r = await attempt(() => api('/api/downloads/av1', { method: 'POST', body: { file_ids: [...ids] } }));
+      if (!r) return;
+      selected.value = []; selecting.value = false;
+      if (fromViewer) viewer.value = null; // the file is replaced when the encode finishes
+      dlKey.value++;
+      const n = r.ids.length;
+      toast.success(`Converting ${n === 1 ? 'the video' : n + ' videos'} to AV1${r.skipped ? ` (${r.skipped} already AV1 or converting)` : ''}. ${n === 1 ? 'It’s' : 'They’re'} replaced only if the result is smaller.`);
+    }
     async function toSongs(ids) {
       const list = [...ids];
       const r = await attempt(() => api('/api/downloads/from-videos', { method: 'POST', body: { file_ids: list } }));
@@ -648,7 +668,7 @@ export default {
       view, allHref, openCol, collections, collectionsLoaded, colItems, colLoaded, colDuration, list, creators,
       shownList, moreList, listEnd, shownCreators, moreCreators, creatorsEnd, shownCollections, moreCollections, collectionsEnd,
       isSel, toggleSel, toggleSelecting, selectAll, editSelected, onCardClick, open, openById, filterBy, showCreator, openMenu, run, remove, deleteSelected, onSaved, onDownloaded,
-      trim, dlKey, currentTime, videoDuration, openTrim, previewTrim, onTrimStarted,
+      trim, dlKey, currentTime, videoDuration, openTrim, previewTrim, onTrimStarted, canAv1, selectedNotAv1, toAv1, videoFormat,
       playCollection, playCollectionById, shuffleList, canConvert, toSongs, collectionToSongs, TAGS_SHOWN, allTags, newCollection, renameCollection, deleteCollection, toggleColFavorite, removeFromCol, setColCover,
       colMenu, openColMenu, runCol, picker, openPicker, pickerFromMenu, addTo, dragIndex, dragOverIndex, onCardDragStart, onCardDrop,
       frameAsCover, onPick, onDragEnter, onDragLeave, onDrop, ext, progressOf,

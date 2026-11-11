@@ -96,15 +96,16 @@ export default {
       return parts.length && (waiting || working + shrinking > 1) ? parts.join(' · ') + '. They keep going if you close this page.' : '';
     });
     const isConversion = (j) => j.url.startsWith('akulavbox:');
-    const hostOf = (u) => { if (u.startsWith('akulavbox:trim/')) return 'trim of your video'; if (u.startsWith('akulavbox:')) return 'from your video'; try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return u; } };
+    const hostOf = (u) => { if (u.startsWith('akulavbox:trim/')) return 'trim of your video'; if (u.startsWith('akulavbox:av1/')) return 'conversion to AV1'; if (u.startsWith('akulavbox:')) return 'from your video'; try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return u; } };
     const needsCookies = (j) => /Profile → Link downloads/.test(j.error || '');
     const label = (j) => {
       if (j.status === 'downloading') {
         const pct = Math.round((j.progress || 0) * 100);
         return `${pct}%${j.speed ? ' · ' + formatBytes(j.speed) + '/s' : ''}`;
       }
-      if (j.status === 'converting') return `${j.url.startsWith('akulavbox:trim/') ? 'Trimming' : isConversion(j) ? 'Saving the sound' : 'Shrinking to AV1'} ${Math.round((j.progress || 0) * 100)}%`;
+      if (j.status === 'converting') return `${j.url.startsWith('akulavbox:trim/') ? 'Trimming' : j.url.startsWith('akulavbox:av1/') || !isConversion(j) ? 'Shrinking to AV1' : 'Saving the sound'} ${Math.round((j.progress || 0) * 100)}%`;
       if (j.status === 'done' && j.url.startsWith('akulavbox:trim/')) return 'Trimmed';
+      if (j.status === 'done' && j.url.startsWith('akulavbox:av1/')) return 'Converted';
       if (j.status === 'queued' && queuePos.value.get(j.id)) return `Waiting · #${queuePos.value.get(j.id)} in line`;
       return STATUS_LABEL[j.status] || j.status;
     };

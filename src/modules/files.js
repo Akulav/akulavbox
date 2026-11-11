@@ -148,6 +148,7 @@ module.exports = async function (fastify) {
     const sysKey = lib.systemKeyOf(folderId);
     if (sysKey && !lib.accepts(sysKey, file.filename, file.mime_type)) return lib.rejectMessage(sysKey);
     db.prepare('UPDATE files SET folder_id = ? WHERE id = ? AND owner_id = ?').run(folderId, id, userId);
+    if (sysKey === 'videos' || sysKey === 'xxx') require('../core/downloader').probeSoon();
     return null;
   }
   const errCode = (msg) => (/not found/i.test(msg) ? 404 : 400);
@@ -331,6 +332,8 @@ module.exports = async function (fastify) {
       if (lib.categoryOf(filename, finalMime) === 'image') {
         thumbs.warm(db.prepare('SELECT * FROM files WHERE id = ?').get(fileId), encPath, MASTER_KEY);
       }
+      // a video in Videos or XXX: read its codec in the background (the format badge, "Convert to AV1")
+      if (sysKey === 'videos' || sysKey === 'xxx') require('../core/downloader').probeSoon();
       return { success: true, fileId };
     } catch (err) {
       const quota = err.code === 'QUOTA';

@@ -33,6 +33,7 @@ The schema version is `PRAGMA user_version`. Each entry in `MIGRATIONS` is one v
 | 9 | `settings`, `activity` |
 | 10 | Drops `messages`, `friends`, `chat_reads` (chat removed in 3.0) and gives chat-file quota back |
 | 11 | `downloads(status)` index |
+| 12 | `media_meta.video_codec` |
 
 ## Authentication
 
@@ -84,6 +85,8 @@ The cover and artwork sub-folders (`library.HIDDEN`) are hidden from Files listi
 - **Video → song** jobs have the url `akulavbox:video/<fileId>` and go through the same queue: decrypt to the work folder, ffprobe the audio codec, copy it when browsers play it (AAC → m4a, MP3, Opus, FLAC, Vorbis) or encode to AAC, store it in Music with the video's details, copy the cover (or grab a frame) into Artwork, and file it in the creator's playlist. Without yt-dlp, only conversions run.
 - yt-dlp gets `--js-runtimes node:<this Node>` when it supports it (YouTube needs a JS runtime for its full format list), and a download that hits "Requested format is not available" is retried with `bv*+ba/b`, then with yt-dlp's default choice.
 - Video width and height live in `media_meta.width/height`: ffprobed for downloads and trims, read by the browser (`readVideoSize`, header only) for uploads.
+- The video codec lives in `media_meta.video_codec` (shown as the format badge on video cards). Downloads, trims and AV1 conversions record it with ffprobe. Other videos in Videos/XXX (uploads, moves, older libraries) are probed in the background (`probeMissing`, a few seconds after an upload and every 30 minutes): the decrypted stream is piped into ffprobe, so no plain copy touches the disk. Unreadable files get `''` and aren't retried.
+- **Convert to AV1** jobs (`akulavbox:av1/<fileId>`, kind `video` or `xxx`) decrypt the video, wait for the one-at-a-time encoder like downloads do (`toAv1`), and swap the result in with `storage.replaceFile()` (same id, details, cover, collections; the name becomes `.mp4`) only when it is smaller. They need an AV1 encoder (`status.encode_av1`), even when `VIDEO_AV1=off`.
 - **Trim** jobs (`akulavbox:trim/<fileId>?s=&e=&exact=&copy=`, videos and songs; songs re-encode to AAC for an exact cut) decrypt the media, cut it with ffmpeg (`-ss` before `-i` with stream copy for a fast keyframe cut, or a re-encode to AV1/H.264 for an exact one), and either store a copy (same details and collections) or swap the contents in place with `storage.replaceFile()`, which keeps the file id, writes a fresh IV and adjusts `used_bytes`.
 
 ## Storage check (`src/core/maintenance.js`)

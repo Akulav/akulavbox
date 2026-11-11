@@ -2,6 +2,12 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 3.1.0 (2026-11-11)
+
+### Added
+- **The video format is shown on every video card**, next to the small film watermark: AV1 (highlighted), H.264, HEVC, VP9 and so on, and in the viewer's details as **Format**. Downloads, trims and conversions record it. Videos uploaded by hand, moved into Videos, or already in your library are read in the background by ffprobe (without writing a decrypted copy to disk). Until then the card shows the file type, such as WEBM.
+- **Convert to AV1** for videos that aren't AV1 yet, from the viewer's details panel, a video's menu, or for a whole selection. The video is re-encoded in the download queue (one at a time, with progress) and replaced in place, keeping its details, cover and collections. It's only replaced if the AV1 version is smaller, and the list shows how much was saved. Works in Videos and XXX, and needs ffmpeg with an AV1 encoder (installed automatically).
+
 ## 3.0.0 (2026-11-11)
 
 ### Breaking

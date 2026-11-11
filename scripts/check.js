@@ -292,6 +292,34 @@ async function main() {
       ok(sized.status === 200 && sized.data.width === 1920 && sized.data.height === 1080 && sized.data.duration === 20, 'store a video’s resolution (keeps the other details)');
       ok((await api('/api/library/videos')).data.items.find(x => x.id === second.id)?.height === 1080, 'the library lists the resolution');
 
+      console.log('\nVideo format and AV1');
+      ok((await api('/api/library/videos')).data.items.find(x => x.id === v.id)?.video_codec === 'h264', 'downloads record their video codec');
+      const vFolder = (await api('/api/library/folder/videos')).data.id;
+      const handUp = await upload(crypto.randomBytes(20 * 1024), 'by hand.webm', vFolder);
+      let handCodec = null;
+      for (let i = 0; i < 60 && !handCodec; i++) { await new Promise(r => setTimeout(r, 250)); handCodec = (await api('/api/library/videos')).data.items.find(x => x.id === handUp.data.fileId)?.video_codec; }
+      ok(handCodec === 'h264', 'an uploaded video’s codec is read in the background', String(handCodec));
+      ok((await api('/api/downloads/av1', { method: 'POST', body: { file_ids: [v.id] } })).status === 503, 'convert to AV1 needs an AV1 encoder');
+      fs.writeFileSync(path.join(tmp, 'fake-av1'), '');
+      await api('/api/admin/system?fresh=1');
+      ok((await api('/api/downloads/status')).data.encode_av1 === true, 'an AV1 encoder is detected');
+      ok((await api('/api/downloads/av1', { method: 'POST', body: { file_ids: ['not-mine', { x: 1 }] } })).status === 400, 'only your own videos can be converted to AV1');
+      const usedAv1 = (await api('/api/user/profile')).data.used_bytes;
+      const av = await api('/api/downloads/av1', { method: 'POST', body: { file_ids: [v.id, second.id] } });
+      ok(av.status === 200 && av.data.ids.length === 2, 'convert videos to AV1');
+      jobs = await waitJobs('video');
+      const avJob = jobs.find(j => j.id === av.data.ids[0]), keptJob = jobs.find(j => j.id === av.data.ids[1]);
+      const avV = (await api('/api/library/videos')).data.items.find(x => x.id === v.id);
+      ok(avJob?.status === 'done' && /smaller/.test(avJob.error || '') && avV?.video_codec === 'av1' && avV.size_bytes === 8192 && /\.mp4$/.test(avV.filename) && avV.title === 'Test video clip1',
+        'the video is replaced in place by a smaller AV1 copy (same id and details)', JSON.stringify({ avJob, avV }));
+      const avBytes = Buffer.from(await (await api(`/api/files/${v.id}/view`, { raw: true })).arrayBuffer());
+      ok(avBytes.subarray(0, 4).toString() === 'AV1F', 'the AV1 video decrypts');
+      ok((await api('/api/user/profile')).data.used_bytes === usedAv1 - (64 * 1024 - 8192), 'storage used shrinks with it');
+      ok(keptJob?.status === 'done' && /wasn’t smaller/.test(keptJob.error || ''), 'a video that wouldn’t get smaller is kept as it is', JSON.stringify(keptJob));
+      ok((await api('/api/downloads/av1', { method: 'POST', body: { file_ids: [v.id] } })).status === 400, 'videos already in AV1 are skipped');
+      fs.rmSync(path.join(tmp, 'fake-av1'), { force: true });
+      await api('/api/admin/system?fresh=1');
+
       console.log('\nYouTube format fallback');
       await api('/api/downloads', { method: 'POST', body: { url: 'https://www.youtube.com/watch?v=noformat', kind: 'video' } });
       jobs = await waitJobs('video');

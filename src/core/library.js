@@ -149,7 +149,7 @@ function withMeta(row) {
 }
 
 // Columns to select (alias m) for any list joined with media_meta
-const META_COLS = `m.title, m.participants, m.tags, m.details, m.date, m.series, m.rating, m.duration, m.thumb_file_id, m.progress, m.updated_at AS meta_updated_at, m.width, m.height`;
+const META_COLS = `m.title, m.participants, m.tags, m.details, m.date, m.series, m.rating, m.duration, m.thumb_file_id, m.progress, m.updated_at AS meta_updated_at, m.width, m.height, m.video_codec`;
 
 function deleteMetaFor(fileId) {
   db.prepare('DELETE FROM media_meta WHERE file_id = ?').run(fileId);

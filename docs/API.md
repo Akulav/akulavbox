@@ -66,6 +66,7 @@ All endpoints are JSON unless noted. Authenticate with `Authorization: Bearer <t
 | GET | `/api/downloads?kind=video\|audio\|xxx` | All my unfinished jobs plus the 60 latest finished: `status` is `queued`, `probing`, `downloading`, `encode_wait` (downloaded, waiting for the AV1 encoder), `converting`, `processing`, `done`, `error`, `cancelled` or `expanded` (a playlist that became one job per entry) |
 | POST | `/api/downloads` | `{ url, kind }` (`video`, `audio`, or `xxx`: a video saved to the XXX section, 403 while it's off). Several links can be separated by spaces. `akulavbox:video/<fileId>` re-queues a conversion |
 | POST | `/api/downloads/trim` | `{ file_id, start, end, exact?, copy? }` (seconds): keep start..end of my video or song. `exact` re-encodes for a frame-accurate cut; `copy` saves a new video instead of replacing. Queued as `akulavbox:trim/<id>?…` |
+| POST | `/api/downloads/av1` | `{ file_ids }`: re-encode my videos to AV1 in place (`akulavbox:av1/<id>` jobs). Ones already AV1 or already queued are skipped (`skipped`). The original is kept when AV1 isn't smaller. Needs `status.encode_av1` |
 | POST | `/api/downloads/from-videos` | `{ file_ids }`: save my videos' sound as songs (same details and artwork). Needs ffmpeg (`status.convert`) |
 | GET / PUT / DELETE | `/api/downloads/cookies` | My sign-in cookies for downloads. GET → `{ saved, sites, updated_at }` (never the values). PUT `{ text }`: a Netscape cookies.txt or a JSON export |
 | DELETE | `/api/downloads/:id` | Cancel, or remove a finished job from the list |

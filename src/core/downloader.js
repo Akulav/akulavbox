@@ -50,6 +50,8 @@ const KINDS = {
 const kindOf = (k) => KINDS[k] || KINDS.video;
 // akulavbox:trim/<fileId>?s=<start>&e=<end>&exact=0|1&copy=0|1
 const TRIM_RE = /^akulavbox:trim\/([\w-]{1,64})\?(s=[\d.]+&e=[\d.]+&exact=[01]&copy=[01])$/;
+// akulavbox:av1/<fileId>: re-encode a video already in the library to AV1, in place
+const AV1_RE = /^akulavbox:av1\/([\w-]{1,64})$/;
 
 // --- tools -----------------------------------------------------------------
 // A YTDLP_PATH ending in .js runs with Node (used by the self-test's stand-in).
@@ -83,7 +85,8 @@ const status = () => {
   const t = detect();
   const s = installer.state;
   return { enabled: ENABLED, available: ENABLED && !!t.ytVersion, ytdlp: t.ytVersion, ffmpeg: t.ffVersion, av1: AV1 && !!t.av1,
-    convert: ENABLED && !!t.ffVersion, installing: s.installing, step: s.step, error: s.error, autoInstall: installer.auto };
+    // "Convert to AV1" on a library video only needs the encoder (VIDEO_AV1=off is about downloads)
+    convert: ENABLED && !!t.ffVersion, encode_av1: ENABLED && !!t.av1, installing: s.installing, step: s.step, error: s.error, autoInstall: installer.auto };
 };
 
 // --- link checks ------------------------------------------------------------
@@ -171,10 +174,7 @@ function addConversions(ownerId, fileIds) {
 function addTrim(ownerId, fileId, { start, end, exact, copy }) {
   const s = Math.max(0, Number(start) || 0), e = Number(end);
   if (!(e > s + 0.2)) return { error: 'Choose an end after the start (at least a fraction of a second).' };
-  const sections = { [lib.ensureSystemFolder(ownerId, 'videos')]: 'video', [lib.ensureSystemFolder(ownerId, 'music')]: 'audio' };
-  // the XXX folder only exists once the section was used; don't create it here
-  const xxx = db.prepare("SELECT id FROM folders WHERE owner_id = ? AND system_key = 'xxx'").get(ownerId);
-  if (xxx) sections[xxx.id] = 'xxx';
+  const sections = { ...videoSections(ownerId), [lib.ensureSystemFolder(ownerId, 'music')]: 'audio' };
   const v = db.prepare(`SELECT f.id, f.filename, f.folder_id, m.title, m.duration FROM files f LEFT JOIN media_meta m ON m.file_id = f.id
     WHERE f.id = ? AND f.owner_id = ? AND f.trashed_at IS NULL`).get(String(fileId), ownerId);
   const kind = v && sections[v.folder_id];
@@ -184,10 +184,43 @@ function addTrim(ownerId, fileId, { start, end, exact, copy }) {
   return { id: addJob(ownerId, url, kind, v.title || v.filename.replace(/\.[^.]+$/, '')) };
 }
 
+/** My video sections: folder id -> job kind (the XXX folder only once the section was used) */
+function videoSections(ownerId) {
+  const out = { [lib.ensureSystemFolder(ownerId, 'videos')]: 'video' };
+  const xxx = db.prepare("SELECT id FROM folders WHERE owner_id = ? AND system_key = 'xxx'").get(ownerId);
+  if (xxx) out[xxx.id] = 'xxx';
+  return out;
+}
+
+/**
+ * Queue "convert to AV1" for videos the user owns. Videos already known to be AV1,
+ * and ones already waiting for a conversion, are skipped. Returns { ids, skipped }.
+ */
+function addAv1(ownerId, fileIds) {
+  const sections = videoSections(ownerId);
+  const get = db.prepare(`SELECT f.id, f.filename, f.folder_id, m.title, m.video_codec FROM files f LEFT JOIN media_meta m ON m.file_id = f.id
+    WHERE f.id = ? AND f.owner_id = ? AND f.trashed_at IS NULL`);
+  const queued = db.prepare(`SELECT 1 FROM downloads WHERE owner_id = ? AND url = ? AND status IN (${ACTIVE_SQL})`);
+  const ids = [];
+  let skipped = 0;
+  db.tx(() => {
+    for (const fid of [...new Set(fileIds)].filter(x => typeof x === 'string').slice(0, 500)) {
+      const v = get.get(fid, ownerId);
+      const kind = v && sections[v.folder_id];
+      if (!kind) continue;
+      const url = `akulavbox:av1/${v.id}`;
+      if (v.video_codec === 'av1' || queued.get(ownerId, url)) { skipped++; continue; }
+      ids.push(addJob(ownerId, url, kind, v.title || v.filename.replace(/\.[^.]+$/, '')));
+    }
+  });
+  return { ids, skipped };
+}
+
 /** Re-queue an internal job (a retry from the downloads list) after checking ownership */
 function addInternal(ownerId, url) {
   let m;
   if ((m = CONVERT_RE.exec(url))) return addConversions(ownerId, [m[1]])[0] || null;
+  if ((m = AV1_RE.exec(url))) return addAv1(ownerId, [m[1]]).ids[0] || null;
   if ((m = TRIM_RE.exec(url))) {
     const q = new URLSearchParams(m[2]);
     const r = addTrim(ownerId, m[1], { start: q.get('s'), end: q.get('e'), exact: q.get('exact') === '1', copy: q.get('copy') === '1' });
@@ -195,7 +228,7 @@ function addInternal(ownerId, url) {
   }
   return null;
 }
-const isInternal = (url) => CONVERT_RE.test(url) || TRIM_RE.test(url);
+const isInternal = (url) => CONVERT_RE.test(url) || TRIM_RE.test(url) || AV1_RE.test(url);
 
 /** Every unfinished job (a long playlist must not be cut off) plus the 60 most recent finished ones */
 function listJobs(ownerId, kind) {
@@ -357,6 +390,13 @@ function videoSize(file) {
   return m ? { width: Number(m[1]), height: Number(m[2]) } : {};
 }
 
+/** Codec of a video file's first video stream ("av1", "h264", …), or '' */
+function codecOf(file) {
+  const t = detect();
+  if (!t.ffVersion) return '';
+  return execText(t.ffprobe, ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=codec_name', '-of', 'csv=p=0', file], 30000).split('\n')[0].trim().slice(0, 32);
+}
+
 const insertMeta = (fields) => {
   const keys = Object.keys(fields);
   db.prepare(`INSERT INTO media_meta (${keys.join(', ')}, updated_at) VALUES (${keys.map(() => '?').join(', ')}, datetime('now'))`).run(...keys.map(k => fields[k]));
@@ -374,6 +414,7 @@ async function run(id) {
   try {
     if (CONVERT_RE.test(job.url)) await convertVideo(job, work);
     else if (TRIM_RE.test(job.url)) await trimMedia(job, work);
+    else if (AV1_RE.test(job.url)) await encodeAv1(job, work);
     else await download(job, work);
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
@@ -512,7 +553,7 @@ async function download(job, work) {
     series: kind === 'audio' && info.album ? String(info.album).slice(0, 300) : null,
     duration: Number(info.duration) > 0 ? Number(info.duration) : null,
     thumb_file_id: kind === 'video' ? coverId : null, source_url: info.webpage_url || job.url, source_id: sourceId,
-    ...(kind === 'video' ? videoSize(media.p) : {}),
+    ...(kind === 'video' ? { ...videoSize(media.p), video_codec: ff ? codecOf(media.p) : null } : {}),
   });
   // grouped by creator in Videos → Creators / Music → Artists; collections and playlists are left to the user
   if (kind === 'audio') setSongCover(file.id, coverId);
@@ -656,7 +697,7 @@ async function trimMedia(job, work) {
         participants: JSON.stringify(meta.participants), tags: JSON.stringify(meta.tags), details: meta.details || null,
         date: meta.date || null, series: meta.series || null, rating: meta.rating || null, duration: realLength,
         thumb_file_id: meta.thumb_file_id || null, source_url: meta.source_url || null,
-        ...(audio ? {} : videoSize(out)),
+        ...(audio ? {} : { ...videoSize(out), video_codec: codecOf(out) }),
       });
     }
     // next to the original: same collections (videos) or same playlists and artwork (songs)
@@ -669,9 +710,10 @@ async function trimMedia(job, work) {
     const name = ext === srcExt ? null : `${base}${ext}`;
     await store.replaceFile(video, out, { filename: name, mime: name ? guessMime(name) : null });
     const size = audio ? {} : videoSize(out);
-    if (meta) db.prepare("UPDATE media_meta SET duration = ?, width = COALESCE(?, width), height = COALESCE(?, height), progress = NULL, updated_at = datetime('now') WHERE file_id = ?")
-      .run(realLength, size.width ?? null, size.height ?? null, video.id);
-    else insertMeta({ file_id: video.id, owner_id: ownerId, duration: realLength });
+    const codec = audio ? null : (codecOf(out) || null);
+    if (meta) db.prepare("UPDATE media_meta SET duration = ?, width = COALESCE(?, width), height = COALESCE(?, height), video_codec = COALESCE(?, video_codec), progress = NULL, updated_at = datetime('now') WHERE file_id = ?")
+      .run(realLength, size.width ?? null, size.height ?? null, codec, video.id);
+    else insertMeta({ file_id: video.id, owner_id: ownerId, duration: realLength, ...(codec ? { video_codec: codec } : {}) });
     update(id, { status: 'done', progress: 1, file_id: video.id, error: null });
   }
 }
@@ -684,9 +726,9 @@ let encodeWaiting = 0;               // jobs that gave their download slot back 
  * Re-encode a video to AV1 (audio is copied). Returns the new file's path when it
  * came out smaller, otherwise null and the original is kept. Already-AV1 files are skipped.
  */
-function toAv1(jobId, src, duration) {
+function toAv1(jobId, src, duration, { strict = false } = {}) {
   const t = detect();
-  const codec = execText(t.ffprobe, ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=codec_name', '-of', 'csv=p=0', src], 30000);
+  const codec = codecOf(src);
   if (!codec || codec === 'av1') return Promise.resolve(null);
   const out = path.join(path.dirname(src), 'av1.mp4');
   const encoder = t.av1 === 'libsvtav1'
@@ -713,7 +755,11 @@ function toAv1(jobId, src, duration) {
           update(jobId, { progress: Math.min(0.99, Number(m[1]) / 1e6 / duration) });
         },
       });
-    } catch (e) { return null; }
+    } catch (e) {
+      // a download keeps its original when the encode fails; an explicit conversion reports why
+      if (strict || e.cancelled) throw e;
+      return null;
+    }
     // only worth keeping when it actually saves space
     return fs.existsSync(out) && fs.statSync(out).size < fs.statSync(src).size ? out : null;
   });
@@ -721,11 +767,108 @@ function toAv1(jobId, src, duration) {
   return job;
 }
 
+/** Remember a video's codec (videos uploaded by hand have no details row yet) */
+function setCodec(fileId, ownerId, codec) {
+  db.prepare("INSERT OR IGNORE INTO media_meta (file_id, owner_id, updated_at) VALUES (?, ?, datetime('now'))").run(fileId, ownerId);
+  db.prepare('UPDATE media_meta SET video_codec = ? WHERE file_id = ?').run(codec, fileId);
+}
+
+const fmtBytes = (n) => (n >= 1024 ** 3 ? `${(n / 1024 ** 3).toFixed(1)} GB` : n >= 1024 ** 2 ? `${(n / 1024 ** 2).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+
+/** "Convert to AV1": re-encode a library video in place (same id, details, collections and links) */
+async function encodeAv1(job, work) {
+  const { id, owner_id: ownerId } = job;
+  const t = detect();
+  if (!t.av1) throw new Error('Converting to AV1 needs ffmpeg with an AV1 encoder, which this server doesn’t have yet.');
+  const fileId = AV1_RE.exec(job.url)[1];
+  const video = db.prepare('SELECT * FROM files WHERE id = ? AND owner_id = ? AND trashed_at IS NULL').get(fileId, ownerId);
+  if (!video) throw new Error('The video is no longer in your library.');
+  const meta = lib.withMeta(db.prepare('SELECT * FROM media_meta WHERE file_id = ?').get(fileId));
+  update(id, { status: 'processing', progress: 0.02, creator: meta?.participants?.[0] || null });
+
+  if (!store.hasRoomFor(video.size_bytes * 2)) throw new Error('The server’s disk is too full to convert this video');
+  const src = path.join(work, `source${path.extname(video.filename).toLowerCase() || '.mp4'}`);
+  const input = store.readAll(video);
+  if (!input) throw new Error('The video file is missing on the server.');
+  await pipeline(input, fs.createWriteStream(src));
+  throwIfCancelled(id);
+
+  const codec = codecOf(src);
+  if (!codec) throw new Error('ffmpeg couldn’t read a video stream in this file.');
+  if (codec === 'av1') {
+    setCodec(video.id, ownerId, 'av1');
+    update(id, { status: 'done', progress: 1, file_id: video.id, error: 'Already AV1' });
+    return;
+  }
+  const out = await toAv1(id, src, Number(meta?.duration) || 0, { strict: true });
+  throwIfCancelled(id);
+  if (!out) {
+    setCodec(video.id, ownerId, codec);
+    update(id, { status: 'done', progress: 1, file_id: video.id, error: 'Kept the original: the AV1 version wasn’t smaller' });
+    return;
+  }
+
+  update(id, { status: 'processing', progress: 0.98 });
+  const before = video.size_bytes, after = fs.statSync(out).size;
+  // the encoder writes MP4; the name follows so the browser and downloads get the right type
+  const name = /\.mp4$/i.test(video.filename) ? null : `${video.filename.replace(/\.[^.]+$/, '')}.mp4`;
+  await store.replaceFile(video, out, { filename: name, mime: name ? guessMime(name) : null });
+  const size = videoSize(out);
+  setCodec(video.id, ownerId, 'av1');
+  db.prepare("UPDATE media_meta SET width = COALESCE(?, width), height = COALESCE(?, height), updated_at = datetime('now') WHERE file_id = ?")
+    .run(size.width ?? null, size.height ?? null, video.id);
+  update(id, { status: 'done', progress: 1, file_id: video.id, error: `${fmtBytes(before)} → ${fmtBytes(after)} (${Math.round((1 - after / before) * 100)}% smaller)` });
+}
+
+// --- codec of videos added before 3.1, or uploaded by hand -------------------------
+// ffprobe reads the decrypted stream from a pipe (no plain copy on disk). One video at
+// a time, in the background; a file it can't read is marked '' so it isn't tried again.
+let probing = false, probeTimer = null;
+function probeStream(stream) {
+  const t = detect();
+  return new Promise((resolve) => {
+    const [cmd, pre] = command(t.ffprobe);
+    const child = spawn(cmd, [...pre, '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=codec_name', '-of', 'csv=p=0', 'pipe:0'],
+      { stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true });
+    let out = '';
+    const timer = setTimeout(() => child.kill(), 5 * 60 * 1000);
+    child.stdout.on('data', (d) => { out += d; });
+    // ffprobe stops reading as soon as it knows: the rest of the stream is dropped
+    child.stdin.on('error', () => {});
+    stream.on('error', () => child.kill());
+    stream.pipe(child.stdin);
+    const done = (codec) => { clearTimeout(timer); stream.unpipe(child.stdin); stream.destroy(); resolve(codec); };
+    child.on('error', () => done(null));
+    child.on('close', () => done(out.split('\n')[0].trim().slice(0, 32)));
+  });
+}
+
+async function probeMissing() {
+  if (probing || !detect().ffVersion) return;
+  probing = true;
+  try {
+    const todo = db.prepare(`SELECT f.* FROM files f JOIN folders d ON d.id = f.folder_id LEFT JOIN media_meta m ON m.file_id = f.id
+      WHERE d.system_key IN ('videos', 'xxx') AND f.trashed_at IS NULL AND m.video_codec IS NULL ORDER BY f.created_at DESC LIMIT 200`).all();
+    for (const f of todo) {
+      const stream = store.readAll(f);
+      if (!stream) { setCodec(f.id, f.owner_id, ''); continue; }
+      const codec = await probeStream(stream);
+      if (codec === null) break; // ffprobe can't run: try again later
+      if (db.prepare('SELECT 1 FROM files WHERE id = ?').get(f.id)) setCodec(f.id, f.owner_id, codec);
+    }
+  } catch (e) { console.warn(`[downloads] codec check failed: ${e.message}`); }
+  finally { probing = false; }
+}
+/** After an upload into Videos: look at it soon (uploads come in batches) */
+function probeSoon() { clearTimeout(probeTimer); probeTimer = setTimeout(probeMissing, 5000); probeTimer.unref?.(); }
+setInterval(probeMissing, 30 * 60 * 1000).unref();
+
 // Jobs that were running when the server stopped start over
 function resume() {
   db.prepare(`UPDATE downloads SET status = 'queued', progress = 0, speed = NULL WHERE status IN (${ACTIVE_SQL}) AND status != 'queued'`).run();
   try { for (const n of fs.readdirSync(config.tempDir)) if (n.startsWith('dl-')) fs.rmSync(path.join(config.tempDir, n), { recursive: true, force: true }); } catch (e) { /* ignore */ }
   pump();
+  probeSoon();
 }
 
-module.exports = { status, detect, checkUrl, checkLink, KINDS, addJob, addConversions, addTrim, addInternal, isInternal, listJobs, cancel, clearFinished, pump, resume, toAv1, PLAYLIST_MAX, CONVERT_RE };
+module.exports = { status, detect, checkUrl, checkLink, KINDS, addJob, addConversions, addTrim, addAv1, addInternal, isInternal, listJobs, cancel, clearFinished, pump, resume, toAv1, probeMissing, probeSoon, PLAYLIST_MAX, CONVERT_RE };

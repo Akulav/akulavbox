@@ -344,6 +344,13 @@ const MIGRATIONS = [
       db.exec('CREATE INDEX IF NOT EXISTS idx_downloads_status ON downloads(status)');
     },
   },
+  {
+    name: 'video codec (format badge, convert to AV1)',
+    up(db) {
+      // ffprobe's codec_name of the first video stream ("av1", "h264", …); '' when it couldn't be read
+      addColumn(db, 'media_meta', 'video_codec', 'TEXT');
+    },
+  },
 ];
 
 const LATEST = MIGRATIONS.length;

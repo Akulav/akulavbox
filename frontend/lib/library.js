@@ -48,6 +48,15 @@ export const displayTitle = (item) => (item && (item.title || (item.filename || 
 export const saveMeta = (fileId, patch) => api(`/api/library/meta/${fileId}`, { method: 'PATCH', body: patch });
 export const bulkMeta = (body) => api('/api/library/meta/bulk', { method: 'POST', body });
 
+// ffprobe codec names -> what people know them as
+const CODECS = { av1: 'AV1', h264: 'H.264', hevc: 'HEVC', vp9: 'VP9', vp8: 'VP8', mpeg4: 'MPEG-4', mpeg2video: 'MPEG-2', mpeg1video: 'MPEG-1', wmv3: 'WMV', vc1: 'VC-1', prores: 'ProRes', theora: 'Theora', mjpeg: 'MJPEG' };
+/** A video's format for its badge: the codec once the server has read it, else the file type ("WEBM") */
+export function videoFormat(it) {
+  if (it?.video_codec) return CODECS[it.video_codec] || it.video_codec.toUpperCase().slice(0, 8);
+  const m = /\.([a-z0-9]{2,4})$/i.exec(it?.filename || '');
+  return m ? m[1].toUpperCase() : '';
+}
+
 export function formatDuration(sec) {
   if (!sec || !isFinite(sec)) return '';
   sec = Math.round(sec);
