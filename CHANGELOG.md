@@ -2,6 +2,11 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 3.2.0 (2026-11-12)
+
+### Added
+- **Checklists in Markdown notes.** Lines like `- [ ] milk` and `- [x] bread` show as real checkboxes in the preview, without bullets; ticked items fade and are struck through. Click a box to tick or untick it: the note is saved right away, exactly as if you had edited that one line. Nested, numbered and quoted items work, and examples inside code blocks are left alone. Notes you can't edit (read-only shares, files too large to edit) show the boxes without letting you change them.
+
 ## 3.1.4 (2026-11-12)
 
 ### Fixed

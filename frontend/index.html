@@ -45,6 +45,7 @@
   <link rel="modulepreload" href="/app.js">
   <link rel="modulepreload" href="/lib/api.js">
   <link rel="modulepreload" href="/lib/ui.js">
+  <link rel="modulepreload" href="/lib/tasks.js">
   <link rel="modulepreload" href="/lib/upload.js">
   <link rel="modulepreload" href="/lib/library.js">
   <link rel="modulepreload" href="/lib/player.js">
@@ -419,6 +420,12 @@
     .doc p, .doc ul, .doc ol, .doc pre, .doc blockquote, .doc table { margin: 0 0 1em; }
     .doc ul { list-style: disc; padding-left: 1.4em; } .doc ol { list-style: decimal; padding-left: 1.4em; }
     .doc li { margin: .25em 0; }
+    /* Markdown checklists: a box instead of a bullet; ticked items fade and are struck through */
+    .doc ul.task-list, .doc ol.task-list { list-style: none; padding-left: .2em; }
+    .doc li.task > ul, .doc li.task > ol { padding-left: 1.75em; }
+    .doc li.task input[type="checkbox"] { width: 1.05em; height: 1.05em; margin: 0 .6em 0 0; vertical-align: -.15em; accent-color: rgb(var(--accent)); }
+    .doc li.task input[type="checkbox"]:not([disabled]) { cursor: pointer; }
+    .doc li.task.done { color: rgb(var(--muted)); text-decoration: line-through; text-decoration-color: rgb(var(--muted) / .6); }
     .doc a { color: rgb(var(--accent)); text-decoration: underline; text-underline-offset: 2px; }
     .doc code { font-family: 'Geist Mono', monospace; font-size: .88em; background: rgb(var(--elevated)); padding: .12em .35em; border-radius: 5px; }
     .doc pre { background: rgb(var(--bg)); border: 1px solid rgb(var(--line)); padding: 14px 16px; border-radius: 10px; overflow: auto; }

@@ -5,6 +5,7 @@ import { kindOf, kindLabel, iconFor, tintFor, languageFor, isTextual, extOf } fr
 import { toast, confirmDialog } from '../lib/ui.js';
 import { api } from '../lib/api.js';
 import { lib, sanitize } from '../lib/cdn.js';
+import { decorateTasks, setTasksEditable, toggleTask } from '../lib/tasks.js';
 import { thumbUrl, displayTitle, formatDuration } from '../lib/library.js';
 import EpubReader from './EpubReader.js';
 
@@ -183,7 +184,7 @@ export default {
             <!-- Markdown rendered / Word document -->
             <div v-else-if="state.html != null && (mode === 'rendered' || kind === 'docx')" class="absolute inset-0 overflow-auto">
               <div v-if="kind === 'docx'" class="py-8 px-3 sm:px-8"><div class="paper"><div class="doc" v-html="state.html"></div></div></div>
-              <div v-else class="py-10 px-5 sm:px-10"><article class="doc" v-html="state.html"></article></div>
+              <div v-else class="py-10 px-5 sm:px-10"><article class="doc" v-html="docHtml" @change="onTaskToggle"></article></div>
             </div>
 
             <!-- Tables: CSV & spreadsheets -->
@@ -350,7 +351,7 @@ export default {
       if (k === 'markdown') {
         const marked = await lib('marked');
         if (my !== token) return;
-        state.html = await sanitize(marked.parse(text, { gfm: true, breaks: false }));
+        state.html = decorateTasks(await sanitize(marked.parse(text, { gfm: true, breaks: false })));
         mode.value = 'rendered';
       } else if (k === 'csv') {
         const rows = parseDelimited(text, ext.value === 'tsv' ? '\t' : null);
@@ -572,6 +573,31 @@ export default {
         draft.value = el.value;
       }
     }
+    // ---------- Markdown checklists: a click in the preview ticks the item and saves the file ----------
+    const docHtml = computed(() => kind.value === 'markdown' ? setTasksEditable(state.html, canEdit.value && !saving.value) : state.html);
+    async function onTaskToggle(e) {
+      const box = e.target;
+      if (!(box instanceof HTMLInputElement) || box.dataset.task == null) return;
+      const done = box.checked;
+      const next = canEdit.value && !saving.value ? toggleTask(state.raw, Number(box.dataset.task), done) : null;
+      if (next == null) { box.checked = !done; return; }
+      box.closest('li')?.classList.toggle('done', done);
+      saving.value = true;
+      try {
+        const f = file.value;
+        const r = await api(`/api/files/${f.id}/content`, { method: 'PUT', body: { content: next, base_size: f.size_bytes } });
+        f.size_bytes = r.size_bytes;
+        state.raw = state.text = next;
+        const marked = await lib('marked');
+        state.html = decorateTasks(await sanitize(marked.parse(next, { gfm: true, breaks: false })));
+        emit('changed', f);
+      } catch (err) {
+        box.checked = !done;
+        box.closest('li')?.classList.toggle('done', !done);
+        toast.error(err.message);
+      } finally { saving.value = false; }
+    }
+
     const onBeforeUnload = (e) => { if (dirty.value) { e.preventDefault(); e.returnValue = ''; } };
     async function requestClose() { if (await confirmDiscard()) { editing.value = false; emit('close'); } }
 
@@ -684,6 +710,7 @@ export default {
 
     return {
       editing, draft, saving, editorEl, canEdit, dirty, draftBytes, draftLines, jsonError, startEdit, cancelEdit, formatJson, save, onEditorKey, requestClose,
+      docHtml, onTaskToggle,
       isShared, epubRef, thumbUrl, displayTitle, rootEl, slideshow, imageCount, toggleSlideshow, toggleFullscreen,
       index, file, kind, ext, tint, url, state, mode, modes, wrap, showInfo, showsCode, isImageView, lineCount, gutter, tableWidth,
       zoom, drag, zoomBy, resetZoom, toggleZoom, onWheel, onPointerDown, onPointerMove, onPointerUp, onTouchStart, onTouchEnd,
