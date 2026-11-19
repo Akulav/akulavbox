@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Page not found · AkulavBox</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <script>
+    (function () {
+      var t = null; try { t = localStorage.getItem('akulavTheme'); } catch (e) {}
+      if (!t || t === 'system') t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      document.documentElement.dataset.theme = t;
+    })();
+  </script>
+  <link rel="stylesheet" href="/hub/hub.css">
+</head>
+<body>
+  <main class="wrap" style="min-height:100vh;display:grid;place-items:center;text-align:center">
+    <div class="rise">
+      <p class="display" style="font-size:72px;line-height:1" aria-hidden="true"><span class="brand-text">404</span></p>
+      <h1 style="font-size:24px;margin-top:8px">That page doesn’t exist</h1>
+      <p class="muted" style="margin:8px 0 22px">It may have moved: AkulavBox now lives at <a href="/box/">/box/</a>.</p>
+      <a class="btn btn-primary" href="/">All apps</a>
+    </div>
+  </main>
+</body>
+</html>

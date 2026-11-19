@@ -108,6 +108,9 @@ async function main() {
       ok(login.data.weak_password === true, 'weak default password is flagged');
       token = login.data.token;
 
+      // the launcher, the Admin console and the other apps (scripts/test/apps-check.js)
+      const appsState = await require('./test/apps-check')({ api, ok, base: () => base, tmp, login, adminToken: token });
+
       console.log('\nFiles');
       const dir = await api('/api/directory');
       ok(dir.status === 200 && Array.isArray(dir.data.folders), 'list the top folder');
@@ -117,7 +120,7 @@ async function main() {
       const up = await upload(content, 'random.bin', folder.data.id);
       ok(up.status === 200 && up.data.fileId, 'chunked upload', JSON.stringify(up.data));
       const fileId = up.data.fileId;
-      const enc = fs.readFileSync(path.join(tmp, 'users', 'admin-uuid-0000', `${fileId}.enc`));
+      const enc = fs.readFileSync(path.join(tmp, 'box', 'users', 'admin-uuid-0000', `${fileId}.enc`));
       ok(enc.length === content.length && !enc.equals(content), 'stored encrypted at rest');
       const view = Buffer.from(await (await api(`/api/files/${fileId}/view`, { raw: true })).arrayBuffer());
       ok(view.equals(content), 'download decrypts to the original bytes');
@@ -162,7 +165,7 @@ async function main() {
       ok((await api(`/api/directory/${folder.data.id}`)).data.files.length === 1, 'its files come back too');
       await api('/api/items/trash', { method: 'POST', body: { files: [fileId] } });
       ok((await api('/api/trash/delete', { method: 'POST', body: { files: [fileId] } })).data.deleted === 1, 'delete for good');
-      ok(!fs.existsSync(path.join(tmp, 'users', 'admin-uuid-0000', `${fileId}.enc`)), 'file removed from disk');
+      ok(!fs.existsSync(path.join(tmp, 'box', 'users', 'admin-uuid-0000', `${fileId}.enc`)), 'file removed from disk');
       ok((await api('/api/user/profile')).data.used_bytes === before - content.length, 'storage used goes down');
 
       console.log('\nPhotos, music, library');
@@ -335,7 +338,7 @@ async function main() {
       const cookieText = '# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t1893456000\tSID\tsecret-value\n';
       const saved = await api('/api/downloads/cookies', { method: 'PUT', body: { text: cookieText } });
       ok(saved.status === 200 && saved.data.sites.includes('youtube.com'), 'save cookies (only the sites are shown back)');
-      const onDisk = fs.readdirSync(path.join(tmp, 'private', 'cookies')).map(n => fs.readFileSync(path.join(tmp, 'private', 'cookies', n), 'latin1')).join('');
+      const onDisk = fs.readdirSync(path.join(tmp, 'box', 'private', 'cookies')).map(n => fs.readFileSync(path.join(tmp, 'box', 'private', 'cookies', n), 'latin1')).join('');
       ok(onDisk.length > 0 && !onDisk.includes('secret-value'), 'cookies are encrypted at rest');
       await api('/api/downloads', { method: 'POST', body: { url: 'https://www.youtube.com/watch?v=agegate', kind: 'video' } });
       jobs = await waitJobs('video');
@@ -509,15 +512,15 @@ async function main() {
       ok(notesSince('# C\n\n## 2.3.0 (x)\n- new\n\n## 2.2.0 (y)\n- old\n', '2.2.0') === '## 2.3.0 (x)\n- new', 'release notes since the installed version');
 
       console.log('\nStorage check');
-      const adminDir = path.join(tmp, 'users', 'admin-uuid-0000');
+      const adminDir = path.join(tmp, 'box', 'users', 'admin-uuid-0000');
       const old = new Date(Date.now() - 2 * 3600 * 1000);
       const orphanEnc = path.join(adminDir, `${crypto.randomUUID()}.enc`);
       const orphanPlain = path.join(adminDir, `${crypto.randomUUID()}.plain`);
       fs.writeFileSync(orphanEnc, crypto.randomBytes(5000));
       fs.writeFileSync(orphanPlain, Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(100)]));
-      fs.mkdirSync(path.join(tmp, 'users', 'gone-user'), { recursive: true });
-      fs.writeFileSync(path.join(tmp, 'users', 'gone-user', 'x.enc'), Buffer.alloc(3000));
-      for (const p of [orphanEnc, orphanPlain, path.join(tmp, 'users', 'gone-user', 'x.enc')]) fs.utimesSync(p, old, old);
+      fs.mkdirSync(path.join(tmp, 'box', 'users', 'gone-user'), { recursive: true });
+      fs.writeFileSync(path.join(tmp, 'box', 'users', 'gone-user', 'x.enc'), Buffer.alloc(3000));
+      for (const p of [orphanEnc, orphanPlain, path.join(tmp, 'box', 'users', 'gone-user', 'x.enc')]) fs.utimesSync(p, old, old);
       const lost = await upload(Buffer.from('soon gone'), 'lost.txt', null);
       const lostRow = fs.readdirSync(adminDir).find(n => n.startsWith(lost.data.fileId));
       fs.unlinkSync(path.join(adminDir, lostRow));
@@ -535,7 +538,7 @@ async function main() {
       const recFolder = (await api('/api/directory')).data.folders.find(d => d.name === 'Recovered files');
       const rec = recFolder && (await api(`/api/directory/${recFolder.id}`)).data.files;
       ok(rec && rec.length === 1 && /\.pdf$/.test(rec[0].filename), 'a readable lost file is recovered with its type');
-      ok(!fs.existsSync(path.join(tmp, 'users', 'gone-user')), 'leftovers of deleted accounts are removed');
+      ok(!fs.existsSync(path.join(tmp, 'box', 'users', 'gone-user')), 'leftovers of deleted accounts are removed');
 
       console.log('\nScheduled backups');
       const putSchedule = (body) => api('/api/admin/backup/schedule', { method: 'PUT', body });
@@ -543,7 +546,7 @@ async function main() {
       ok(sched0 && !sched0.enabled && !sched0.has_passphrase && sched0.default_dir, 'scheduled backups start off');
       ok((await putSchedule({ enabled: true })).status === 400, 'a schedule needs a passphrase');
       ok((await putSchedule({ dir: 'relative/folder' })).status === 400, 'the folder must be a full path');
-      ok((await putSchedule({ dir: path.join(tmp, 'users', 'x') })).status === 400, 'the folder can’t be inside the data folders');
+      ok((await putSchedule({ dir: path.join(tmp, 'box', 'users', 'x') })).status === 400, 'the folder can’t be inside the data folders');
       const schedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'akulavbox-sched-'));
       const savedSchedule = await putSchedule({ enabled: true, every: 'weekly', weekday: 3, hour: 4, keep: 2, dir: schedDir, passphrase: 'scheduled pass 1' });
       const next = savedSchedule.data.next_at && new Date(savedSchedule.data.next_at);
@@ -640,12 +643,40 @@ async function main() {
         const back = await api(`/api/files/${kept.data.fileId}/view`, { raw: true });
         ok(back.status === 200 && Buffer.from(await back.arrayBuffer()).equals(marker), 'files open on a server with a different key');
         ok((await api('/api/music/playlists')).data.some(p => p.title === 'Road trip'), 'playlists and library details came along');
+        const login2 = await fetch(`${base}/api/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'admin', password: 'admin' }) });
+        const jar2 = (login2.headers.getSetCookie?.() || []).map(c => c.split(';')[0]).find(c => c.startsWith('akb_session='));
+        const docs2 = await (await fetch(`${base}/docs/api/s/personal/documents`, { headers: { Cookie: jar2 } })).json().catch(() => null);
+        ok(Array.isArray(docs2) && docs2.some(d => d.id === appsState.docId && d.files.length === 1), 'e-Management documents came along', JSON.stringify(docs2)?.slice(0, 200));
+        const tx2 = await (await fetch(`${base}/budget/api/transactions`, { headers: { Cookie: jar2 } })).json().catch(() => null);
+        ok(JSON.stringify(tx2 || {}).includes('Check'), 'Florin transactions came along');
+        if (appsState.workId) ok((await fetch(`${base}/manga/w/${appsState.workId}`)).status === 200 && fs.existsSync(path.join(tmp2, 'manga', 'works', appsState.workId, 'cover.webp')), 'Koma Shelf webtoons came along');
         ok(fs.readdirSync(path.join(tmp2, 'backups')).some(n => n.startsWith('pre-import-')), 'the replaced data is kept in backups/');
       } finally {
         s2.kill();
         base = base1;
         await new Promise(r => setTimeout(r, 300));
         try { fs.rmSync(tmp2, { recursive: true, force: true }); } catch (e) { /* Windows may still hold files */ }
+      }
+
+      // a data folder from before 4.0: users/, thumbs/ and private/ at the top move into box/
+      console.log('\nUpgrading a data folder from before 4.0');
+      const tmp3 = fs.mkdtempSync(path.join(os.tmpdir(), 'akulavbox-check3-'));
+      try {
+        fs.mkdirSync(path.join(tmp3, 'users', 'someone'), { recursive: true });
+        fs.writeFileSync(path.join(tmp3, 'users', 'someone', 'f.enc'), 'x');
+        fs.mkdirSync(path.join(tmp3, 'thumbs'));
+        fs.mkdirSync(path.join(tmp3, 'private', 'cookies'), { recursive: true });
+        const s3 = spawn(process.execPath, ['src/server.js'], { cwd: root, env: { ...env, STORAGE_DIR: tmp3, PORT: String(port + 3) }, stdio: ['ignore', 'pipe', 'pipe'] });
+        let out3 = '';
+        s3.stdout.on('data', d => { out3 += d; });
+        let up3 = false;
+        for (let i = 0; i < 60 && !up3; i++) { try { up3 = (await fetch(`http://127.0.0.1:${port + 3}/api/health`)).ok; } catch (e) { /* not yet */ } if (!up3) await new Promise(r => setTimeout(r, 250)); }
+        s3.kill();
+        await new Promise(r => setTimeout(r, 300));
+        ok(up3 && fs.existsSync(path.join(tmp3, 'box', 'users', 'someone', 'f.enc')) && !fs.existsSync(path.join(tmp3, 'users')), 'users/ moves to box/users/', out3.split('\n').filter(l => /Moved|Couldn/.test(l)).join(' | '));
+        ok(fs.existsSync(path.join(tmp3, 'box', 'thumbs')) && fs.existsSync(path.join(tmp3, 'box', 'private', 'cookies')) && !fs.existsSync(path.join(tmp3, 'private')), 'thumbs/ and private/ move along');
+      } finally {
+        try { fs.rmSync(tmp3, { recursive: true, force: true }); } catch (e) { /* Windows may still hold files */ }
       }
     }
   } catch (e) {

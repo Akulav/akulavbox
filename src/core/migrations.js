@@ -351,6 +351,21 @@ const MIGRATIONS = [
       addColumn(db, 'media_meta', 'video_codec', 'TEXT');
     },
   },
+  {
+    name: 'one account for every app: per-user app access and quotas',
+    up(db) {
+      // No row means the app's defaults (Admin console → Defaults). quota_bytes NULL: the default quota.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS user_apps (
+          user_id TEXT NOT NULL,
+          app TEXT NOT NULL,
+          enabled INTEGER NOT NULL DEFAULT 1,
+          quota_bytes INTEGER,
+          PRIMARY KEY (user_id, app)
+        );
+      `);
+    },
+  },
 ];
 
 const LATEST = MIGRATIONS.length;

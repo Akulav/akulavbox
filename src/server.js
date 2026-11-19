@@ -19,9 +19,14 @@ const fastify = require('fastify')({
     serializers: { req: (req) => ({ method: req.method, url: redact(req.url), remoteAddress: req.ip }) },
   },
   trustProxy: process.env.TRUST_PROXY === '1',
+  // big uploads (files, webtoons, backups) on slow connections need time
+  requestTimeout: 0,
 });
+fastify.server.requestTimeout = 0;
+fastify.server.headersTimeout = 60_000;
 
 const db = require('./core/db');
+const apps = require('./core/apps');
 const instance = require('./core/instance');
 const activity = require('./core/activity');
 const backup = require('./core/backup');
@@ -73,6 +78,8 @@ fastify.addHook('onSend', async (request, reply, payload) => {
 fastify.register(require('@fastify/static'), {
   root: path.join(__dirname, '../frontend'),
   prefix: '/',
+  // "/" is the app launcher (modules/hub.js); AkulavBox's page is at /box/
+  index: false,
   cacheControl: true,
   maxAge: 0,
   setHeaders: (res, filePath) => {
@@ -88,14 +95,24 @@ fastify.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'st
 
 // API routes
 fastify.register(require('./modules/auth'));
+fastify.register(require('./modules/hub'));
 fastify.register(require('./modules/admin'));
+fastify.register(require('./modules/backups'));
+fastify.register(require('./modules/updates'));
+fastify.register(require('./modules/console'));
 fastify.register(require('./modules/files'));
+fastify.register(require('./modules/media'));
+fastify.register(require('./modules/zip'));
+fastify.register(require('./modules/user'));
 fastify.register(require('./modules/trash'));
 fastify.register(require('./modules/albums'));
 fastify.register(require('./modules/music'));
 fastify.register(require('./modules/library'));
 fastify.register(require('./modules/collections'));
 fastify.register(require('./modules/downloads'));
+
+// The other apps: e-Management (/docs), Koma Shelf (/manga) and Florin (/budget)
+require('../apps').load(fastify);
 
 // Errors nobody caught: client mistakes (bad JSON, too large, wrong type) keep their
 // message; anything else is logged and answered with a plain sentence, so internal
@@ -108,10 +125,11 @@ fastify.setErrorHandler((err, request, reply) => {
   reply.code(code).send({ error: message });
 });
 
-// Unknown /api routes answer in JSON; anything else falls back to the app
+// Unknown /api routes answer in JSON; any other page goes to the launcher
 fastify.setNotFoundHandler((request, reply) => {
   if (request.url.startsWith('/api/')) return reply.code(404).send({ error: 'Not found' });
-  return reply.sendFile('index.html');
+  if (request.method === 'GET' || request.method === 'HEAD') return reply.code(404).sendFile('404.html', path.join(__dirname, '../hub'));
+  return reply.code(404).send({ error: 'Not found' });
 });
 
 const start = async () => {
@@ -123,6 +141,8 @@ const start = async () => {
     const schema = db.schema;
     console.log(`${config.name} v${config.version} by ${config.author} is running on http://localhost:${config.port}`);
     console.log(`  storage: ${config.storageDir}`);
+    for (const note of config.layoutNotes) console.log(`  ${note}`);
+    for (const a of apps.APPS) if (!a.core) console.log(`  ${a.name} (${a.path}): ${apps.status(a.id) === 'running' ? 'running' : `not running: ${apps.failures.get(a.id) || 'off'}`}`);
     if (schema && schema.backup) console.log(`  database upgraded from schema ${schema.from} to ${schema.to} (backup: ${schema.backup})`);
     // the swap ran before anything could log: record its outcome now
     if (db.restored) activity.log(null, 'backup.restored', { detail: `Backup from ${db.restored.created_at}: ${db.restored.users} accounts, ${db.restored.files} files. The replaced data is in ${db.restored.previous}` });
@@ -144,6 +164,7 @@ async function shutdown(signal) {
   const force = setTimeout(() => process.exit(0), 4000);
   force.unref();
   try { await fastify.close(); } catch (e) { /* ignore */ }
+  try { await require('../apps').close(); } catch (e) { /* ignore */ }
   try { db.exec('PRAGMA wal_checkpoint(TRUNCATE)'); db.close(); } catch (e) { /* ignore */ }
   process.exit(0);
 }

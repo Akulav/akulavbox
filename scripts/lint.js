@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Fast static checks (CI runs them before the end-to-end test; run them yourself with `npm run lint`):
-//   - every backend and frontend file parses
+//   - every backend and frontend file parses (src/, scripts/, apps/, frontend/, hub/)
+//   - Florin's built page (apps/budget/dist) exists and links only files it has
 //   - the frontend's index.html keeps the import map above the module preloads,
 //     and every frontend module has a <link rel="modulepreload">
 //   - package.json, package-lock.json and CHANGELOG.md agree on the version
@@ -15,10 +16,13 @@ const root = path.join(__dirname, '..');
 const rel = (p) => path.relative(root, p).split(path.sep).join('/');
 const problems = [];
 
-function walk(dir, out = []) {
+// built output, browser code and the React sources are checked separately (or not at all)
+const NOT_BACKEND = /[\\/]apps[\\/](budget[\\/](client|dist)|documents[\\/]public|manga[\\/]public)([\\/]|$)/;
+function walk(dir, out = [], skip = null) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
-    if (e.isDirectory()) walk(p, out);
+    if (skip && skip.test(p)) continue;
+    if (e.isDirectory()) walk(p, out, skip);
     else if (e.name.endsWith('.js')) out.push(p);
   }
   return out;
@@ -33,11 +37,23 @@ const check = (file, asModule) => {
   try { execFileSync(process.execPath, ['--check', target], { stdio: 'pipe' }); }
   catch (e) { problems.push(`${rel(file)} doesn't parse:\n${String(e.stderr || e.message).split('\n').slice(0, 6).join('\n')}`); }
 };
-const backend = [...walk(path.join(root, 'src')), ...walk(path.join(root, 'scripts'))];
+const backend = [...walk(path.join(root, 'src')), ...walk(path.join(root, 'scripts')), ...walk(path.join(root, 'test')), ...walk(path.join(root, 'apps'), [], NOT_BACKEND)];
 const frontend = walk(path.join(root, 'frontend'));
+// browser modules of the launcher, the Admin console and e-Management; Koma Shelf's scripts are classic ones
+const pages = [...walk(path.join(root, 'hub')), ...walk(path.join(root, 'apps', 'documents', 'public'))];
+const classic = walk(path.join(root, 'apps', 'manga', 'public'));
 for (const f of backend) check(f, false);
-for (const f of frontend) check(f, true);
+for (const f of [...frontend, ...pages]) check(f, true);
+for (const f of classic) check(f, false);
 fs.rmSync(tmp, { recursive: true, force: true });
+
+// 1c. Florin's page is built ahead (npm run build:budget) and committed; it must be there and complete
+const dist = path.join(root, 'apps', 'budget', 'dist');
+const distHtml = fs.existsSync(path.join(dist, 'index.html')) ? fs.readFileSync(path.join(dist, 'index.html'), 'utf-8') : '';
+if (!distHtml) problems.push('apps/budget/dist/index.html is missing. Run: npm run build:budget');
+for (const m of distHtml.matchAll(/(?:src|href)="\/budget\/([^"]+)"/g)) {
+  if (!fs.existsSync(path.join(dist, m[1]))) problems.push(`apps/budget/dist/index.html links /budget/${m[1]}, which isn't in dist/. Run: npm run build:budget`);
+}
 
 // 1b. SQL: no numbered placeholders (?1). Node 22's node:sqlite can't bind them
 //     ("column index out of range"), while newer Node versions can, so tests on a new Node miss it.
@@ -69,7 +85,7 @@ const changelog = fs.readFileSync(path.join(root, 'CHANGELOG.md'), 'utf-8');
 const top = /^## (\d+\.\d+\.\d+)/m.exec(changelog)?.[1];
 if (top !== pkg.version) problems.push(`The newest CHANGELOG.md entry is ${top || 'missing'}, but package.json is ${pkg.version}.`);
 
-const files = backend.length + frontend.length;
+const files = backend.length + frontend.length + pages.length + classic.length;
 if (problems.length) {
   console.error(`✗ ${problems.length} problem${problems.length === 1 ? '' : 's'} (${files} files checked):\n`);
   for (const p of problems) console.error(`- ${p}\n`);

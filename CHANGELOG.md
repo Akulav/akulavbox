@@ -2,6 +2,30 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 4.0.0 (2026-11-19)
+
+AkulavBox becomes the home of four apps that share one account: AkulavBox, **e-Management** (documents), **Koma Shelf** (webtoons) and **Florin** (budgets).
+
+### Added
+- **One sign-in for every app.** A new sign-in page at `/login` and a launcher at `/` that shows the apps your account may use, with what each one stores. Signing in, out, changing a password or "sign out everywhere" applies to all of them.
+- **e-Management** at `/docs/`: personal and work documents with categories, tags, attachments, an activity log and per-space backups (in Romanian). Every account has its own two spaces.
+- **Koma Shelf** at `/manga/`: a private library, unlisted links and a public shelf for webtoons made with Koma, with a reader for long strips, moderation for admins and API tokens so Koma can publish directly. Needs `sharp`.
+- **Florin** at `/budget/`: expenses and income in 30 currencies, budgets per category, a dashboard, charts and CSV export.
+- **The Admin console** at `/admin` (admins only): create and delete accounts, reset passwords, change roles, sign people out, turn each app on or off per account, set the storage quota of AkulavBox, e-Management and Koma Shelf per account, see what every account stores in every app, and choose what new accounts get.
+- **Full backups include every app.** Restoring a backup made with 4.0 replaces the apps' data too; older backups leave it as it is.
+- Settings: `PUBLIC_URL`, `DOCUMENTS_QUOTA_MB`, `MANGA_QUOTA_MB`, `MANGA_MAX_UPLOAD_MB`, `MANGA_SITE_NAME`.
+- `npm test`: unit tests for the sign-in cookie, app access and quotas, and the apps' helpers (CI runs them too).
+
+### Changed
+- **AkulavBox moved to `/box/`.** `/` is the launcher; old links (`/#/files/…`) are forwarded, and public share links (`/shared/…`) don't change. The installed app opens the launcher.
+- **AkulavBox's folders moved into `box/`** of the data folder (`users/`, `thumbs/`, `private/`), on the first start, so every app has its own folder: `box/`, `documents/`, `manga/`, `budget/`. A folder that can't be moved is used where it is, and the log says so.
+- AkulavBox's Admin page links to the Admin console for accounts; it keeps the disk, updates, storage check, backups and the activity log.
+- The server is one Fastify app in CommonJS; each other app is a plugin under `apps/`. Bigger modules were split up (`files.js` into files, media, zip and user; `admin.js` into admin, backups and updates; `backup.js` into the format, export and restore).
+
+### Upgrading
+- Everyone stays signed in, and every existing account can use every app with the default quotas. Turn apps off or change quotas in the Admin console.
+- Run `npm install` (or use Admin → Updates, which does it): there are new dependencies (`vue`, `yauzl`, `@fontsource/dela-gothic-one`).
+
 ## 3.2.0 (2026-11-12)
 
 ### Added

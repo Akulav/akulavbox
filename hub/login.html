@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Sign in · AkulavBox</title>
+  <meta name="description" content="Sign in once for AkulavBox, e-Management, Koma Shelf and Florin. Made by Akulav.">
+  <meta name="referrer" content="same-origin">
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="alternate icon" href="/favicon.ico">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <meta name="theme-color" content="#0D1518">
+  <script>
+    (function () {
+      var t = null; try { t = localStorage.getItem('akulavTheme'); } catch (e) {}
+      if (!t || t === 'system') t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      document.documentElement.dataset.theme = t;
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,650;12..96,750&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/hub/hub.css">
+  <link rel="modulepreload" href="/hub/common.js">
+</head>
+<body class="login-page">
+  <div class="wrap" style="display:flex;justify-content:flex-end;padding-top:12px">
+    <button class="icon-btn" id="theme" title="Switch theme" aria-label="Switch theme"></button>
+  </div>
+  <main>
+    <div class="panel login-card rise">
+      <section class="login-hero">
+        <span class="brand" id="lockup"></span>
+        <div>
+          <span class="chip chip-accent" style="height:26px;padding:0 11px;margin-bottom:18px" id="lock-chip"></span>
+          <h1>One sign-in,<br><span class="brand-text">every app.</span></h1>
+          <p class="muted" style="margin-top:14px;font-size:14.5px">Your files, documents, webtoons and budget, on a server you own.</p>
+        </div>
+        <ul class="login-apps stagger" id="apps"></ul>
+      </section>
+
+      <section class="login-form">
+        <div style="display:flex;flex-direction:column;align-items:center;text-align:center;margin-bottom:26px">
+          <span id="mark" style="margin-bottom:14px"></span>
+          <h2 style="font-size:26px">Welcome back</h2>
+          <p class="muted" id="sub" style="margin-top:4px;font-size:13.5px">Sign in to continue.</p>
+        </div>
+        <div id="checking" class="muted" style="text-align:center;padding:24px 0" hidden>Checking your session…</div>
+        <form id="form" novalidate hidden>
+          <div>
+            <label class="label" for="u">Username</label>
+            <div class="with-icon" id="u-wrap"><input id="u" class="input" autocomplete="username" autocapitalize="off" spellcheck="false" required maxlength="64"></div>
+          </div>
+          <div>
+            <label class="label" for="p">Password</label>
+            <div class="with-icon" id="p-wrap">
+              <input id="p" class="input" type="password" autocomplete="current-password" required maxlength="1024" style="padding-right:44px">
+              <button type="button" class="icon-btn" id="show" aria-label="Show password" title="Show password"></button>
+            </div>
+            <p id="caps" class="faint" style="font-size:12px;margin-top:6px;color:rgb(var(--accent))" hidden>Caps Lock is on</p>
+          </div>
+          <p id="error" class="alert" role="alert" hidden></p>
+          <button class="btn btn-primary btn-block" id="go" style="height:44px;font-size:14.5px;margin-top:8px">Sign in</button>
+        </form>
+        <p class="faint" style="font-size:12px;text-align:center;margin-top:24px">Forgot your password? Ask the admin of this server to reset it.</p>
+      </section>
+    </div>
+    <p class="faint" id="made" style="font-size:12px;margin-top:22px"></p>
+  </main>
+  <script type="module" src="/hub/login.js"></script>
+</body>
+</html>

@@ -3,6 +3,7 @@ const bcrypt = require('../core/hash');
 const config = require('../core/config');
 const { signToken, PASSWORD_MIN } = require('../core/auth');
 const activity = require('../core/activity');
+const session = require('../core/session');
 
 // A real hash to compare against when the username doesn't exist, so a wrong
 // username takes as long as a wrong password (no account discovery by timing).
@@ -73,6 +74,9 @@ module.exports = async function (fastify) {
 
     // older accounts may still have a password shorter than today's minimum: nudge them to change it
     const weak = WEAK.has(password.toLowerCase()) || password.toLowerCase() === user.username.toLowerCase() || password.length < PASSWORD_MIN;
-    return { token: signToken(user), role: user.role, id: user.id, username: user.username, weak_password: weak };
+    const token = signToken(user);
+    // the same sign-in for the other apps (documents, manga, budget), which read a cookie
+    session.addCookie(reply, session.cookieFor(request, token));
+    return { token, role: user.role, id: user.id, username: user.username, weak_password: weak };
   });
 };

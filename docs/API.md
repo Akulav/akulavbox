@@ -1,12 +1,17 @@
 # API reference
 
-All endpoints are JSON unless noted. Authenticate with `Authorization: Bearer <token>`, or `?token=<token>` for media URLs. Errors look like `{ "error": "message" }` with a 4xx or 5xx status. `401` means sign in again, and `403` means admins only. Responses may include `X-Refresh-Token`. Store it to keep the session alive.
+All endpoints are JSON unless noted. AkulavBox's API (`/api/…`) authenticates with `Authorization: Bearer <token>`, or `?token=<token>` for media URLs; it never reads the sign-in cookie. Errors look like `{ "error": "message" }` with a 4xx or 5xx status. `401` means sign in again, and `403` means admins only. Responses may include `X-Refresh-Token`. Store it to keep the session alive.
+
+The other apps (`/docs`, `/manga`, `/budget`) use the same sign-in through the HttpOnly cookie `akb_session` (the same JWT), set by `/api/login` and `/api/session`. Their routes are listed at the end.
 
 ## Public
 | Method | Path | |
 | --- | --- | --- |
 | GET | `/api/health` | `{ ok, name, version, author }` |
-| POST | `/api/login` | `{ username, password }` → `{ token, role, id, username, weak_password }`. Rate limited (429) |
+| POST | `/api/login` | `{ username, password }` → `{ token, role, id, username, weak_password }`, and sets the `akb_session` cookie. Rate limited (429) |
+| POST | `/api/logout` | Clears the `akb_session` cookie (the page forgets its stored token) |
+| POST | `/api/session/resume` | Cookie only, same origin: → `{ token, id, username, role }` for a page that lost its stored token. Other origins get 403 |
+| GET | `/`, `/login`, `/admin`, `/box/` | The launcher, the sign-in page (`?next=/path` to come back to, `?out=1` after signing out), the Admin console, AkulavBox's page |
 | GET | `/shared/:hash` | A publicly shared file (supports Range) |
 
 ## Files and folders
@@ -104,3 +109,50 @@ All endpoints are JSON unless noted. Authenticate with `Authorization: Bearer <t
 | POST | `/api/admin/updates/apply` | Install the newest version in the background; it runs after a restart |
 | POST | `/api/admin/updates/rollback` | Put back the code from before the last update |
 | POST | `/api/admin/restart` | Stops the server cleanly so a service manager restarts it (applies a staged restore) |
+
+## e-Management (`/docs`)
+
+Cookie sign-in. Changes (anything but GET) must come from the same origin. `:store` is `personal` or `work`; a record of one space is not found in the other.
+
+| Method | Path | |
+| --- | --- | --- |
+| GET | `/docs/` | The page (signed out: redirect to `/login?next=/docs/`) |
+| GET | `/docs/api/me` | `{ id, username, role, quota_bytes, used_bytes, stores: [{ key, label }] }` |
+| GET / POST | `/docs/api/s/:store/categories` | Categories with their tags / `{ name, color, sort }` |
+| PUT / DELETE | `/docs/api/s/:store/categories/:id` | |
+| POST · PUT / DELETE | `/docs/api/s/:store/tags` · `/tags/:id` | `{ category_id, name }` · `{ name }` |
+| GET | `/docs/api/s/:store/documents` | Every document with `tagIds` and `files` |
+| POST · PUT | `/docs/api/s/:store/documents` · `/documents/:id` | multipart: `data` (JSON `{ title, doc_date, number, description, tagIds, removeFileIds }`) and up to 10 `files` of 50 MB. 413 over the account's quota |
+| DELETE | `/docs/api/s/:store/documents/:id` | Deletes the document and its files |
+| GET | `/docs/api/s/:store/files/:id` | A file (PDF/PNG/JPEG inline, the rest as a download; `?download=1`) |
+| GET · POST | `/docs/api/s/:store/export` · `/import` | A `.anscbackup` of the space · the archive as the request body (`application/octet-stream`), replacing the space |
+| GET · POST | `/docs/api/audit` · `/docs/api/audit/prune` | The account's activity log (90 days) · `{ until: 'YYYY-MM-DD' }` |
+
+## Koma Shelf (`/manga`)
+
+Server-rendered pages under `/manga/` (`/`, `/w/:id`, `/w/:id/:chapter`, `/u/:username`, `/me`, `/upload`, `/account`, `/admin`). Cookie sign-in; form posts need the `_csrf` field from the page (or `X-CSRF-Token`) and the same origin. `/manga/login` sends you to `/login`.
+
+For Koma and scripts, with `Authorization: Bearer ks_…` (create a token under Account → Connect Koma):
+
+| Method | Path | |
+| --- | --- | --- |
+| GET | `/manga/api/v1/me` | Who the token belongs to |
+| POST | `/manga/api/v1/works` | multipart: `files` (zip/cbz or images), optional `title`, `description`, `visibility`, `cover`. 413 over the account's quota |
+| GET | `/manga/api/v1/works/:id` | `{ status: processing \| ready \| failed, progress, url, … }` |
+
+## Florin (`/budget`)
+
+Cookie sign-in. Changes need the header `X-Requested-With: florin`.
+
+| Method | Path | |
+| --- | --- | --- |
+| GET | `/budget/api/config` · `/budget/api/currencies` | App version and default currency · exchange rates |
+| GET / PATCH | `/budget/api/auth/me` | The account: `{ user: { id, name, username, role, baseCurrency } }` / `{ name?, baseCurrency? }` |
+| GET / POST | `/budget/api/categories` | / `{ name, icon, color, kind, budget }` |
+| PATCH / DELETE | `/budget/api/categories/:id` | |
+| GET / POST | `/budget/api/transactions` | Filters `?from=&to=&kind=&category=&q=` / `{ kind, amount, currency, date, categoryId, payee, note }` |
+| PATCH / DELETE | `/budget/api/transactions/:id` | |
+| GET | `/budget/api/transactions/export.csv` · `/payees` | CSV of the (filtered) transactions · known payees |
+| GET | `/budget/api/stats/overview` · `/trend` · `/analytics` | Dashboard and chart data |
+| GET · PATCH | `/budget/api/admin/stats` · `/budget/api/admin/settings` | Admins: totals · `{ defaultCurrency }` |
+| PUT · POST | `/budget/api/admin/rates/:code` · `/rates/refresh` | Admins: `{ rate }` · fetch the latest rates |

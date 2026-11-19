@@ -4,21 +4,21 @@ const path = require('path');
 const crypto = require('crypto');
 const { pipeline } = require('stream/promises');
 const { Transform } = require('stream');
-const bcrypt = require('../core/hash');
-const { ZipArchive } = require('archiver');
 const config = require('../core/config');
-const { verifyUser, signToken, fromForm, setPassword, revokeSessions, PASSWORD_MIN } = require('../core/auth');
+const { verifyUser } = require('../core/auth');
 const activity = require('../core/activity');
-const { guessMime, fileCsp } = require('../core/mime');
+const { guessMime } = require('../core/mime');
 const lib = require('../core/library');
 const thumbs = require('../core/thumbs');
 const store = require('../core/storage');
 const trash = require('../core/trash');
 
 const { MASTER_KEY, userDirOf, diskPathOf } = store;
+const { cleanName } = require('../core/serve');
 const UPLOAD_ID_RE = /^[A-Za-z0-9-]{8,64}$/;
-const NAME_MAX = 255;
-const cleanName = (s) => String(s ?? '').trim().replace(/[\\/]/g, '_').replace(/[\u0000-\u001f]/g, '').slice(0, NAME_MAX);
+
+// Folders, uploads, moving, renaming, trashing and sharing files, and editing text files in place.
+// Opening files and thumbnails are in media.js, zips and public links in zip.js, the account in user.js.
 
 /** Counts bytes flowing through (to enforce quota while a chunk streams in) */
 class Meter extends Transform {
@@ -439,112 +439,6 @@ module.exports = async function (fastify) {
   });
 
   // --- VIEWER, DOWNLOADS & PUBLIC LINKS ---
-  const serveStream = (request, reply, file) => {
-    const filePath = diskPathOf(file);
-    const mime = guessMime(file.filename, file.mime_type);
-    const stat = fs.statSync(filePath);
-    const totalSize = stat.size;
-    const download = request.query.download === '1' || request.query.download === 'true';
-
-    let start = 0;
-    let end = totalSize - 1;
-    const range = request.headers.range;
-
-    if (range && totalSize > 0) {
-      const m = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
-      if (!m || (m[1] === '' && m[2] === '')) {
-        reply.header('Content-Range', `bytes */${totalSize}`);
-        return reply.code(416).send();
-      }
-      if (m[1] === '') {
-        // Suffix range: last N bytes
-        start = Math.max(0, totalSize - parseInt(m[2], 10));
-      } else {
-        start = parseInt(m[1], 10);
-        end = m[2] ? Math.min(parseInt(m[2], 10), totalSize - 1) : totalSize - 1;
-      }
-      if (start >= totalSize || start > end) {
-        reply.header('Content-Range', `bytes */${totalSize}`);
-        return reply.code(416).send();
-      }
-      reply.code(206);
-      reply.header('Content-Range', `bytes ${start}-${end}/${totalSize}`);
-    }
-
-    reply.header('Accept-Ranges', 'bytes');
-    reply.header('Content-Length', totalSize === 0 ? 0 : (end - start) + 1);
-    reply.header('Content-Type', mime);
-    reply.header('X-Content-Type-Options', 'nosniff');
-    // Revalidate every time: files can be edited in place, so a long max-age would show stale content
-    const etag = `"${stat.size.toString(16)}-${Math.floor(stat.mtimeMs).toString(16)}"`;
-    reply.header('ETag', etag);
-    reply.header('Cache-Control', 'private, no-cache');
-    if (!range && request.headers['if-none-match'] === etag) { reply.removeHeader('Content-Length'); return reply.code(304).send(); }
-    // Uploaded files must never run scripts on our origin (that would expose the login token)
-    const csp = fileCsp(mime);
-    if (csp) reply.header('Content-Security-Policy', csp);
-
-    const safeName = encodeURIComponent(file.filename);
-    reply.header('Content-Disposition', `${download ? 'attachment' : 'inline'}; filename*=UTF-8''${safeName}`);
-
-    if (totalSize === 0) return reply.send('');
-    return reply.send(store.readRange(file, start, end));
-  };
-
-  // --- USER PROFILE & SETTINGS ---
-  fastify.get('/api/user/profile', { preHandler: verifyUser }, async (request) => {
-    const p = db.prepare('SELECT id, username, role, quota_bytes, used_bytes, profile_image, created_at, show_xxx FROM users WHERE id = ?').get(request.user.id);
-    const t = db.prepare('SELECT COALESCE(SUM(size_bytes), 0) AS bytes FROM files WHERE owner_id = ? AND trashed_at IS NOT NULL').get(request.user.id);
-    return { ...p, show_xxx: !!p.show_xxx, trash_bytes: t.bytes };
-  });
-
-  // Account settings that follow the user to every device: { show_xxx }
-  fastify.patch('/api/user/settings', { preHandler: verifyUser }, async (request, reply) => {
-    const b = request.body || {};
-    if (b.show_xxx === undefined) return reply.code(400).send({ error: 'Nothing to change' });
-    db.prepare('UPDATE users SET show_xxx = ? WHERE id = ?').run(b.show_xxx ? 1 : 0, request.user.id);
-    return { success: true, show_xxx: !!b.show_xxx };
-  });
-
-  fastify.patch('/api/user/profile', { preHandler: verifyUser }, async (request, reply) => {
-    const img = request.body?.profile_image;
-    // raster images only: an SVG avatar could carry script if it were ever opened directly
-    if (img && (typeof img !== 'string' || !/^data:image\/(png|jpeg|webp|gif);base64,/.test(img) || img.length > 2_000_000)) {
-      return reply.code(400).send({ error: 'Invalid image' });
-    }
-    db.prepare('UPDATE users SET profile_image = ? WHERE id = ?').run(img || null, request.user.id);
-    return { success: true };
-  });
-
-  const tokenUser = db.prepare('SELECT id, username, role, token_version FROM users WHERE id = ?');
-
-  // Changing the password signs out every other session; this one gets a fresh token
-  fastify.patch('/api/user/password', { preHandler: verifyUser }, async (request, reply) => {
-    const { currentPassword, newPassword } = request.body || {};
-    if (!newPassword || String(newPassword).length < PASSWORD_MIN) return reply.code(400).send({ error: `New password must be at least ${PASSWORD_MIN} characters.` });
-    const user = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(request.user.id);
-    if (!user || !(await bcrypt.compare(String(currentPassword || ''), user.password_hash))) {
-      activity.log(request, 'account.password_change_failed', { detail: 'Wrong current password' });
-      return reply.code(400).send({ error: 'Current password is incorrect' });
-    }
-    setPassword(request.user.id, await bcrypt.hash(String(newPassword), 10));
-    activity.log(request, 'account.password_changed');
-    return { success: true, token: signToken(tokenUser.get(request.user.id)) };
-  });
-
-  // Sign out every other browser and device (a lost phone, a shared computer); this one gets a fresh token
-  fastify.post('/api/user/signout-others', { preHandler: verifyUser }, async (request) => {
-    revokeSessions(request.user.id);
-    activity.log(request, 'account.signed_out_others');
-    return { success: true, token: signToken(tokenUser.get(request.user.id)) };
-  });
-
-  // My recent sign-ins, failed ones included, so a stranger's attempt stands out
-  fastify.get('/api/user/activity', { preHandler: verifyUser }, async (request) => {
-    const { items } = activity.list({ userId: request.user.id, kind: 'signin', limit: 25 });
-    return items.map(({ at, action, detail, ip }) => ({ at, action, detail, ip }));
-  });
-
   // Replace the contents of a text file in place. The file keeps its id, name, folder,
   // album/playlist links and – if it is shared – its public link.
   const EDITABLE_MAX = 5 * 1024 * 1024;
@@ -590,129 +484,4 @@ module.exports = async function (fastify) {
     return { success: true, size_bytes: buf.length, public_hash: file.public_hash };
   });
 
-  // ---------------- Thumbnails ----------------
-  // GET  /api/files/:id/thumb?w=240|480|960         cached preview (made by sharp if installed)
-  //      &cached=1                                   only answer from cache; 404 { source } otherwise,
-  //                                                  so the browser knows which image to make it from
-  // PUT  /api/files/:id/thumb?w=…&ow=…&oh=…          the browser uploads a thumbnail it made
-  fastify.get('/api/thumbs/status', { preHandler: verifyUser }, async () => ({ server: thumbs.available() }));
-
-  const resolveThumbSource = (fileId, userId) => {
-    const file = db.prepare('SELECT * FROM files WHERE id = ? AND owner_id = ?').get(fileId, userId);
-    if (!file) return null;
-    if (lib.categoryOf(file.filename, file.mime_type) === 'image') return file;
-    const meta = db.prepare('SELECT thumb_file_id FROM media_meta WHERE file_id = ?').get(file.id);
-    return (meta && meta.thumb_file_id && db.prepare('SELECT * FROM files WHERE id = ? AND owner_id = ?').get(meta.thumb_file_id, userId)) || null;
-  };
-
-  fastify.get('/api/files/:id/thumb', { preHandler: verifyUser }, async (request, reply) => {
-    const file = resolveThumbSource(request.params.id, request.user.id);
-    if (!file) return reply.code(404).send({ error: 'No preview' });
-    const width = thumbs.pickWidth(request.query.w);
-    const filePath = diskPathOf(file);
-    if (!fs.existsSync(filePath)) return reply.code(404).send({ error: 'Missing on disk' });
-
-    const onlyCached = request.query.cached === '1';
-    const hit = onlyCached ? await thumbs.cached(file, width, MASTER_KEY) : await thumbs.get(file, filePath, width, MASTER_KEY);
-    if (!hit) {
-      if (onlyCached) {
-        reply.header('Cache-Control', 'no-store');
-        return reply.code(404).send({ error: 'Not generated yet', source: file.id, width });
-      }
-      // no sharp, or it couldn't decode the image (e.g. HEIC): send the original so plain <img> tags still work
-      return serveStream(request, reply, file);
-    }
-    reply.header('Content-Type', hit.type);
-    reply.header('Content-Length', hit.buf.length);
-    reply.header('X-Content-Type-Options', 'nosniff');
-    reply.header('Cache-Control', 'private, max-age=31536000, immutable');
-    return reply.send(hit.buf);
-  });
-
-  fastify.register(async (scope) => {
-    scope.addContentTypeParser(['image/webp', 'image/jpeg', 'image/png'], { parseAs: 'buffer', bodyLimit: 3 * 1024 * 1024 }, (req, body, done) => done(null, body));
-    scope.put('/api/files/:id/thumb', { preHandler: verifyUser }, async (request, reply) => {
-      const file = db.prepare('SELECT * FROM files WHERE id = ? AND owner_id = ?').get(request.params.id, request.user.id);
-      if (!file || lib.categoryOf(file.filename, file.mime_type) !== 'image') return reply.code(404).send({ error: 'Image not found' });
-      const buf = request.body;
-      if (!Buffer.isBuffer(buf) || buf.length < 32) return reply.code(400).send({ error: 'Empty thumbnail' });
-      const width = thumbs.pickWidth(request.query.w);
-      const ow = parseInt(request.query.ow, 10), oh = parseInt(request.query.oh, 10);
-      await thumbs.store(file, width, buf, MASTER_KEY, ow > 0 && oh > 0 ? { width: ow, height: oh } : null);
-      return { success: true };
-    });
-  });
-
-  // Remember natural sizes measured in the browser: { items: [{ id, w, h }] }
-  fastify.post('/api/files/dims', { preHandler: verifyUser }, async (request) => {
-    const items = Array.isArray(request.body?.items) ? request.body.items.slice(0, 500) : [];
-    const owned = db.prepare('SELECT 1 FROM files WHERE id = ? AND owner_id = ?');
-    let n = 0;
-    for (const it of items) {
-      const w = parseInt(it.w, 10), h = parseInt(it.h, 10);
-      if (w > 0 && h > 0 && owned.get(it.id, request.user.id)) { thumbs.saveDims(it.id, request.user.id, w, h); n++; }
-    }
-    return { success: true, saved: n };
-  });
-
-  fastify.get('/api/files/:id/view', { preHandler: verifyUser }, async (request, reply) => {
-    const file = db.prepare('SELECT * FROM files WHERE id = ? AND owner_id = ?').get(request.params.id, request.user.id);
-    if (!file) return reply.code(404).send({ error: 'File not found' });
-    if (!fs.existsSync(diskPathOf(file))) return reply.code(404).send({ error: 'Missing on disk' });
-    return serveStream(request, reply, file);
-  });
-
-  // --- ZIP DOWNLOADS ---
-  const filesIn = db.prepare('SELECT * FROM files WHERE folder_id = ? AND owner_id = ? AND trashed_at IS NULL');
-  const subfoldersOf = db.prepare('SELECT id, name FROM folders WHERE parent_id = ? AND owner_id = ? AND trashed_at IS NULL');
-  const liveFolderOf = db.prepare('SELECT id, name FROM folders WHERE id = ? AND owner_id = ? AND trashed_at IS NULL');
-  function folderEntries(userId, rootId, prefix, out, seen = new Set()) {
-    if (seen.has(rootId)) return;
-    seen.add(rootId);
-    for (const f of filesIn.all(rootId, userId)) out.push({ file: f, name: prefix + f.filename });
-    for (const sub of subfoldersOf.all(rootId, userId)) folderEntries(userId, sub.id, `${prefix}${sub.name}/`, out, seen);
-  }
-
-  function sendZip(reply, name, entries) {
-    reply.header('Content-Type', 'application/zip');
-    reply.header('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(name)}.zip`);
-    const archive = new ZipArchive({ zlib: { level: 1 } });
-    archive.on('error', (err) => fastify.log.error(err));
-    reply.send(archive);
-    store.appendToZip(archive, entries);
-    archive.finalize();
-    return reply;
-  }
-
-  // Download a whole folder (recursively) as a zip
-  fastify.get('/api/folders/:id/download', { preHandler: verifyUser }, async (request, reply) => {
-    const root = liveFolderOf.get(request.params.id, request.user.id);
-    if (!root) return reply.code(404).send({ error: 'Folder not found' });
-    const entries = [];
-    folderEntries(request.user.id, root.id, '', entries);
-    return sendZip(reply, root.name, entries);
-  });
-
-  // Download a selection (files and folders) as one zip. A form POST, so the
-  // browser streams it straight to disk: fields token, files, folders (comma separated), name.
-  fastify.post('/api/zip', { preHandler: fromForm(verifyUser) }, async (request, reply) => {
-    const ids = (v) => String(v || '').split(',').map(s => s.trim()).filter(Boolean).slice(0, 10000);
-    const uid = request.user.id;
-    const entries = [];
-    const fileStmt = db.prepare('SELECT * FROM files WHERE id = ? AND owner_id = ? AND trashed_at IS NULL');
-    for (const id of ids(request.body?.files)) { const f = fileStmt.get(id, uid); if (f) entries.push({ file: f, name: f.filename }); }
-    for (const id of ids(request.body?.folders)) {
-      const d = liveFolderOf.get(id, uid);
-      if (d) folderEntries(uid, d.id, `${d.name}/`, entries);
-    }
-    if (!entries.length) return reply.code(404).send({ error: 'Nothing to download' });
-    return sendZip(reply, cleanName(request.body?.name) || 'AkulavBox download', entries);
-  });
-
-  fastify.get('/shared/:hash', async (request, reply) => {
-    const file = db.prepare('SELECT * FROM files WHERE public_hash = ?').get(request.params.hash);
-    if (!file || file.is_encrypted || file.trashed_at) return reply.code(404).type('text/plain').send('File not found or is private.');
-    if (!fs.existsSync(diskPathOf(file))) return reply.code(404).type('text/plain').send('Missing on disk');
-    return serveStream(request, reply, file);
-  });
 };

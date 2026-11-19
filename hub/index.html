@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>AkulavBox</title>
+  <meta name="description" content="Your apps on this server: AkulavBox, e-Management, Koma Shelf and Florin. Made by Akulav.">
+  <meta name="application-name" content="AkulavBox">
+  <meta name="referrer" content="same-origin">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="alternate icon" href="/favicon.ico">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0D1518">
+  <script>
+    // links from before 4.0 (/#/files/…) belong to AkulavBox, which now lives at /box/
+    if (/^#\//.test(location.hash)) location.replace('/box/' + location.hash);
+    (function () {
+      var t = null; try { t = localStorage.getItem('akulavTheme'); } catch (e) {}
+      if (!t || t === 'system') t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      document.documentElement.dataset.theme = t;
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,650;12..96,750&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/hub/hub.css">
+  <link rel="modulepreload" href="/hub/common.js">
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <a class="brand" href="/" id="lockup" aria-label="AkulavBox, all apps"></a>
+      <span class="spacer"></span>
+      <div id="account" style="display:flex;align-items:center;gap:4px"></div>
+    </div>
+  </header>
+  <main class="wrap">
+    <div id="boot" class="boot">Loading your apps…</div>
+    <div id="page" hidden>
+      <section class="hello rise">
+        <p class="muted" id="when"></p>
+        <h1 id="greet"></h1>
+        <p class="muted" style="margin-top:8px">One account opens every app below. Pick up where you left off.</p>
+      </section>
+      <p class="alert" id="weak" role="status" hidden style="margin-bottom:16px;align-items:center;color:rgb(var(--accent));background:rgb(var(--accent) / .1)"></p>
+      <section class="apps-grid stagger" id="apps" aria-label="Your apps"></section>
+      <section id="admin" hidden>
+        <p class="section-title">Server</p>
+        <a class="panel app-card" href="/admin" style="--c:rgb(var(--info));min-height:0;flex-direction:row;align-items:center">
+          <span class="tile" style="--c:rgb(var(--info))" id="admin-icon"></span>
+          <span style="flex:1;min-width:0"><h2 style="font-size:17px">Admin console</h2><span class="muted" style="font-size:13px">Accounts, which apps each one can use, and storage limits.</span></span>
+          <span class="go" id="admin-go"></span>
+        </a>
+      </section>
+    </div>
+    <footer class="footer" id="footer"></footer>
+  </main>
+  <script type="module" src="/hub/home.js"></script>
+</body>
+</html>

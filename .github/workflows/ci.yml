@@ -61,6 +61,8 @@ jobs:
           cache: npm
       - name: Install
         run: npm ci --no-audit --no-fund ${{ !matrix.optional && '--omit=optional' || '' }}
+      - name: Unit tests
+        run: npm test
       - name: End-to-end check
         run: npm run check
 

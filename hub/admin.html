@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Admin console · AkulavBox</title>
+  <meta name="referrer" content="same-origin">
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="alternate icon" href="/favicon.ico">
+  <meta name="theme-color" content="#0D1518">
+  <script>
+    (function () {
+      var t = null; try { t = localStorage.getItem('akulavTheme'); } catch (e) {}
+      if (!t || t === 'system') t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      document.documentElement.dataset.theme = t;
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,650;12..96,750&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/hub/hub.css">
+  <link rel="modulepreload" href="/hub/common.js">
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <a class="brand" href="/" id="lockup" aria-label="AkulavBox, all apps"></a>
+      <span class="chip chip-accent" id="console-chip"></span>
+      <span class="spacer"></span>
+      <div id="account" style="display:flex;align-items:center;gap:4px"></div>
+    </div>
+  </header>
+  <main class="wrap">
+    <div id="boot" class="boot">Loading…</div>
+    <div id="page" hidden>
+      <div class="page-head">
+        <div style="flex:1;min-width:220px">
+          <h1>Admin console</h1>
+          <p class="muted" id="summary"></p>
+        </div>
+        <div class="tabs" role="tablist" aria-label="Sections">
+          <button role="tab" aria-selected="true" data-tab="accounts">Accounts</button>
+          <button role="tab" aria-selected="false" data-tab="apps">Apps &amp; defaults</button>
+        </div>
+        <button class="btn" id="refresh"></button>
+      </div>
+
+      <section class="stats stagger" id="stats"></section>
+
+      <div data-panel="accounts">
+        <section class="panel" style="margin-bottom:16px">
+          <div class="card-head"><h2 id="create-title"></h2></div>
+          <form class="create-form" id="create" autocomplete="off">
+            <div><label class="label" for="nu">Username</label><input id="nu" class="input" maxlength="32" required></div>
+            <div><label class="label" for="np">Password</label><input id="np" class="input" type="password" autocomplete="new-password" minlength="8" required></div>
+            <div><label class="label" for="nq">AkulavBox (GB)</label><input id="nq" class="input" type="number" min="0.1" step="0.1" value="5" required></div>
+            <div><label class="label" for="nr">Role</label><select id="nr" class="input"><option value="user">User</option><option value="admin">Admin</option></select></div>
+            <button class="btn btn-primary" id="create-btn" style="height:40px"></button>
+          </form>
+          <p class="faint" style="font-size:12px;padding:0 18px 16px">The other apps start with the defaults from “Apps &amp; defaults”. Change them per account below.</p>
+        </section>
+
+        <section class="panel">
+          <div class="card-head">
+            <h2>Accounts</h2>
+            <input id="search" class="input search" type="search" placeholder="Find an account" aria-label="Find an account" style="height:36px">
+          </div>
+          <div class="users" id="users"></div>
+        </section>
+      </div>
+
+      <div data-panel="apps" hidden>
+        <section class="app-panels stagger" id="app-panels"></section>
+        <section class="panel" style="padding:18px;margin-top:16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+          <span class="tile" style="--c:#E8A33D" id="server-icon"></span>
+          <div style="flex:1;min-width:220px"><h3 style="font-size:16px">Backups, updates and the activity log</h3>
+            <p class="muted" style="font-size:13px">Full backups include every app’s data. They live in AkulavBox’s server settings.</p></div>
+          <a class="btn" href="/box/#/admin">Open server settings</a>
+        </section>
+      </div>
+    </div>
+    <footer class="footer" id="footer"></footer>
+  </main>
+  <script type="module" src="/hub/console.js"></script>
+</body>
+</html>

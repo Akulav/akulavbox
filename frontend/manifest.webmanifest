@@ -1,8 +1,8 @@
 {
   "name": "AkulavBox",
   "short_name": "AkulavBox",
-  "description": "Your private, encrypted personal cloud. Made by Akulav.",
-  "start_url": "/#/files",
+  "description": "Your private, encrypted personal cloud, with documents, webtoons and budgets. Made by Akulav.",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#0D1518",
   "theme_color": "#0D1518",

@@ -1,6 +1,6 @@
 import { createApp, ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue';
 import Icon from './components/Icon.js';
-import { BrandMark, BrandLockup, MadeBy } from './components/Brand.js';
+import { BrandLockup, MadeBy } from './components/Brand.js';
 import { UiHost, UploadTray, PlayerBar, Avatar } from './components/Shell.js';
 import FileManager from './pages/FileManager.js';
 import Trash from './pages/Trash.js';
@@ -10,7 +10,7 @@ import CustomAlbums from './pages/CustomAlbums.js';
 import Music from './pages/MusicApp.js';
 import MediaLibrary from './pages/MediaLibrary.js';
 import { forgetFolders } from './lib/library.js';
-import { session, setSession, clearSession, api, account, refreshAccount, formatBytes, storage, app as appInfo, checkVersion } from './lib/api.js';
+import { session, clearSession, api, account, refreshAccount, formatBytes, storage, app as appInfo, checkVersion } from './lib/api.js';
 import { stop as stopPlayer, player } from './lib/player.js';
 import { toast } from './lib/ui.js';
 
@@ -33,12 +33,6 @@ const SHORTCUTS = [
   ['Viewer', [['← / →', 'Previous / next file'], ['+ / − / 0', 'Zoom in, out, reset'], ['Space', 'Slideshow, or play and pause'], ['F', 'Full screen'], ['I', 'Details panel'], ['Ctrl + S', 'Save while editing']]],
 ];
 
-const FEATURES = [
-  { label: 'Files & sharing', icon: 'folder', tint: '#E8A33D' }, { label: 'Photo albums', icon: 'images', tint: '#5fb3a1' },
-  { label: 'Music player', icon: 'music', tint: '#c78bd8' }, { label: 'Videos & books', icon: 'film', tint: '#d0806b' },
-  { label: 'Link downloads', icon: 'download', tint: '#6ea8e6' }, { label: 'Multi-user', icon: 'users', tint: '#60c798' },
-];
-
 function parseHash() {
   const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
   const tab = TABS.some(t => t.id === parts[0]) ? parts[0] : 'files';
@@ -47,76 +41,12 @@ function parseHash() {
 }
 
 createApp({
-  components: { Icon, BrandMark, BrandLockup, MadeBy, UiHost, UploadTray, PlayerBar, Avatar, MediaLibrary, FileManager, Trash, CustomAlbums, Profile, AdminPanel, Music },
+  components: { Icon, BrandLockup, MadeBy, UiHost, UploadTray, PlayerBar, Avatar, MediaLibrary, FileManager, Trash, CustomAlbums, Profile, AdminPanel, Music },
   template: /*html*/`
     <UiHost />
 
-    <!-- ============ SIGN IN ============ -->
-    <div v-if="!session.token" class="min-h-full flex flex-col">
-      <div class="flex justify-end p-3 sm:p-5">
-        <button class="icon-btn" @click="toggleTheme" :title="theme === 'dark' ? 'Light theme' : 'Dark theme'" :aria-label="theme === 'dark' ? 'Light theme' : 'Dark theme'">
-          <Icon :name="theme === 'dark' ? 'sun' : 'moon'" :size="18" />
-        </button>
-      </div>
-
-      <main class="flex-1 grid place-items-center px-4 pb-10">
-        <div class="w-full max-w-[440px] lg:max-w-[940px] rise">
-          <div class="panel glass overflow-hidden grid lg:grid-cols-2">
-            <!-- brand half (wide screens) -->
-            <section class="login-hero hidden lg:flex flex-col justify-between gap-10 p-10 border-r border-line">
-              <BrandLockup :size="34" :animated="true" />
-              <div>
-                <p class="chip chip-accent !h-7 !px-3 mb-5"><Icon name="lock" :size="13" :stroke="2.2" />Encrypted at rest with AES-256</p>
-                <h1 class="title text-[44px] leading-[1.04] tracking-tight">Your files,<br><span class="brand-text">your cloud.</span></h1>
-                <p class="text-muted text-[14.5px] leading-relaxed mt-4">Files, photos, music, videos and books, on a server you own.</p>
-              </div>
-              <ul class="grid grid-cols-2 gap-2.5 stagger">
-                <li v-for="f in features" :key="f.label" class="rounded-xl bg-surface/55 border border-line/70 px-3 py-2.5 flex items-center gap-2.5">
-                  <span class="w-8 h-8 rounded-lg grid place-items-center shrink-0" :style="{ background: f.tint + '22', color: f.tint }"><Icon :name="f.icon" :size="16" /></span>
-                  <span class="text-[13px] font-medium truncate">{{ f.label }}</span>
-                </li>
-              </ul>
-            </section>
-
-            <!-- form half -->
-            <section class="p-7 sm:p-10 flex flex-col justify-center">
-              <div class="flex flex-col items-center text-center mb-7">
-                <BrandMark :size="52" :animated="true" class="mb-4" />
-                <h2 class="title text-[26px] leading-tight">Welcome back</h2>
-                <p class="text-muted text-[13.5px] mt-1">Sign in to your AkulavBox.</p>
-              </div>
-              <form @submit.prevent="login" class="space-y-4" novalidate>
-                <div>
-                  <label class="label" for="u">Username</label>
-                  <div class="relative">
-                    <Icon name="user" :size="16" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-faint pointer-events-none" />
-                    <input id="u" v-model="form.username" class="input h-11 pl-10" autocomplete="username" autocapitalize="off" spellcheck="false" autofocus required>
-                  </div>
-                </div>
-                <div>
-                  <label class="label" for="p">Password</label>
-                  <div class="relative">
-                    <Icon name="key" :size="16" class="absolute left-3.5 top-1/2 -translate-y-1/2 text-faint pointer-events-none" />
-                    <input id="p" v-model="form.password" :type="showPw ? 'text' : 'password'" class="input h-11 pl-10 pr-11" autocomplete="current-password" required @keyup="onPwKey" @keydown="onPwKey">
-                    <button type="button" class="icon-btn icon-btn-sm absolute right-2 top-1/2 -translate-y-1/2" @click="showPw = !showPw" :aria-label="showPw ? 'Hide password' : 'Show password'" :title="showPw ? 'Hide password' : 'Show password'">
-                      <Icon :name="showPw ? 'eye-off' : 'eye'" :size="16" />
-                    </button>
-                  </div>
-                  <p v-if="capsLock" class="text-accent text-xs mt-1.5 flex items-center gap-1.5"><Icon name="info" :size="13" />Caps Lock is on</p>
-                </div>
-                <Transition name="fade"><p v-if="loginError" role="alert" class="text-danger text-[13px] flex items-center gap-2 rounded-lg bg-danger/10 px-3 py-2"><Icon name="alert" :size="15" class="shrink-0" />{{ loginError }}</p></Transition>
-                <button type="submit" class="btn btn-primary w-full h-11 text-[14.5px] !mt-6" :disabled="loggingIn">
-                  <Icon v-if="loggingIn" name="loader" :size="16" />{{ loggingIn ? 'Signing in…' : 'Sign in' }}
-                </button>
-              </form>
-              <p class="text-faint text-[12px] text-center mt-6">Forgot your password? Ask the admin of this server to reset it.</p>
-            </section>
-          </div>
-          <div class="flex justify-center mt-6"><MadeBy :version="appInfo.version" /></div>
-        </div>
-      </main>
-    </div>
-
+    <!-- Signing in happens on the server's shared page (/login), for every app at once -->
+    <div v-if="!session.token" class="min-h-full grid place-items-center text-muted text-[13.5px]">Opening the sign-in page…</div>
     <!-- ============ APP ============ -->
     <template v-else>
       <!-- Top bar: brand · sections · account (sections move to the bottom bar on phones) -->
@@ -139,6 +69,7 @@ createApp({
           </nav>
 
           <div class="flex items-center gap-0.5 shrink-0 md:justify-self-end">
+            <a href="/" class="icon-btn" title="All apps" aria-label="All apps"><Icon name="grid" :size="18" /></a>
             <a href="#/trash" class="icon-btn relative" :class="{ active: route.tab === 'trash' }" :title="account.trash_bytes ? 'Trash (' + formatBytes(account.trash_bytes) + ')' : 'Trash'" aria-label="Trash">
               <Icon name="trash" :size="18" />
               <span v-if="account.trash_bytes" class="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-accent"></span>
@@ -173,6 +104,8 @@ createApp({
                   </a>
                   <div class="p-1">
                     <a href="#/profile" class="menu-item"><Icon name="user" :size="16" />Profile & settings</a>
+                    <a href="/" class="menu-item"><Icon name="grid" :size="16" />All apps</a>
+                    <a v-if="session.role === 'admin'" href="/admin" class="menu-item"><Icon name="shield" :size="16" />Admin console</a>
                     <button class="menu-item hidden md:flex" @click="showKeys = true"><Icon name="keyboard" :size="16" />Keyboard shortcuts<span class="kbd ml-auto">?</span></button>
                     <div class="menu-sep"></div>
                     <button class="menu-item" @click="logout"><Icon name="logout" :size="16" />Sign out</button>
@@ -360,40 +293,31 @@ createApp({
       storage.write('akulavTheme', theme.value);
     };
 
-    const onPwKey = (e) => { if (e.getModifierState) capsLock.value = e.getModifierState('CapsLock'); };
-
-    const login = async () => {
-      if (loggingIn.value) return;
-      loginError.value = '';
-      if (!form.username.trim() || !form.password) { loginError.value = 'Enter your username and password.'; return; }
-      loggingIn.value = true;
-      try {
-        const data = await api('/api/login', { method: 'POST', body: { username: form.username.trim(), password: form.password } });
-        setSession(data.token, { weak: !!data.weak_password });
-        form.password = '';
-        if (!location.hash) location.hash = '#/files';
-      } catch (e) {
-        loginError.value = e.status === 401 ? 'Wrong username or password.' : e.status ? e.message : 'Can’t reach the server. Check your connection and try again.';
-        form.password = '';
-        document.getElementById('p')?.focus();
-      } finally { loggingIn.value = false; }
+    // Signed out (or the session expired): the shared sign-in page brings you back here
+    let leaving = false;
+    const toLogin = () => {
+      if (leaving) return;
+      leaving = true;
+      location.replace('/login?next=' + encodeURIComponent('/box/' + location.hash));
     };
 
-    const logout = () => {
+    // Signing out is shared by every app: the cookie the other apps read goes too
+    const logout = async () => {
+      leaving = true;
       stopPlayer();
-      clearSession();
       forgetFolders();
-      Object.assign(account, { username: '', role: '', used_bytes: 0, quota_bytes: 0, trash_bytes: 0, profile_image: null, show_xxx: false, loaded: false });
-      toast('Signed out');
+      await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
+      clearSession();
+      location.assign('/login?out=1');
     };
-
     // Start background services whenever we have a session (also after an expired token is cleared)
     watch(() => session.token, (t, prev) => {
-      if (t && !prev) refreshAccount();
+      // the other apps read a cookie with the same sign-in: keep it in step with this token
+      if (t && !prev) { refreshAccount(); api('/api/session', { method: 'POST' }).catch(() => {}); }
       else if (!t) stopPlayer();
     }, { immediate: true });
 
-    return { session, route, form, login, loginError, loggingIn, showPw, capsLock, onPwKey, logout, theme, toggleTheme, visibleTabs, mobileTabs,
-      account, usedPct, formatBytes, player, goFolder, showTop, toTop, online, appInfo, banners, features: FEATURES, showKeys, shortcuts: SHORTCUTS, mainTabs, userMenu, newRelease };
+    return { session, route, logout, theme, toggleTheme, visibleTabs, mobileTabs,
+      account, usedPct, formatBytes, player, goFolder, showTop, toTop, online, appInfo, banners, showKeys, shortcuts: SHORTCUTS, mainTabs, userMenu, newRelease };
   },
 }).mount('#app');

@@ -170,56 +170,15 @@ export default {
         <BackupPanel />
       </section>
 
-      <!-- ===== New account ===== -->
-      <section class="panel p-5 mb-5">
-        <h2 class="font-semibold mb-4 flex items-center gap-2"><Icon name="user-plus" :size="17" class="text-accent" />Create an account</h2>
-        <form class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_120px_130px_auto] gap-3 items-end" @submit.prevent="createUser">
-          <div><label class="label" for="nu">Username</label><input id="nu" v-model="form.username" class="input" autocomplete="off" maxlength="32" required></div>
-          <div><label class="label" for="np">Password</label><input id="np" v-model="form.password" type="password" class="input" autocomplete="new-password" minlength="8" required></div>
-          <div><label class="label" for="nq">Storage (GB)</label><input id="nq" v-model.number="form.quotaGb" type="number" min="0.1" step="0.1" class="input" required></div>
-          <div><label class="label" for="nr">Role</label><select id="nr" v-model="form.role" class="input"><option value="user">User</option><option value="admin">Admin</option></select></div>
-          <button type="submit" class="btn btn-primary h-[38px]" :disabled="busy"><Icon :name="busy ? 'loader' : 'user-plus'" :size="16" />Create</button>
-        </form>
-        <p v-if="sys && sys.disk && form.quotaGb * GB > sys.disk.free" class="text-accent text-xs mt-2">That’s more than the {{ formatBytes(sys.disk.free) }} free on the disk.</p>
+      <!-- ===== Accounts: managed for every app in the Admin console (/admin) ===== -->
+      <section class="panel p-5 mb-5 flex flex-wrap items-center gap-4">
+        <span class="w-10 h-10 rounded-xl bg-info/15 text-info grid place-items-center shrink-0"><Icon name="users" :size="20" /></span>
+        <div class="flex-1 min-w-[220px]">
+          <h2 class="font-semibold">Accounts</h2>
+          <p class="text-xs text-muted">{{ users.length }} account{{ users.length === 1 ? '' : 's' }}. Create accounts, reset passwords, change roles and storage, and choose which apps each one can use in the Admin console.</p>
+        </div>
+        <a href="/admin" class="btn btn-primary"><Icon name="shield" :size="16" />Open the Admin console</a>
       </section>
-
-      <!-- ===== Users ===== -->
-      <section class="panel overflow-hidden">
-        <div class="flex items-center gap-3 px-5 py-3 border-b border-line">
-          <h2 class="font-semibold flex-1">Accounts</h2>
-          <div class="relative w-full max-w-[220px]">
-            <Icon name="search" :size="15" class="absolute left-3 top-1/2 -translate-y-1/2 text-faint pointer-events-none" />
-            <input v-model="search" type="search" class="input h-9 pl-9" placeholder="Find an account" aria-label="Find an account">
-          </div>
-        </div>
-        <div class="hidden md:grid grid-cols-[minmax(0,1fr)_240px_168px] gap-4 px-5 h-10 items-center border-b border-line text-xs font-medium text-muted">
-          <span>Account</span><span>Storage</span><span></span>
-        </div>
-        <div class="stagger">
-          <div v-for="u in filtered" :key="u.id" class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_240px_168px] gap-3 md:gap-4 px-5 py-4 border-b border-line last:border-0 items-center row-hover">
-            <div class="flex items-center gap-3 min-w-0">
-              <Avatar :name="u.username" :src="u.profile_image" :size="40" />
-              <div class="min-w-0">
-                <p class="font-medium truncate flex items-center gap-2">{{ u.username }}<span v-if="u.role === 'admin'" class="chip chip-accent">Admin</span><span v-if="u.id === session.id" class="chip">You</span></p>
-                <p class="text-xs text-muted truncate">{{ (u.file_count || 0).toLocaleString() }} files<template v-if="u.trash_bytes"> · {{ formatBytes(u.trash_bytes) }} in trash</template> · {{ u.last_login_at ? 'signed in ' + formatRelative(u.last_login_at) : 'never signed in since v2' }}</p>
-              </div>
-            </div>
-            <div>
-              <div class="flex justify-between text-xs mb-1.5"><span class="tabular-nums" :class="u.used_bytes > u.quota_bytes ? 'text-danger font-medium' : ''">{{ formatBytes(u.used_bytes) }}</span><span class="text-muted">{{ formatBytes(u.quota_bytes) }}</span></div>
-              <div class="meter" :class="{ warn: pctOf(u) >= 90 }"><span :style="{ width: pctOf(u) + '%' }"></span></div>
-            </div>
-            <div class="flex md:justify-end gap-1">
-              <button class="icon-btn" @click="editQuota(u)" title="Change storage limit"><Icon name="hard-drive" :size="17" /></button>
-              <button class="icon-btn" @click="resetPassword(u)" title="Set a new password"><Icon name="key" :size="17" /></button>
-              <button class="icon-btn" :disabled="u.id === session.id" :class="u.id === session.id ? 'opacity-30' : ''" @click="toggleRole(u)" :title="u.role === 'admin' ? 'Remove admin rights' : 'Make admin'"><Icon name="shield" :size="17" :class="u.role === 'admin' ? 'text-accent' : ''" /></button>
-              <button class="icon-btn" @click="signOut(u)" title="Sign out on every device"><Icon name="logout" :size="17" /></button>
-              <button class="icon-btn hover:!text-danger" :disabled="u.id === session.id" :class="u.id === session.id ? 'opacity-30' : ''" @click="deleteUser(u)" title="Delete account"><Icon name="trash" :size="17" /></button>
-            </div>
-          </div>
-          <p v-if="!filtered.length" class="px-5 py-8 text-center text-muted text-[13.5px]">No account matches “{{ search }}”.</p>
-        </div>
-      </section>
-
       <!-- ===== Activity ===== -->
       <ActivityLog :users="users" />
     </div>

@@ -1,0 +1,168 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --bg: #f5f6f4;
+  --surface: #ffffff;
+  --surface-2: #f2f4f1;
+  --border: #e4e7e2;
+  --text: #121614;
+  --text-2: #4f5752;
+  --text-3: #7f8882;
+  --brand: #0b8a67;
+  --brand-strong: #086f53;
+  --brand-soft: #e3f4ee;
+  --gold: #e7a727;
+  --danger: #d43c3b;
+  --warning: #b97900;
+  --ring: rgb(11 138 103 / 0.35);
+  color-scheme: light;
+}
+
+.dark {
+  --bg: #0b0f0e;
+  --surface: #131917;
+  --surface-2: #1a221f;
+  --border: #26302c;
+  --text: #eef2ef;
+  --text-2: #b5bfb9;
+  --text-3: #808b85;
+  --brand: #22b58c;
+  --brand-strong: #3fcca3;
+  --brand-soft: #12302a;
+  --gold: #f0b840;
+  --danger: #ef6b6a;
+  --warning: #e0a32e;
+  --ring: rgb(34 181 140 / 0.4);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--border);
+  --color-ink: var(--text);
+  --color-ink-2: var(--text-2);
+  --color-ink-3: var(--text-3);
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-soft: var(--brand-soft);
+  --color-gold: var(--gold);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Plus Jakarta Sans', 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: 'cv11', 'ss01';
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+}
+
+.input {
+  width: 100%;
+  height: 2.5rem;
+  border-radius: 0.65rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  padding: 0 0.8rem;
+  font-size: 0.9rem;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.input::placeholder {
+  color: var(--text-3);
+}
+.input:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+textarea.input {
+  height: auto;
+  padding: 0.6rem 0.8rem;
+}
+select.input {
+  appearance: none;
+  padding-right: 2rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%237f8882' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' viewBox='0 0 24 24'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.6rem center;
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-in {
+  animation: fade-up 0.25s ease-out both;
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-pop {
+  animation: pop 0.18s ease-out both;
+}
+
+.recharts-wrapper,
+.recharts-surface {
+  outline: none;
+}
+.recharts-sector:focus,
+.recharts-rectangle:focus {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

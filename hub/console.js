@@ -1,0 +1,240 @@
+import { api, session, toLogin, icon, mark, esc, appTile, formatBytes, relative, avatar, accountMenu, madeBy, toast, dialog } from './common.js';
+
+// The Admin console: every account, which apps it can use and how much it may store in each.
+// Accounts, passwords and roles use AkulavBox's /api/admin/users routes; per-app access and
+// defaults use /api/admin/users/:id/apps/:app and /api/admin/apps/defaults (src/modules/console.js).
+
+const $ = (id) => document.getElementById(id);
+const GB = 1024 ** 3;
+const gb = (b) => Number((b / GB).toFixed(2));
+let state = null;
+let me = null;
+let query = '';
+
+const pct = (used, quota) => (quota ? Math.min(100, Math.round(((used || 0) / quota) * 100)) : 0);
+
+function statsHtml(d) {
+  const by = Object.fromEntries(d.apps.map((a) => [a.id, a]));
+  const disk = d.disk;
+  const tiles = [
+    [icon('users'), 'Accounts', d.users.length, `${d.users.filter((u) => u.role === 'admin').length} admin`],
+    [icon('hdd'), 'Free disk', disk ? formatBytes(disk.free) : '—', disk ? `of ${formatBytes(disk.total)}` : d.storage_dir],
+    ...['box', 'documents', 'manga'].map((id) => {
+      const a = by[id];
+      const t = a.totals;
+      return [`<span class="dot" style="width:8px;height:8px;border-radius:50%;background:${a.color}"></span>`, a.name,
+        a.status === 'running' ? formatBytes(t?.bytes || 0) : '—',
+        a.status !== 'running' ? (a.problem || 'not running') : `${(t?.items ?? 0).toLocaleString()} ${t?.label || 'items'}`];
+    }),
+  ];
+  return tiles.map(([ic, k, v, s]) => `<div class="panel stat"><p class="k">${ic}${esc(k)}</p><p class="v num">${esc(v)}</p><p class="s">${esc(s)}</p></div>`).join('');
+}
+
+function appCell(u, a) {
+  if (a.core) {
+    const p = pct(u.used_bytes, u.quota_bytes);
+    return `<div class="ua" style="--c:${a.color}">
+      <div class="ua-head"><span class="dot"></span><span class="n">${esc(a.name)}</span><span class="chip">${(u.file_count || 0).toLocaleString()} files</span></div>
+      <div class="meter ${p >= 90 ? 'warn' : ''}" style="--c:${a.color}"><span style="width:${p}%"></span></div>
+      <div class="ua-line"><span class="num">${formatBytes(u.used_bytes)} of ${formatBytes(u.quota_bytes)}</span><button data-act="box-quota" data-id="${esc(u.id)}">Change</button></div>
+    </div>`;
+  }
+  const x = u.apps[a.id];
+  const p = pct(x.used_bytes, x.quota_bytes);
+  return `<div class="ua ${x.enabled ? '' : 'off'}" style="--c:${a.color}">
+    <div class="ua-head"><span class="dot"></span><span class="n">${esc(a.name)}</span>
+      <label class="switch" title="${x.enabled ? 'Turn off' : 'Turn on'} ${esc(a.name)} for ${esc(u.username)}"><input type="checkbox" data-act="toggle" data-id="${esc(u.id)}" data-app="${a.id}" ${x.enabled ? 'checked' : ''} ${a.status === 'running' ? '' : 'disabled'} aria-label="${esc(a.name)} for ${esc(u.username)}"><span></span></label></div>
+    ${a.quota
+      ? `<div class="meter ${p >= 90 ? 'warn' : ''}" style="--c:${a.color}"><span style="width:${p}%"></span></div>
+         <div class="ua-line"><span class="num">${formatBytes(x.used_bytes || 0)} of ${formatBytes(x.quota_bytes)}${x.custom_quota ? '' : ' <span class="faint">(default)</span>'}</span><button data-act="app-quota" data-id="${esc(u.id)}" data-app="${a.id}">Change</button></div>`
+      : `<div class="ua-line"><span>${esc(x.summary || 'No files, no quota')}</span></div>`}
+    ${a.quota && x.summary ? `<div class="ua-line"><span>${esc(x.summary)}</span></div>` : ''}
+  </div>`;
+}
+
+function usersHtml(d) {
+  const list = d.users.filter((u) => !query || u.username.toLowerCase().includes(query));
+  if (!list.length) return `<p class="empty">No account matches “${esc(query)}”.</p>`;
+  return list.map((u) => {
+    const self = u.id === me.id;
+    const seen = relative(u.last_login_at);
+    return `<div class="user-row">
+      <div class="who">${avatar(u.username, u.profile_image)}<div style="min-width:0">
+        <p class="name">${esc(u.username)}${u.role === 'admin' ? '<span class="chip chip-accent">Admin</span>' : ''}${self ? '<span class="chip">You</span>' : ''}</p>
+        <small>${seen ? `Signed in ${esc(seen)}` : 'Never signed in'}${u.created_at ? ` · since ${esc(new Date(u.created_at.replace(' ', 'T') + 'Z').toLocaleDateString(undefined, { year: 'numeric', month: 'short' }))}` : ''}</small>
+      </div></div>
+      <div class="user-apps">${d.apps.map((a) => appCell(u, a)).join('')}</div>
+      <div class="row-actions">
+        <button class="icon-btn" data-act="password" data-id="${esc(u.id)}" title="Set a new password" aria-label="Set a new password for ${esc(u.username)}">${icon('key')}</button>
+        <button class="icon-btn" data-act="role" data-id="${esc(u.id)}" ${self ? 'disabled' : ''} title="${u.role === 'admin' ? 'Remove admin rights' : 'Make admin'}" aria-label="${u.role === 'admin' ? 'Remove admin rights from' : 'Make admin:'} ${esc(u.username)}" style="${u.role === 'admin' ? 'color:rgb(var(--accent))' : ''}">${icon('shield')}</button>
+        <button class="icon-btn" data-act="signout" data-id="${esc(u.id)}" title="Sign out on every device" aria-label="Sign ${esc(u.username)} out on every device">${icon('logout')}</button>
+        <button class="icon-btn danger" data-act="delete" data-id="${esc(u.id)}" ${self ? 'disabled' : ''} title="Delete account" aria-label="Delete ${esc(u.username)}">${icon('trash')}</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function appsHtml(d) {
+  return d.apps.map((a) => {
+    const def = d.defaults[a.id];
+    const t = a.totals || {};
+    const status = a.status === 'running' ? '<span class="chip chip-ok">Running</span>' : `<span class="chip chip-danger">${a.status === 'failed' ? 'Not running' : 'Off'}</span>`;
+    const using = a.core ? d.users.length : d.users.filter((u) => u.apps[a.id]?.enabled).length;
+    return `<div class="panel app-panel" style="--c:${a.color}">
+      <div class="top">${appTile(a, true)}<div style="flex:1;min-width:0"><h3>${esc(a.name)}</h3><p class="muted" style="font-size:12.5px">${esc(a.tagline)}</p></div>${status}</div>
+      ${a.problem ? `<p class="alert">${icon('alert')}<span>${esc(a.problem)}</span></p>` : ''}
+      <dl>
+        <dt>Address</dt><dd><a href="${esc(a.path)}">${esc(a.path)}</a></dd>
+        <dt>Data folder</dt><dd class="mono" style="font-size:12px">${esc(a.folder)}</dd>
+        <dt>Stored</dt><dd>${a.id === 'budget' ? `${(t.items || 0).toLocaleString()} transactions · ${formatBytes(t.bytes || 0)} database` : `${formatBytes(t.bytes || 0)} · ${(t.items || 0).toLocaleString()} ${esc(t.label || 'items')}`}</dd>
+        <dt>Accounts</dt><dd>${using} of ${d.users.length} can use it</dd>
+      </dl>
+      ${a.core
+        ? '<p class="faint" style="font-size:12px">Every account has AkulavBox. Its storage limit is set per account (Accounts tab).</p>'
+        : `<form class="defaults" data-defaults="${a.id}">
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px"><span class="switch"><input type="checkbox" name="enabled" ${def.enabled ? 'checked' : ''}><span></span></span>On for new accounts</label>
+            ${a.quota ? `<label style="display:flex;align-items:center;gap:8px;font-size:13px">Default quota <input class="input" name="quota" type="number" min="0.1" step="0.1" value="${gb(def.quota_bytes)}" aria-label="Default quota in GB"> GB</label>` : ''}
+            <button class="btn btn-sm">Save</button>
+          </form>`}
+    </div>`;
+  }).join('');
+}
+
+function render() {
+  const d = state;
+  $('summary').textContent = `${d.users.length} account${d.users.length === 1 ? '' : 's'} · ${d.apps.filter((a) => a.status === 'running').length} of ${d.apps.length} apps running · AkulavBox v${d.version}`;
+  $('stats').innerHTML = statsHtml(d);
+  $('users').innerHTML = usersHtml(d);
+  $('app-panels').innerHTML = appsHtml(d);
+}
+
+async function load() {
+  state = await api('/api/admin/console');
+  render();
+}
+
+const userOf = (id) => state.users.find((u) => u.id === id);
+const appOf = (id) => state.apps.find((a) => a.id === id);
+
+async function act(fn, ok) {
+  try { await fn(); if (ok) toast(ok); } catch (e) { toast(e.message, 'error'); }
+  await load().catch(() => {});
+}
+
+async function onAction(e) {
+  const el = e.target.closest('[data-act]');
+  if (!el || el.disabled) return;
+  const u = userOf(el.dataset.id);
+  if (!u) return;
+  const kind = el.dataset.act;
+  if (kind === 'toggle') {
+    const a = appOf(el.dataset.app);
+    return act(() => api(`/api/admin/users/${encodeURIComponent(u.id)}/apps/${a.id}`, { method: 'PATCH', body: { enabled: el.checked } }), `${a.name} ${el.checked ? 'turned on' : 'turned off'} for ${u.username}`);
+  }
+  if (kind === 'box-quota') {
+    const v = await dialog({ title: `AkulavBox storage for ${u.username}`, message: `Using ${formatBytes(u.used_bytes)} now.`, fields: [{ name: 'gb', label: 'Limit (GB)', type: 'number', min: 0.1, step: 0.1, value: gb(u.quota_bytes) }], confirm: 'Save',
+      check: (x) => (Number(x.gb) > 0 ? null : 'Enter a size larger than 0.') });
+    if (v) act(() => api(`/api/admin/users/${encodeURIComponent(u.id)}/quota`, { method: 'PATCH', body: { quota: Math.round(Number(v.gb) * GB) } }), 'Storage limit saved');
+    return;
+  }
+  if (kind === 'app-quota') {
+    const a = appOf(el.dataset.app);
+    const x = u.apps[a.id];
+    const v = await dialog({ title: `${a.name} storage for ${u.username}`, message: `Using ${formatBytes(x.used_bytes || 0)} now. Leave the field empty to use the default (${formatBytes(state.defaults[a.id].quota_bytes)}).`,
+      fields: [{ name: 'gb', label: 'Limit (GB)', type: 'number', min: 0.1, step: 0.1, value: x.custom_quota ? gb(x.quota_bytes) : '', placeholder: String(gb(state.defaults[a.id].quota_bytes)) }], confirm: 'Save',
+      check: (x2) => (x2.gb === '' || Number(x2.gb) > 0 ? null : 'Enter a size larger than 0, or leave it empty.') });
+    if (v) act(() => api(`/api/admin/users/${encodeURIComponent(u.id)}/apps/${a.id}`, { method: 'PATCH', body: { quota_bytes: v.gb === '' ? null : Math.round(Number(v.gb) * GB) } }), 'Storage limit saved');
+    return;
+  }
+  if (kind === 'password') {
+    const v = await dialog({ title: `New password for ${u.username}`, message: 'They are signed out of every app on every device.', fields: [{ name: 'pw', label: 'New password', type: 'password', hint: 'At least 8 characters. Share it with them securely.' }], confirm: 'Set password',
+      check: (x) => (x.pw.length >= 8 ? null : 'Use at least 8 characters.') });
+    if (v) act(() => api(`/api/admin/users/${encodeURIComponent(u.id)}/password`, { method: 'PATCH', body: { newPassword: v.pw } }), `Password changed for ${u.username}`);
+    return;
+  }
+  if (kind === 'role') {
+    const make = u.role !== 'admin';
+    const okd = await dialog({ title: make ? `Make ${u.username} an admin?` : `Remove ${u.username}’s admin rights?`, message: make ? 'Admins manage every account, read the activity log, restore backups and moderate Koma Shelf.' : 'They keep their data and their apps.', confirm: make ? 'Make admin' : 'Remove rights' });
+    if (okd) act(() => api(`/api/admin/users/${encodeURIComponent(u.id)}/role`, { method: 'PATCH', body: { role: make ? 'admin' : 'user' } }), make ? `${u.username} is now an admin` : `${u.username} is no longer an admin`);
+    return;
+  }
+  if (kind === 'signout') {
+    const okd = await dialog({ title: `Sign ${u.username} out everywhere?`, message: 'Every browser and device has to sign in again, in every app.', confirm: 'Sign out' });
+    if (okd) act(() => api(`/api/admin/users/${encodeURIComponent(u.id)}/signout`, { method: 'POST' }), `${u.username} was signed out`);
+    return;
+  }
+  if (kind === 'delete') {
+    const parts = [`${(u.file_count || 0).toLocaleString()} AkulavBox files`, ...state.apps.filter((a) => !a.core && u.apps[a.id]?.summary).map((a) => `${u.apps[a.id].summary} in ${a.name}`)];
+    const v = await dialog({ title: `Delete ${u.username}?`, danger: true, confirm: 'Delete for good',
+      message: `This removes the account and everything it stored in every app: ${esc(parts.join(', '))}. It can’t be undone.`,
+      fields: [{ name: 'name', label: `Type ${u.username} to confirm` }],
+      check: (x) => (x.name.trim() === u.username ? null : 'The name doesn’t match.') });
+    if (v) act(() => api(`/api/admin/users/${encodeURIComponent(u.id)}`, { method: 'DELETE' }), `${u.username} was deleted`);
+  }
+}
+
+async function main() {
+  const s = session();
+  if (!s) return toLogin('/admin');
+  if (s.role !== 'admin') { location.replace('/'); return; }
+  me = s;
+  try { await load(); } catch (e) {
+    if (e.status === 403) { location.replace('/'); return; }
+    $('boot').textContent = e.message;
+    return;
+  }
+  let profile = {};
+  try { profile = await api('/api/user/profile'); } catch (e) { /* just no avatar */ }
+  $('lockup').innerHTML = `${mark(30)}<b class="brand-text">AkulavBox</b>`;
+  $('console-chip').innerHTML = `${icon('shield')}Admin`;
+  accountMenu($('account'), { ...s, profile_image: profile.profile_image }, { admin: true });
+  $('create-title').innerHTML = `<span style="display:inline-flex;gap:8px;align-items:center">${icon('user-plus')}Create an account</span>`;
+  $('create-btn').innerHTML = `${icon('user-plus')}Create`;
+  $('refresh').innerHTML = `${icon('rotate')}Refresh`;
+  $('server-icon').innerHTML = icon('settings');
+  $('footer').innerHTML = madeBy(state.version);
+
+  for (const t of document.querySelectorAll('[data-tab]')) {
+    t.onclick = () => {
+      for (const x of document.querySelectorAll('[data-tab]')) x.setAttribute('aria-selected', String(x === t));
+      for (const p of document.querySelectorAll('[data-panel]')) p.hidden = p.dataset.panel !== t.dataset.tab;
+    };
+  }
+  $('refresh').onclick = () => act(load, 'Refreshed');
+  $('search').oninput = (e) => { query = e.target.value.trim().toLowerCase(); $('users').innerHTML = usersHtml(state); };
+  $('users').addEventListener('click', (e) => { if (!e.target.closest('input[data-act]')) onAction(e); });
+  $('users').addEventListener('change', (e) => { if (e.target.matches('input[data-act="toggle"]')) onAction(e); });
+
+  $('create').onsubmit = async (e) => {
+    e.preventDefault();
+    const username = $('nu').value.trim();
+    const password = $('np').value;
+    if (!username) return toast('Enter a username.', 'error');
+    if (password.length < 8) return toast('Passwords need at least 8 characters.', 'error');
+    $('create-btn').disabled = true;
+    await act(async () => {
+      await api('/api/admin/users', { method: 'POST', body: { username, password, role: $('nr').value, quota: Math.round(Number($('nq').value || 5) * GB) } });
+      $('nu').value = ''; $('np').value = '';
+    }, `${username} can sign in now`);
+    $('create-btn').disabled = false;
+  };
+
+  $('app-panels').addEventListener('submit', (e) => {
+    const f = e.target.closest('[data-defaults]');
+    if (!f) return;
+    e.preventDefault();
+    const id = f.dataset.defaults;
+    const body = { [id]: { enabled: f.elements.enabled.checked } };
+    if (f.elements.quota) {
+      const q = Number(f.elements.quota.value);
+      if (!(q > 0)) return toast('Enter a quota larger than 0.', 'error');
+      body[id].quota_bytes = Math.round(q * GB);
+    }
+    act(() => api('/api/admin/apps/defaults', { method: 'PUT', body }), `Defaults saved for ${appOf(id).name}`);
+  });
+
+  $('boot').hidden = true;
+  $('page').hidden = false;
+}
+
+main();

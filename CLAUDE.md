@@ -1,13 +1,15 @@
 # CLAUDE.md
 
-Notes for working on AkulavBox, a self-hosted personal cloud made by Akulav. Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full picture and [docs/API.md](docs/API.md) for endpoints.
+Notes for working on AkulavBox, a self-hosted personal cloud made by Akulav, and the apps that share its sign-in: e-Management (`apps/documents`, `/docs`), Koma Shelf (`apps/manga`, `/manga`) and Florin (`apps/budget`, `/budget`), plus the sign-in page, launcher and Admin console (`hub/`). Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full picture and [docs/API.md](docs/API.md) for endpoints.
 
 ## Run and verify
 
 - `npm start`: the server on `PORT` (default 3000), using `./data` (or an older `./storage`) and `.env`.
+- `npm test`: unit tests (`test/*.test.js`, `node:test`), no server.
 - `npm run check`: **run this after backend changes.** It boots a throwaway server (temporary `STORAGE_DIR`, random port, generated keys) and exercises the API end to end. It never touches `data/`.
 - `npm run check` tests link downloads with `scripts/test/fake-yt-dlp.js` and `scripts/test/fake-ffmpeg.js`, stand-ins that answer like yt-dlp and ffmpeg/ffprobe with no network access (`AUTO_INSTALL_TOOLS=0`). It also restores a full backup into a second throwaway server with a different `MASTER_KEY`. Real downloads use the tools auto-installed into `data/tools/` (`src/core/tools.js`). For a real test, use a throwaway `STORAGE_DIR`, which installs a fresh copy.
-- `npm run lint`: fast static checks (every file parses, every frontend module has a modulepreload below the import map, one version in package.json / lockfile / CHANGELOG). CI (`.github/workflows/ci.yml`) runs lint, then `npm run check` on Linux and Windows.
+- `npm run lint`: fast static checks (every file parses, every frontend module has a modulepreload below the import map, Florin's build is present, one version in package.json / lockfile / CHANGELOG). CI (`.github/workflows/ci.yml`) runs lint, then `npm test` and `npm run check` on Linux and Windows. The app checks are in `scripts/test/apps-check.js`.
+- Florin's page is React: after changing `apps/budget/client/`, run `npm run build:budget` and commit `apps/budget/dist/` too (servers never build it).
 - `node scripts/check.js --db <copy-of-real.db>`: also verifies that migrations and read endpoints work against a copy of a real database. Never point it at the live file.
 - For UI testing, start a separate instance: set `STORAGE_DIR` to a temp folder, set another `PORT`, and use test values for `MASTER_KEY` (32 characters) and `JWT_SECRET`. A fresh instance signs in as `admin` / `admin`.
 - `node scripts/icons.js` regenerates the PNG and ICO icons from `frontend/favicon.svg` (needs `sharp`).
@@ -16,18 +18,20 @@ Notes for working on AkulavBox, a self-hosted personal cloud made by Akulav. Rea
 
 ## Hard rules
 
-- **Never touch the user's `data/` (or older `storage/`) folder or `.env` secrets** except when the user asks. Work on copies.
+- **Never touch the user's `data/` (or older `storage/`) folder or `.env` secrets** except when the user asks. Work on copies. A live instance upgrades in place: anything that changes the data layout must migrate on start (see `config.js` moving folders into `box/`) and keep old backups restorable.
 - **Schema changes go through `src/core/migrations.js` only**: append a new step and make it idempotent (`addColumn`, `IF NOT EXISTS`). Never edit a released step or add `ALTER TABLE` calls in modules.
 - **The on-disk file format is frozen**: AES-256-CTR with `MASTER_KEY` and `files.iv_hex`, `.enc` when private, `.plain` when shared. Old files must keep decrypting.
-- **New per-user data must be covered by delete-user (`admin.js`) and by full backups (`core/backup.js` `listData`)**. Anything in the database is backed up automatically; files outside `data/users/` are not.
+- **New per-user data must be covered by delete-user and by full backups.** AkulavBox: `admin.js` and `core/backup-format.js` `listData`. The apps: their `deleteUser` hook (`apps.register`), and keep their data inside `DATA_DIR/<app>/` (backed up as a whole; SQLite files are snapshotted).
 - **Every query that lists files or folders must filter `trashed_at IS NULL`** (alias it, e.g. `f.trashed_at`). Permanent deletion only goes through `purgeFile()` in `src/core/storage.js`.
-- Use `verifyUser` / `verifyAdmin` from `src/core/auth.js` on every private route, and always scope queries with `owner_id = request.user.id`.
+- Use `verifyUser` / `verifyAdmin` from `src/core/auth.js` on every private AkulavBox route, and always scope queries with `owner_id = request.user.id`. **AkulavBox's API never reads the `akb_session` cookie.** The apps sign in with `session.userOf(request, reply)` (`src/core/session.js`), check `apps.access(userId, app).enabled`, and need their own CSRF defence (same-origin check, form token, or custom header).
 - Bump `version` in `package.json` and add a `CHANGELOG.md` entry for anything user-facing (semver: breaking → major, feature → minor, fix → patch). Run `npm install --package-lock-only --ignore-scripts` so the lockfile matches.
 - **Auto-commit:** when a change is finished and verified, describe it in `CHANGELOG.md` and run `npm run commit`. It stages everything, builds the commit message from the new changelog lines, and tags `v<version>` when the version changed. Preview with `npm run commit -- --dry-run`. Don't push unless the user asks (`--push`). git may only exist inside GitHub Desktop; the script finds it.
 
 ## Code conventions
 
-- Backend: CommonJS, Fastify plugins in `src/modules/` (one area each), and shared logic in `src/core/`. `node:sqlite` is synchronous, so use `db.tx(fn)` for multi-statement writes and prepare statements outside loops.
+- The apps' UI text stays as it was: e-Management in Romanian, the others in English.
+
+- Backend: CommonJS everywhere, one Fastify server. Fastify plugins in `src/modules/` (one area each), shared logic in `src/core/`, and each app is a plugin in `apps/<app>/index.js` with its routes in `src/routes/`. Keep files small: split by area when one grows past a few hundred lines. `node:sqlite` is synchronous, so use `db.tx(fn)` for multi-statement writes and prepare statements outside loops.
 - Validate input at the route: trim and cap strings (`cleanName`, `cleanTitle`), check ownership, and return `{ error }` with 400 or 404. Errors are written as user-facing sentences.
 - Frontend: no build step. Vue 3 Options/Composition hybrid with string templates (`/*html*/`) and Tailwind classes using the theme tokens (`bg-surface`, `text-muted`, `text-accent`, …) defined as CSS variables in `index.html`. Add icons to `components/Icon.js` (Lucide paths).
 - New frontend modules need a `<link rel="modulepreload">` in `index.html`. The import map must stay **above** all module preloads.
