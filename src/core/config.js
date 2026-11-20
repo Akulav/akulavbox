@@ -25,65 +25,32 @@ function resolveStorage() {
 }
 const { dir: STORAGE_DIR, legacy: LEGACY_STORAGE } = resolveStorage();
 
-/**
- * Since 4.0 every app keeps its files in its own folder of the data folder:
- * AkulavBox in box/, the others in documents/, manga/ and budget/. Shared state
- * (the accounts database, backups, temp, tools, updates) stays at the top.
- * Older installs have users/, thumbs/ and private/ at the top: they are moved
- * into box/ here, before anything opens them. A rename on the same drive is
- * instant; when it can't be done (a mounted folder, a file held open on Windows,
- * a second server on the same folder) that folder keeps being used where it is.
- */
-const BOX_DIR = path.join(STORAGE_DIR, 'box');
-const layoutNotes = [];
-function boxFolder(name) {
-  const now = path.join(BOX_DIR, name);
-  const old = path.join(STORAGE_DIR, name);
-  if (fs.existsSync(now) || !fs.existsSync(old)) return now;
-  if (otherServerRunning()) { layoutNotes.push(`${old} was not moved to ${now}: another server uses this data folder.`); return old; }
-  try {
-    fs.mkdirSync(BOX_DIR, { recursive: true });
-    fs.renameSync(old, now);
-    layoutNotes.push(`Moved ${old} to ${now}.`);
-    return now;
-  } catch (e) {
-    layoutNotes.push(`Couldn’t move ${old} to ${now} (${e.code || e.message}); it stays where it is. Stop the server and move it by hand to finish the change.`);
-    return old;
-  }
-}
-// the pid file of core/instance.js (that module needs this one, so it is read here directly)
-function otherServerRunning() {
-  try {
-    const pid = Number(JSON.parse(fs.readFileSync(path.join(STORAGE_DIR, 'akulavbox.pid'), 'utf-8')).pid);
-    if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) return false;
-    try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; }
-  } catch (e) { return false; }
-}
-// command-line tools (scripts/backup.js) run next to a live server and must not move its folders
-const MOVE_OK = process.env.AKB_NO_RESTORE !== '1';
-const boxPath = (name) => (MOVE_OK ? boxFolder(name) : fs.existsSync(path.join(BOX_DIR, name)) || !fs.existsSync(path.join(STORAGE_DIR, name)) ? path.join(BOX_DIR, name) : path.join(STORAGE_DIR, name));
+// box/, documents/, manga/, budget/: moves a data folder from before 4.0 into place (core/layout.js).
+// Command-line tools next to a live server (scripts/backup.js, AKB_NO_RESTORE=1) never move anything.
+const layout = require('./layout').prepare(STORAGE_DIR, { move: process.env.AKB_NO_RESTORE !== '1' });
 
 const config = {
   name: 'AkulavBox',
   author: 'Akulav',
   version: pkg.version,
-  appDir: APP_DIR,
+  installDir: APP_DIR,
   port: Number(process.env.PORT) || 3000,
   host: process.env.HOST || '0.0.0.0',
   logLevel: process.env.LOG_LEVEL || 'warn',
   storageDir: STORAGE_DIR,
   // accounts, app access and AkulavBox's own tables
   dbPath: path.join(STORAGE_DIR, 'akulavbox.db'),
-  boxDir: BOX_DIR,
-  usersDir: boxPath('users'),
+  // AkulavBox's own files: box/{users,thumbs,private}
+  boxDir: layout.boxDir,
+  usersDir: layout.usersDir,
+  thumbsDir: layout.thumbsDir,
+  privateDir: layout.privateDir,
+  /** What the start did to the data folder's layout: [{ warn, text }] */
+  layoutNotes: layout.notes,
   tempDir: path.join(STORAGE_DIR, 'temp'),
-  thumbsDir: boxPath('thumbs'),
   backupsDir: path.join(STORAGE_DIR, 'backups'),
-  // per-user secrets for link downloads (sign-in cookies), encrypted with MASTER_KEY
-  privateDir: boxPath('private'),
-  /** The folder of one of the other apps (documents, manga, budget) */
-  appDir: (id) => path.join(STORAGE_DIR, id),
-  layoutNotes,
+  /** The data folder of one of the other apps (documents, manga, budget) */
+  appDataDir: (id) => path.join(STORAGE_DIR, id),
   // a restore waiting to be applied on the next start (see core/backup.js)
   importDir: path.join(STORAGE_DIR, 'import-staging'),
   // Days a deleted item stays in the trash before it is removed for good
@@ -112,7 +79,7 @@ function validate() {
   if (!process.env.JWT_SECRET) problems.push('JWT_SECRET is not set. Use a long random string.');
   else if (process.env.JWT_SECRET === 'change-me' || process.env.JWT_SECRET.length < 16) warnings.push('JWT_SECRET is short or still the example value. Use a long random string.');
   if (key === 'change-me-to-exactly-32-chars!!!') warnings.push('MASTER_KEY is still the example value. Anyone with the example key could decrypt your files.');
-  for (const n of layoutNotes) if (!n.startsWith('Moved ')) warnings.push(n);
+  for (const n of layout.notes) if (n.warn) warnings.push(n.text);
   if (LEGACY_STORAGE) warnings.push(`Using the old storage folder ${STORAGE_DIR}. Move it to ${path.join(APP_DIR, 'data')} (or set STORAGE_DIR) while the server is stopped.`);
   return { problems, warnings };
 }
@@ -120,7 +87,5 @@ function validate() {
 for (const dir of [config.storageDir, config.usersDir, config.tempDir, config.thumbsDir]) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
-// chat was removed in 3.0: its 10-minute attachments have no owner any more
-try { fs.rmSync(path.join(STORAGE_DIR, 'chat_temp'), { recursive: true, force: true }); } catch (e) { /* in use or gone */ }
 
 module.exports = { ...config, validate };

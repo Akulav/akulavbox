@@ -13,9 +13,10 @@
     <link rel="manifest" href="/budget/site.webmanifest" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
-    <!-- the saved theme, before first paint -->
-    <script src="/budget/theme.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,650;12..96,750&family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <!-- the theme every app shares, before first paint; the shared account menu -->
+    <script src="/hub/theme.js"></script>
+    <script src="/hub/account.js" defer></script>
 
     <script type="importmap">
       { "imports": { "vue": "/budget/vendor/vue.js" } }
@@ -57,8 +58,8 @@
         --color-gold: var(--gold);
         --color-danger: var(--danger);
         --color-warning: var(--warning);
-        --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-        --font-display: 'Plus Jakarta Sans', 'Inter', ui-sans-serif, system-ui, sans-serif;
+        --font-sans: Geist, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+        --font-display: 'Bricolage Grotesque', Geist, ui-sans-serif, system-ui, sans-serif;
       }
     </style>
     <link rel="stylesheet" href="/budget/style.css" />

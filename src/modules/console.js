@@ -33,7 +33,7 @@ module.exports = async function (fastify) {
         id: a.id, name: a.name, path: a.path, color: a.color, tagline: a.tagline, core: !!a.core, quota: !!a.quota,
         status: apps.status(a.id), problem: apps.failures.get(a.id) || null,
         totals: a.core ? { bytes: users.reduce((s, u) => s + (u.used_bytes || 0), 0), items: users.reduce((s, u) => s + (u.file_count || 0), 0), label: 'files' } : apps.totals(a.id),
-        folder: a.core ? config.boxDir : config.appDir(a.id),
+        folder: a.core ? config.boxDir : config.appDataDir(a.id),
       })),
       defaults: apps.defaults(),
       disk: store.diskSpace(),

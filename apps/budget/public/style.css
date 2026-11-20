@@ -1,13 +1,15 @@
 /* Florin's tokens and the few shared classes. Tailwind's utilities come from the browser build
-   (index.html); these rules are outside its layers, so they win over a utility unless it has "!". */
+   (index.html); these rules are outside its layers, so they win over a utility unless it has "!".
+   The neutrals and fonts are AkulavBox's (frontend/index.html, hub/hub.css), so every app of the
+   server feels like one product; the green is Florin's own. */
 :root {
-  --bg: #f5f6f4;
+  --bg: #f3f5f4;
   --surface: #ffffff;
-  --surface-2: #f2f4f1;
-  --border: #e4e7e2;
-  --text: #121614;
-  --text-2: #4f5752;
-  --text-3: #7f8882;
+  --surface-2: #ecf0ef;
+  --border: #dbe1e0;
+  --text: #141f22;
+  --text-2: #3f5054;
+  --text-3: #58696d;
   --brand: #0b8a67;
   --brand-strong: #086f53;
   --brand-soft: #e3f4ee;
@@ -19,16 +21,16 @@
 }
 
 .dark {
-  --bg: #0b0f0e;
-  --surface: #131917;
-  --surface-2: #1a221f;
-  --border: #26302c;
-  --text: #eef2ef;
-  --text-2: #b5bfb9;
-  --text-3: #808b85;
+  --bg: #0d1518;
+  --surface: #131e22;
+  --surface-2: #1c2a2f;
+  --border: #28393f;
+  --text: #e3ebe9;
+  --text-2: #b6c4c5;
+  --text-3: #8ea1a4;
   --brand: #22b58c;
   --brand-strong: #3fcca3;
-  --brand-soft: #12302a;
+  --brand-soft: #123129;
   --gold: #f0b840;
   --danger: #ef6b6a;
   --warning: #e0a32e;
@@ -50,9 +52,8 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family: Geist, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
-  font-feature-settings: 'cv11', 'ss01';
 }
 
 .num {

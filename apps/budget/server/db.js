@@ -3,9 +3,11 @@ const { DatabaseSync } = require('node:sqlite');
 const fs = require('node:fs');
 const path = require('node:path');
 const { CURRENCIES, DEFAULT_CATEGORIES } = require('./currencies.js');
+const sqlite = require('../../../src/core/sqlite');
+const { runSteps } = sqlite;
 
 // Florin's database lives in DATA_DIR/budget of the AkulavBox data folder
-const DATA_DIR = require('../../../src/core/config').appDir('budget');
+const DATA_DIR = require('../../../src/core/config').appDataDir('budget');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 const DB_PATH = path.join(DATA_DIR, 'florin.db');
 
@@ -85,35 +87,25 @@ const MIGRATIONS = [
   CREATE UNIQUE INDEX idx_users_box ON users(box_id);
   DELETE FROM sessions;
   `,
+  // v3 — an overall monthly budget per account (0 = the sum of the category budgets); the sessions
+  // table and the registration switch belonged to Florin's own sign-in, gone since v2.
+  `
+  ALTER TABLE users ADD COLUMN monthly_budget REAL NOT NULL DEFAULT 0;
+  DROP TABLE IF EXISTS sessions;
+  DELETE FROM settings WHERE key = 'allow_registration';
+  `,
 ];
 
 function migrate() {
-  const { user_version: current } = db.prepare('PRAGMA user_version').get();
-  for (let v = current; v < MIGRATIONS.length; v++) {
-    tx(() => {
-      db.exec(MIGRATIONS[v]);
-      db.exec(`PRAGMA user_version = ${v + 1}`);
-    });
-  }
+  runSteps(db, MIGRATIONS, { describe: (n) => `Florin database migration ${n}` });
   const insertRate = db.prepare('INSERT OR IGNORE INTO rates (code, name, rate) VALUES (?, ?, ?)');
   for (const c of CURRENCIES) insertRate.run(c.code, c.name, c.rate);
   const insertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
-  insertSetting.run('allow_registration', 'true');
   insertSetting.run('default_currency', 'EUR');
 }
 
-/** Run fn inside a transaction. */
-function tx(fn) {
-  db.exec('BEGIN');
-  try {
-    const result = fn();
-    db.exec('COMMIT');
-    return result;
-  } catch (err) {
-    db.exec('ROLLBACK');
-    throw err;
-  }
-}
+/** Run fn inside a transaction */
+const tx = (fn) => sqlite.tx(db, fn);
 
 function getSetting(key) {
   return db.prepare('SELECT value FROM settings WHERE key = ?').get(key)?.value;

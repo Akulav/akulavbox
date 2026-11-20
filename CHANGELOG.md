@@ -2,6 +2,20 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 4.1.0 (2026-11-20)
+
+### Added
+- **Your profile picture in every app.** e-Management, Koma Shelf, Florin, the launcher and the Admin console show the picture you set in AkulavBox, in one shared account menu: your name and role, the app's own links, then All apps, Profile & password, Admin console (for admins) and Sign out.
+- **Florin: an overall monthly budget.** The total on Categories & budgets can now be edited (the pencil). It sets a limit of its own, and the dashboard's "Budget left" follows it. Leave it empty to go back to the sum of the category budgets.
+
+### Changed
+- **One look for every app.** All of them use AkulavBox's colours and fonts now, each with its own accent (e-Management blue, Koma Shelf pink, Florin green), and they share one theme: switch to light or dark in any app and the others follow.
+- **e-Management is redesigned**: it has a dark theme, and a lighter top bar like the other apps. On phones the menu scrolls on its own row instead of wrapping.
+- Under the hood: AkulavBox and the three apps run their database upgrades with one shared runner (`src/core/sqlite.js`), and moving a data folder from before 4.0 into `box/` has its own module (`src/core/layout.js`). Florin's server code lost leftovers from its old sign-in.
+
+### Upgrading
+- Nothing to do. Florin's database gets one upgrade step on the first start. A theme picked in Florin or Koma Shelf before is replaced by the shared one, AkulavBox's.
+
 ## 4.0.1 (2026-11-20)
 
 ### Changed

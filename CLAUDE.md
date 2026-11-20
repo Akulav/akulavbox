@@ -18,8 +18,8 @@ Notes for working on AkulavBox, a self-hosted personal cloud made by Akulav, and
 
 ## Hard rules
 
-- **Never touch the user's `data/` (or older `storage/`) folder or `.env` secrets** except when the user asks. Work on copies. A live instance upgrades in place: anything that changes the data layout must migrate on start (see `config.js` moving folders into `box/`) and keep old backups restorable.
-- **Schema changes go through `src/core/migrations.js` only**: append a new step and make it idempotent (`addColumn`, `IF NOT EXISTS`). Never edit a released step or add `ALTER TABLE` calls in modules.
+- **Never touch the user's `data/` (or older `storage/`) folder or `.env` secrets** except when the user asks. Work on copies. A live instance upgrades in place: anything that changes the data layout must migrate on start (see `src/core/layout.js` moving folders into `box/`) and keep old backups restorable.
+- **Schema changes go through `src/core/migrations.js` only** (the apps: the step list in their `db.js`): append a new step and make it idempotent (`addColumn`, `IF NOT EXISTS`). Never edit a released step or add `ALTER TABLE` calls in modules. Steps run through `runSteps` in `src/core/sqlite.js`, which also has `tx` and `addColumn`.
 - **The on-disk file format is frozen**: AES-256-CTR with `MASTER_KEY` and `files.iv_hex`, `.enc` when private, `.plain` when shared. Old files must keep decrypting.
 - **New per-user data must be covered by delete-user and by full backups.** AkulavBox: `admin.js` and `core/backup-format.js` `listData`. The apps: their `deleteUser` hook (`apps.register`), and keep their data inside `DATA_DIR/<app>/` (backed up as a whole; SQLite files are snapshotted).
 - **Every query that lists files or folders must filter `trashed_at IS NULL`** (alias it, e.g. `f.trashed_at`). Permanent deletion only goes through `purgeFile()` in `src/core/storage.js`.
@@ -30,6 +30,8 @@ Notes for working on AkulavBox, a self-hosted personal cloud made by Akulav, and
 ## Code conventions
 
 - The apps' UI text stays as it was: e-Management in Romanian, the others in English.
+- **One look for every app** (docs/ARCHITECTURE.md, "One look for every app"): AkulavBox's neutrals and fonts (Geist, Bricolage Grotesque), each app's own accent. Every page loads `/hub/theme.js` in its `<head>` (the shared `akulavTheme`; never a theme key of its own) and uses `<akb-account>` from `/hub/account.js` for the account menu (app links go inside it as children). Vue pages declare it a custom element (`compilerOptions.isCustomElement`).
+- An app's data folder is `config.appDataDir(id)`.
 
 - Backend: CommonJS everywhere, one Fastify server. Fastify plugins in `src/modules/` (one area each), shared logic in `src/core/`, and each app is a plugin in `apps/<app>/index.js` with its routes in `src/routes/`. Keep files small: split by area when one grows past a few hundred lines. `node:sqlite` is synchronous, so use `db.tx(fn)` for multi-statement writes and prepare statements outside loops.
 - Validate input at the route: trim and cap strings (`cleanName`, `cleanTitle`), check ownership, and return `{ error }` with 400 or 404. Errors are written as user-facing sentences.

@@ -21,6 +21,12 @@ browser ──HTTP──▶ Fastify ┼─ /box/ + /api/…     frontend/ (Vue 3
 - **Access and quotas** (`src/core/apps.js`, table `user_apps`): AkulavBox is always on, with `users.quota_bytes`. e-Management, Koma Shelf and Florin can be turned off per account; e-Management and Koma Shelf have a quota each (Florin stores no files). No row means the defaults (`settings` key `apps.defaults`, set in the Admin console; the first ones come from `DOCUMENTS_QUOTA_MB` and `MANGA_QUOTA_MB`).
 - **Each app registers hooks** (`apps.register(id, { usage, summary, totals, deleteUser })`) that the launcher, the Admin console and delete-user use. An app that can't start (`apps.failed`) answers with a short page saying why; Koma Shelf without `sharp` still registers its data hooks (`apps/manga/src/data.js`), so usage shows and delete-user still removes its data.
 
+## One look for every app
+
+- **The same neutrals and fonts.** The ink/paper colours, Geist for text and Bricolage Grotesque for headings come from AkulavBox (`frontend/index.html`, `hub/hub.css`); each app keeps its own accent: AkulavBox brass, e-Management blue (teal in the work space), Koma Shelf pink (and its Dela Gothic headlines), Florin green.
+- **One theme.** `localStorage` `akulavTheme` (`light`, `dark` or `system`) is read before the page paints by `hub/theme.js` (AkulavBox's `index.html` has the same few lines inline), which sets `<html data-theme>` and the `dark` class Tailwind's `dark:` variant uses. Changing it in any app changes it in all of them (also in other open tabs).
+- **One account menu.** `<akb-account>` (`hub/account.js`, a custom element with its own shadow DOM and `hub/account.css`) is in the launcher, the Admin console, e-Management, Koma Shelf and Florin: the AkulavBox profile picture, the app's own links (its children), then All apps, Profile & password, Admin console and Sign out, plus the theme button. It asks `GET /api/session/me` (the cookie) and shows the picture from `/api/session/avatar`. It speaks Romanian on a `lang="ro"` page. AkulavBox has its own menu in `app.js`, with the same picture.
+
 ## The apps (`apps/`)
 
 Each app is a Fastify plugin registered by `apps/index.js` under its prefix, with its own security headers, error and not-found handlers.
@@ -31,7 +37,7 @@ Each app is a Fastify plugin registered by `apps/index.js` under its prefix, wit
 
 ## Startup order
 
-1. `src/core/config.js` loads `.env`, resolves the data folder (`STORAGE_DIR` / `DATA_DIR`, else `data/` in the app folder, else an older `storage/` that already holds a database), moves AkulavBox's folders of a data folder from before 4.0 (`users/`, `thumbs/`, `private/`) into `box/` (a rename; a folder that can't be moved, or a second server on the same folder, keeps the old place and logs why), and creates its sub-folders. Paths below say `data/`.
+1. `src/core/config.js` loads `.env`, resolves the data folder (`STORAGE_DIR` / `DATA_DIR`, else `data/` in the app folder, else an older `storage/` that already holds a database), and has `src/core/layout.js` move AkulavBox's folders of a data folder from before 4.0 (`users/`, `thumbs/`, `private/`) into `box/` (a rename; a folder that can't be moved, or a second server on the same folder, keeps the old place and logs why; command-line tools never move anything), then creates its sub-folders. The other apps' folders are `config.appDataDir(id)`. Paths below say `data/`.
 2. `src/server.js` validates the config and exits with a readable message if `MASTER_KEY` or `JWT_SECRET` is wrong.
 3. `src/core/db.js` opens SQLite and runs **`src/core/migrations.js`**. Pending steps run in order inside transactions, and an existing database is first snapshotted with `VACUUM INTO` to `data/backups/`. Then the pragmas are set (WAL, `synchronous=NORMAL`, busy timeout) and the default admin is created on an empty database.
 4. `src/core/library.js` adopts locked library folders created by older versions (idempotent).
@@ -39,7 +45,7 @@ Each app is a Fastify plugin registered by `apps/index.js` under its prefix, wit
 
 ## Schema versioning
 
-The schema version is `PRAGMA user_version`. Each entry in `MIGRATIONS` is one version. Steps must be **idempotent** (`CREATE … IF NOT EXISTS`, `addColumn` only adds missing columns), because 1.x databases already contain most tables at version 0. Append new steps at the end and never edit a released one.
+The schema version is `PRAGMA user_version`. Each entry in `MIGRATIONS` (`src/core/migrations.js`) is one version, run in its own transaction by `runSteps` (`src/core/sqlite.js`), after a `VACUUM INTO` snapshot of an existing database. Steps must be **idempotent** (`CREATE … IF NOT EXISTS`, `addColumn` only adds missing columns), because 1.x databases already contain most tables at version 0. Append new steps at the end and never edit a released one.
 
 | # | What |
 | --- | --- |
@@ -57,7 +63,7 @@ The schema version is `PRAGMA user_version`. Each entry in `MIGRATIONS` is one v
 | 12 | `media_meta.video_codec` |
 | 13 | `user_apps` (per-account access and quota for the other apps) |
 
-The apps have their own migrations: Koma Shelf and Florin number them with `PRAGMA user_version` in their `db.js`; e-Management adds missing columns (`addColumn`).
+The apps have their own databases and steps, run the same way: Koma Shelf and Florin list them in their `db.js` and call `runSteps` (Florin's step 3 adds `users.monthly_budget` and drops the unused `sessions` table); e-Management adds missing columns with `addColumn`. All three share `tx`, `addColumn` and `runSteps` from `src/core/sqlite.js`.
 
 ## Authentication
 

@@ -20,31 +20,21 @@
   };
   window.komaStore = store;
 
-  // theme toggle
+  // the theme toggle of signed-out pages (signed in, the shared account menu has it): the theme
+  // every app shares (hub/theme.js)
   const root = document.documentElement;
-  const dark = () => root.dataset.theme === 'dark' || (!root.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches);
   $$('[data-theme-toggle]').forEach((b) =>
     b.addEventListener('click', () => {
-      const next = dark() ? 'light' : 'dark';
+      const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
       root.dataset.theme = next;
+      root.classList.toggle('dark', next === 'dark');
       try {
-        localStorage.setItem('theme', next);
+        localStorage.setItem('akulavTheme', next);
       } catch {
-        /* ignore */
+        /* private mode */
       }
     }),
   );
-
-  // account menu: close on outside click / Escape
-  const menu = $('.user-menu');
-  if (menu) {
-    document.addEventListener('click', (e) => {
-      if (menu.open && !menu.contains(e.target)) menu.open = false;
-    });
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') menu.open = false;
-    });
-  }
 
   // confirm destructive forms
   $$('form[data-confirm]').forEach((f) =>

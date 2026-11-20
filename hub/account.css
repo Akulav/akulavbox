@@ -1,0 +1,89 @@
+/* <akb-account> (hub/account.js): the account menu every app shares. Inside a shadow root, so the
+   app's own styles don't reach it; the colours are AkulavBox's, the accent is the app's. */
+:host {
+  --bg: 13 21 24;
+  --surface: 19 30 34;
+  --elevated: 28 42 47;
+  --line: 40 57 63;
+  --fg: 227 235 233;
+  --muted: 142 161 164;
+  --danger: 240 108 96;
+  --shadow: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 18px 44px -16px rgb(0 0 0 / 0.75);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+  font: 14px/1.4 Geist, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: rgb(var(--fg));
+}
+:host([theme='light']) {
+  --bg: 243 245 244;
+  --surface: 255 255 255;
+  --elevated: 236 240 239;
+  --line: 219 225 224;
+  --fg: 20 31 34;
+  --muted: 88 105 109;
+  --danger: 204 64 52;
+  --shadow: 0 1px 2px rgb(16 24 26 / 0.06), 0 16px 40px -18px rgb(16 24 26 / 0.4);
+}
+:host([expanded]) { display: flex; width: 100%; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+
+button, a { font: inherit; color: inherit; }
+.icon-btn {
+  display: grid; place-items: center; width: 36px; height: 36px; padding: 0;
+  border: 0; border-radius: 10px; background: transparent; color: rgb(var(--muted)); cursor: pointer;
+  transition: background-color .15s, color .15s;
+}
+.icon-btn:hover { background: rgb(var(--fg) / .07); color: rgb(var(--fg)); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.me {
+  display: flex; align-items: center; gap: 10px; min-width: 0;
+  padding: 3px; border: 0; border-radius: 999px; background: transparent; cursor: pointer; text-align: left;
+}
+:host([expanded]) .me { flex: 1; padding: 6px 8px; border-radius: 12px; }
+.me:hover { background: rgb(var(--fg) / .07); }
+.who { min-width: 0; display: none; }
+:host([expanded]) .who { display: block; }
+.who b, .who span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.who b { font-size: 14px; font-weight: 600; }
+.who span, .role { font-size: 12px; color: rgb(var(--muted)); text-transform: capitalize; }
+
+.avatar {
+  width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; overflow: hidden;
+  display: grid; place-items: center; font-weight: 700; font-size: 13px; color: #fff;
+  background: hsl(var(--h, 30) 45% 42%);
+  box-shadow: 0 0 0 2px rgb(var(--surface)), 0 0 0 3.5px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+.avatar.lg { width: 40px; height: 40px; font-size: 15px; box-shadow: none; }
+.avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.menu {
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 1000; min-width: 236px;
+  padding: 6px; border-radius: 14px; border: 1px solid rgb(var(--line));
+  background: rgb(var(--surface)); box-shadow: var(--shadow);
+  animation: pop .14s ease-out both; transform-origin: top right;
+}
+:host([up]) .menu { top: auto; bottom: calc(100% + 8px); transform-origin: bottom left; }
+:host([expanded]) .menu { left: 0; right: 0; }
+.head { display: flex; align-items: center; gap: 10px; padding: 8px 10px 10px; margin-bottom: 4px; border-bottom: 1px solid rgb(var(--line)); }
+.head b { display: block; font-weight: 600; }
+.item, ::slotted(a), ::slotted(button) {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 8px 10px; border: 0; border-radius: 9px; background: transparent;
+  font: inherit; font-size: 14px; color: rgb(var(--fg)); text-decoration: none; text-align: left; cursor: pointer;
+}
+.item:hover, ::slotted(a:hover), ::slotted(button:hover) { background: rgb(var(--fg) / .07); }
+.item svg { color: rgb(var(--muted)); }
+.item.danger:hover { color: rgb(var(--danger)); }
+.item.danger:hover svg { color: inherit; }
+.sep { height: 1px; margin: 4px 6px; background: rgb(var(--line)); }
+.sep.slot-sep { display: none; }
+.has-slot .sep.slot-sep { display: block; }
+
+@keyframes pop { from { opacity: 0; transform: scale(.97) translateY(-4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .menu { animation: none; } }
+:host-context(html[data-motion='off']) .menu { animation: none; }

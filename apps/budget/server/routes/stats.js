@@ -1,15 +1,15 @@
 'use strict';
+// Florin's numbers: the month at a glance (/overview), the last months (/trend) and patterns over a
+// range (/analytics). Amounts are stored in EUR (amount_eur) and shown in the account's currency (r).
 const { db, rateOf } = require('../db.js');
 const { HttpError, date, round2 } = require('../util.js');
 
-module.exports = async function routes(router) {
-
-  const pad = (n) => String(n).padStart(2, '0');
-  const daysIn = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate(); // m is 1-based
-  const shiftMonth = (ym, delta) => {
-    const [y, m] = ym.split('-').map(Number);
-    const d = new Date(Date.UTC(y, m - 1 + delta, 1));
-    return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}`;
+const pad = (n) => String(n).padStart(2, '0');
+const daysIn = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate(); // m is 1-based
+const shiftMonth = (ym, delta) => {
+  const [y, m] = ym.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}`;
 };
 const todayStr = () => {
   const d = new Date();
@@ -22,7 +22,7 @@ function parseMonth(v) {
   return m;
 }
 
-router.get('/overview', async (req, reply) => {
+async function overview(req, reply) {
   const uid = req.user.id;
   const r = rateOf(req.user.base_currency) ?? 1;
   const month = parseMonth(req.query.month);
@@ -94,7 +94,9 @@ router.get('/overview', async (req, reply) => {
     });
   }
 
-  const budgetTotal = byCategory.reduce((a, c) => a + (c.budget || 0), 0);
+  // the account's overall budget when it set one, else what the categories add up to
+  const categoryBudgets = byCategory.reduce((a, c) => a + (c.budget || 0), 0);
+  const budgetTotal = req.user.monthly_budget > 0 ? req.user.monthly_budget : categoryBudgets;
   const spent = round2(cur.spent * r);
   const dailyAvg = elapsed ? round2(spent / elapsed) : 0;
 
@@ -130,6 +132,7 @@ router.get('/overview', async (req, reply) => {
       prevSpentToDate: round2(lastToDate * r),
       prevIncome: round2(last.income * r),
       budget: round2(budgetTotal),
+      categoryBudgets: round2(categoryBudgets),
       dailyAvg,
       projected: isCurrent ? round2(dailyAvg * dim) : spent,
     },
@@ -137,9 +140,9 @@ router.get('/overview', async (req, reply) => {
     daily,
     recent,
   });
-});
+}
 
-router.get('/trend', async (req, reply) => {
+async function trend(req, reply) {
   const r = rateOf(req.user.base_currency) ?? 1;
   const end = parseMonth(req.query.month);
   const months = Math.min(Math.max(Number(req.query.months) || 12, 1), 36);
@@ -159,9 +162,9 @@ router.get('/trend', async (req, reply) => {
     out.push({ month: m, spent: round2((map[m]?.spent ?? 0) * r), income: round2((map[m]?.income ?? 0) * r) });
   }
   return reply.send({ currency: req.user.base_currency, months: out });
-});
+}
 
-router.get('/analytics', async (req, reply) => {
+async function analytics(req, reply) {
   const uid = req.user.id;
   const r = rateOf(req.user.base_currency) ?? 1;
   const to = date(req.query.to ?? todayStr(), { field: 'To' });
@@ -293,6 +296,10 @@ router.get('/analytics', async (req, reply) => {
     byCurrency,
     largest,
   });
-});
+}
 
+module.exports = async function routes(router) {
+  router.get('/overview', overview);
+  router.get('/trend', trend);
+  router.get('/analytics', analytics);
 };

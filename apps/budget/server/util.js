@@ -1,4 +1,5 @@
 'use strict';
+// Input checks for Florin's routes: each throws a 400 with a sentence the page shows as it is.
 class HttpError extends Error {
   constructor(status, message) {
     super(message);
@@ -7,8 +8,6 @@ class HttpError extends Error {
 }
 
 const bad = (msg) => new HttpError(400, msg);
-
-const asyncH = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 function str(v, { field, min = 0, max = 200, optional = false } = {}) {
   if (v === undefined || v === null) {
@@ -19,13 +18,6 @@ function str(v, { field, min = 0, max = 200, optional = false } = {}) {
   if (s.length < min) throw bad(min <= 1 ? `${field} is required` : `${field} must be at least ${min} characters`);
   if (s.length > max) throw bad(`${field} must be at most ${max} characters`);
   return s;
-}
-
-function email(v, opts = {}) {
-  const s = str(v, { field: 'Email', max: 254, ...opts });
-  if (s === undefined) return s;
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)) throw bad('Please enter a valid email address');
-  return s.toLowerCase();
 }
 
 function num(v, { field, min = -Infinity, max = Infinity, optional = false } = {}) {
@@ -58,13 +50,6 @@ function oneOf(v, values, { field, optional = false } = {}) {
   return v;
 }
 
-function password(v, field = 'Password') {
-  const s = String(v ?? '');
-  if (s.length < 8) throw bad(`${field} must be at least 8 characters`);
-  if (s.length > 200) throw bad(`${field} is too long`);
-  return s;
-}
-
 const round2 = (n) => Math.round(n * 100) / 100;
 
-module.exports = { HttpError, bad, asyncH, str, email, num, date, oneOf, password, round2 };
+module.exports = { HttpError, bad, str, num, date, oneOf, round2 };

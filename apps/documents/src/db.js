@@ -12,25 +12,8 @@ const { DatabaseSync } = require('node:sqlite');
 const path = require('node:path');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
-
-function tx(db, fn) {
-  db.exec('BEGIN');
-  try {
-    const out = fn();
-    db.exec('COMMIT');
-    return out;
-  } catch (e) {
-    db.exec('ROLLBACK');
-    throw e;
-  }
-}
-
-// Coloane adăugate după prima versiune; verificarea face pasul repetabil pe baze de date existente.
-function addColumn(db, table, column, definition) {
-  if (!db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === column)) {
-    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
-  }
-}
+// tranzacții și coloane adăugate după prima versiune (addColumn verifică înainte, deci pasul se poate repeta)
+const { tx, addColumn } = require('../../../src/core/sqlite');
 
 function openDb(dir) {
   const uploadDir = path.join(dir, 'uploads');

@@ -281,8 +281,8 @@ function applyPending() {
     [path.join(stage, 'private', 'cookies'), cookiesDir],
     // the apps' folders (backups from 4.0 on), each replaced as a whole
     ...(Array.isArray(ready.apps) ? ready.apps.filter((a) => APP_IDS.includes(a)) : []).flatMap((id) => [
-      [config.appDir(id), path.join(journal.aside, 'apps', id)],
-      [path.join(stage, 'apps', id), config.appDir(id)],
+      [config.appDataDir(id), path.join(journal.aside, 'apps', id)],
+      [path.join(stage, 'apps', id), config.appDataDir(id)],
     ]),
   ];
   const save = () => fs.writeFileSync(journalPath, JSON.stringify(journal));

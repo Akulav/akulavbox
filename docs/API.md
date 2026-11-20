@@ -11,6 +11,8 @@ The other apps (`/docs`, `/manga`, `/budget`) use the same sign-in through the H
 | POST | `/api/login` | `{ username, password }` → `{ token, role, id, username, weak_password }`, and sets the `akb_session` cookie. Rate limited (429) |
 | POST | `/api/logout` | Clears the `akb_session` cookie (the page forgets its stored token) |
 | POST | `/api/session/resume` | Cookie only, same origin: → `{ token, id, username, role }` for a page that lost its stored token. Other origins get 403 |
+| GET | `/api/session/me` | Cookie only, for the shared account menu (`hub/account.js`): `{ id, username, role, avatar }`; `avatar` is `/api/session/avatar?v=<version>` or `null`. 401 when signed out |
+| GET | `/api/session/avatar` | Cookie only: the AkulavBox profile picture as an image (PNG, JPEG, WebP or GIF), cached until its `?v=` changes. 404 without one |
 | GET | `/`, `/login`, `/admin`, `/box/` | The launcher, the sign-in page (`?next=/path` to come back to, `?out=1` after signing out), the Admin console, AkulavBox's page |
 | GET | `/shared/:hash` | A publicly shared file (supports Range) |
 
@@ -147,12 +149,12 @@ Cookie sign-in. Changes need the header `X-Requested-With: florin`.
 | Method | Path | |
 | --- | --- | --- |
 | GET | `/budget/api/config` · `/budget/api/currencies` | App version and default currency · exchange rates |
-| GET / PATCH | `/budget/api/auth/me` | The account: `{ user: { id, name, username, role, baseCurrency } }` / `{ name?, baseCurrency? }` |
+| GET / PATCH | `/budget/api/auth/me` | The account: `{ user: { id, name, username, role, baseCurrency, monthlyBudget } }` / `{ name?, baseCurrency?, monthlyBudget? }`. `monthlyBudget` 0 or empty: the total budget is the sum of the category budgets |
 | GET / POST | `/budget/api/categories` | / `{ name, icon, color, kind, budget }` |
 | PATCH / DELETE | `/budget/api/categories/:id` | |
 | GET / POST | `/budget/api/transactions` | Filters `?from=&to=&kind=&category=&q=` / `{ kind, amount, currency, date, categoryId, payee, note }` |
 | PATCH / DELETE | `/budget/api/transactions/:id` | |
 | GET | `/budget/api/transactions/export.csv` · `/payees` | CSV of the (filtered) transactions · known payees |
-| GET | `/budget/api/stats/overview` · `/trend` · `/analytics` | Dashboard and chart data |
+| GET | `/budget/api/stats/overview` · `/trend` · `/analytics` | Dashboard and chart data. The overview's `totals.budget` is the overall monthly budget when set, else `totals.categoryBudgets` |
 | GET · PATCH | `/budget/api/admin/stats` · `/budget/api/admin/settings` | Admins: totals · `{ defaultCurrency }` |
 | PUT · POST | `/budget/api/admin/rates/:code` · `/rates/refresh` | Admins: `{ rate }` · fetch the latest rates |

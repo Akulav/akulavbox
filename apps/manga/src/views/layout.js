@@ -47,22 +47,16 @@ function nav(req, active) {
         ${u?.role === 'admin' ? link('/admin', 'Admin', 'admin') : ''}
       </nav>
       <div class="header-actions">
-        <button class="icon-btn theme-toggle" type="button" aria-label="Switch light/dark theme" data-theme-toggle>${icon.sun}${icon.moon}</button>
         ${u
           ? html`<a class="btn btn-primary btn-sm upload-btn" href="/upload">${icon.upload}<span>Upload</span></a>
-            <details class="user-menu">
-              <summary aria-label="Account menu">${avatar(u.username)}</summary>
-              <div class="menu">
-                <div class="menu-head">Signed in as <strong>${u.username}</strong></div>
-                <a href="/u/${u.username}">Public profile</a>
-                <a href="/me">My library</a>
-                <a href="/account">Account</a>
-                ${u.role === 'admin' ? html`<a href="/admin">Moderation</a>` : ''}
-                <a href="~/">All apps</a>
-                <form method="post" action="/logout">${csrfField(req)}<button type="submit">Log out</button></form>
-              </div>
-            </details>`
-          : html`<a class="btn btn-ghost btn-sm" href="~/">All apps</a><a class="btn btn-primary btn-sm" href="/login">Log in</a>`}
+            <akb-account accent="#f03862" username="${u.username}" role="${u.role}">
+              <a href="/u/${u.username}">Public profile</a>
+              <a href="/me">My library</a>
+              <a href="/account">Koma Shelf account</a>
+              ${u.role === 'admin' ? html`<a href="/admin">Moderation</a>` : ''}
+            </akb-account>`
+          : html`<button class="icon-btn theme-toggle" type="button" aria-label="Switch light/dark theme" data-theme-toggle>${icon.sun}${icon.moon}</button>
+            <a class="btn btn-ghost btn-sm" href="~/">All apps</a><a class="btn btn-primary btn-sm" href="/login">Log in</a>`}
       </div>
     </div>
   </header>`;
@@ -82,13 +76,15 @@ function layout(req, { title, description, body, active, bodyClass = '', og = {}
 <title>${fullTitle}</title>
 <meta name="description" content="${desc}">
 <meta name="color-scheme" content="dark light">
-<meta name="theme-color" content="#0d0c11" media="(prefers-color-scheme: dark)">
-<meta name="theme-color" content="#f6f3ee" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d1518" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f3f5f4" media="(prefers-color-scheme: light)">
 <link rel="icon" href="/favicon.ico" sizes="32x32">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/site.webmanifest">
 <link rel="preload" href="/fonts/dela-gothic-one-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="/static/app.css?v=${req.site.assetRev}">
 <meta property="og:site_name" content="${site}">
 <meta property="og:title" content="${title || site}">
@@ -97,7 +93,8 @@ function layout(req, { title, description, body, active, bodyClass = '', og = {}
 ${og.url ? html`<meta property="og:url" content="${base}${og.url}"><link rel="canonical" href="${base}${og.url}">` : ''}
 ${og.image ? html`<meta property="og:image" content="${base}${og.image}"><meta name="twitter:card" content="summary_large_image">` : html`<meta property="og:image" content="${base}/icon-512.png">`}
 ${og.noindex ? html`<meta name="robots" content="noindex">` : ''}
-<script>try{var t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+<script src="~/hub/theme.js"></script>
+${req.user ? html`<script src="~/hub/account.js" defer></script>` : ''}
 </head>
 <body class="${bodyClass}" data-root="${req.site.base}">
 ${chrome ? nav(req, active) : ''}

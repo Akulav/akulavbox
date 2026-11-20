@@ -36,6 +36,22 @@ module.exports = async function appsCheck({ api, ok, base, tmp, login, adminToke
   const resumed = await json(resume);
   ok(resume.status === 200 && resumed?.token && resumed.username === 'admin', 'a page with only the cookie gets its token back');
   ok((await get('/api/session/resume', { cookie: jar, method: 'POST', headers: { Origin: 'https://evil.example' } })).status === 403, 'other sites can’t exchange the cookie for a token');
+
+  // the shared account menu (hub/account.js): who is signed in, and the AkulavBox profile picture
+  ok((await get('/api/session/me')).status === 401, 'the account menu needs the cookie');
+  const meBefore = await json(await get('/api/session/me', { cookie: jar }));
+  ok(meBefore?.username === 'admin' && meBefore.role === 'admin' && meBefore.avatar === null, 'the account menu learns who is signed in (no picture yet)');
+  ok((await get('/api/session/avatar', { cookie: jar })).status === 404, 'no picture: 404');
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+  await api('/api/user/profile', { method: 'PATCH', body: { profile_image: `data:image/png;base64,${png.toString('base64')}` } });
+  const meAfter = await json(await get('/api/session/me', { cookie: jar }));
+  ok(/^\/api\/session\/avatar\?v=[0-9a-f]{12}$/.test(meAfter?.avatar || ''), 'with a profile picture, it gets a versioned URL', meAfter?.avatar);
+  const pic = await get(meAfter.avatar, { cookie: jar });
+  ok(pic.status === 200 && pic.headers.get('content-type') === 'image/png' && Buffer.from(await pic.arrayBuffer()).equals(png) && /immutable/.test(pic.headers.get('cache-control') || ''), 'every app shows the same picture (served as the image, cached until it changes)');
+  ok((await get(meAfter.avatar)).status === 401, 'the picture needs the cookie too');
+  await api('/api/user/profile', { method: 'PATCH', body: { profile_image: null } });
+  ok((await json(await get('/api/session/me', { cookie: jar })))?.avatar === null, 'removing the picture removes it everywhere');
+  for (const page of ['/hub/account.js', '/hub/account.css', '/hub/theme.js']) ok((await get(page)).status === 200, `serves ${page}`);
   // Koma Shelf needs sharp, an optional dependency (CI also runs without the optional native modules)
   let sharp = null;
   try { sharp = require('sharp'); } catch (e) { /* optional */ }
@@ -81,6 +97,19 @@ module.exports = async function appsCheck({ api, ok, base, tmp, login, adminToke
   const tx = await get('/budget/api/transactions', { cookie: jar, method: 'POST', body: txBody, headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'florin' } });
   ok(tx.status === 201 || tx.status === 200, 'add a transaction', `${tx.status} ${JSON.stringify(await json(tx))}`);
   ok(fs.existsSync(path.join(tmp, 'budget', 'florin.db')), 'its database lives in budget/ of the data folder');
+  const fjson = { cookie: jar, headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'florin' } };
+  const setBudget = (v) => get('/budget/api/auth/me', { ...fjson, method: 'PATCH', body: JSON.stringify({ monthlyBudget: v }) });
+  const overview = async () => {
+    const r = await get('/budget/api/stats/overview', { cookie: jar });
+    const body = await json(r);
+    if (!body?.totals) throw new Error(`Florin's overview answered ${r.status}: ${JSON.stringify(body)}`);
+    return body.totals;
+  };
+  const sumOfCategories = (await overview()).categoryBudgets;
+  ok((await json(await setBudget(1234.5))).user.monthlyBudget === 1234.5 && (await overview()).budget === 1234.5, 'an overall monthly budget replaces the sum of the categories');
+  ok((await setBudget(-5)).status === 400, 'a negative monthly budget is refused');
+  await setBudget('');
+  ok((await overview()).budget === sumOfCategories, 'clearing it goes back to the sum of the category budgets');
   const page = await get('/budget/', { cookie: jar });
   const pageText = await page.text();
   ok(page.status === 200 && /src="\/budget\/app\.js"/.test(pageText), 'serves the page under /budget/');

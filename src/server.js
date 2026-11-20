@@ -141,7 +141,7 @@ const start = async () => {
     const schema = db.schema;
     console.log(`${config.name} v${config.version} by ${config.author} is running on http://localhost:${config.port}`);
     console.log(`  storage: ${config.storageDir}`);
-    for (const note of config.layoutNotes) console.log(`  ${note}`);
+    for (const note of config.layoutNotes) console.log(`  ${note.text}`);
     for (const a of apps.APPS) if (!a.core) console.log(`  ${a.name} (${a.path}): ${apps.status(a.id) === 'running' ? 'running' : `not running: ${apps.failures.get(a.id) || 'off'}`}`);
     if (schema && schema.backup) console.log(`  database upgraded from schema ${schema.from} to ${schema.to} (backup: ${schema.backup})`);
     // the swap ran before anything could log: record its outcome now

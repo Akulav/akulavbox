@@ -2,7 +2,7 @@
 // (categories, currencies) every page uses. `store.version` goes up after any change, and
 // pages that load data watch it to reload.
 import { reactive, computed, watch } from 'vue';
-import { api, toLogin } from './api.js';
+import { api } from './api.js';
 
 export const store = reactive({
   user: undefined, // undefined = loading, null = no access
@@ -29,17 +29,7 @@ export async function loadUser() {
 
 export const loadConfig = () => api.get('/config').then((c) => (store.config = c)).catch(() => {});
 
-/** Signing out is shared by every app: forget AkulavBox's stored token too */
-export async function logout() {
-  await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
-  try {
-    for (const k of ['akulavToken', 'akulavRole', 'akulavWeak']) localStorage.removeItem(k);
-  } catch {
-    /* storage unavailable */
-  }
-  window.location.assign('/login?out=1');
-}
-export { toLogin };
+// signing out is in the shared account menu (hub/account.js)
 
 /* ───────────── Reference data ───────────── */
 export const loadCategories = () => api.get('/categories').then((d) => (store.categories = d.categories));
@@ -54,22 +44,26 @@ export function bump() {
 export const openTransaction = (transaction = null, defaults = {}) => (store.txModal = { transaction, defaults });
 export const closeTransaction = () => (store.txModal = null);
 
-/* ───────────── Theme ───────────── */
+/* ───────────── Theme (shared by every app: akulavTheme, see hub/theme.js) ───────────── */
 function readPref() {
   try {
-    return localStorage.getItem('florin-theme') || 'system';
+    return localStorage.getItem('akulavTheme') || 'system';
   } catch {
     return 'system';
   }
 }
 export const isDark = computed(() => store.themePref === 'dark' || (store.themePref === 'system' && store.systemDark));
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => (store.systemDark = e.matches));
+// the account menu or another tab changed it
+window.addEventListener('akb-theme', (e) => (store.themePref = e.detail.preference));
+window.addEventListener('storage', (e) => e.key === 'akulavTheme' && (store.themePref = e.newValue || 'system'));
 watch(
   [isDark, () => store.themePref],
   ([dark, pref]) => {
     document.documentElement.classList.toggle('dark', dark);
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
     try {
-      localStorage.setItem('florin-theme', pref);
+      if (pref !== readPref()) localStorage.setItem('akulavTheme', pref);
     } catch {
       /* storage unavailable */
     }
@@ -80,8 +74,8 @@ watch(
 /** Concrete colors for the charts (SVG attributes need real values) */
 export const chartTheme = computed(() =>
   isDark.value
-    ? { grid: '#232c28', axis: '#808b85', text: '#eef2ef', muted: '#3a4540', surface: '#131917', spend: '#3987e5', income: '#199e70', prev: '#5b6761' }
-    : { grid: '#eceeea', axis: '#7f8882', text: '#121614', muted: '#d5dad5', surface: '#ffffff', spend: '#2a78d6', income: '#1baf7a', prev: '#b3bab5' },
+    ? { grid: '#21323a', axis: '#8ea1a4', text: '#e3ebe9', muted: '#34474d', surface: '#131e22', spend: '#3987e5', income: '#199e70', prev: '#5c6f74' }
+    : { grid: '#e6ebea', axis: '#58696d', text: '#141f22', muted: '#d3dbda', surface: '#ffffff', spend: '#2a78d6', income: '#1baf7a', prev: '#a9b6b8' },
 );
 
 /* ───────────── Toasts ───────────── */

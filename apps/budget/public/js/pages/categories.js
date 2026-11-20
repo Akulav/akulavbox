@@ -85,6 +85,56 @@ const CategoryEditor = {
     </Modal>`,
 };
 
+/** The overall monthly limit; empty = the sum of the category budgets */
+const TotalBudgetEditor = {
+  props: { categoryBudgets: Number },
+  emits: ['close'],
+  data: () => ({ value: store.user.monthlyBudget > 0 ? String(store.user.monthlyBudget) : '', busy: false, error: '' }),
+  computed: {
+    symbol: () => currencySymbol(store.user.baseCurrency),
+    hint() {
+      return `In ${store.user.baseCurrency}. Leave empty to use the sum of your category budgets (${money0(this.categoryBudgets, store.user.baseCurrency)}).`;
+    },
+  },
+  methods: {
+    onInput(e) {
+      this.value = e.target.value.replace(/[^\d.,]/g, '').replace(',', '.');
+      e.target.value = this.value;
+    },
+    async save() {
+      this.busy = true;
+      this.error = '';
+      try {
+        store.user = (await api.patch('/auth/me', { monthlyBudget: this.value === '' ? 0 : Number(this.value) })).user;
+        toast.success(this.value ? 'Monthly budget saved' : 'Using the sum of your category budgets');
+        bump();
+        this.$emit('close');
+      } catch (err) {
+        this.error = err.message;
+      } finally {
+        this.busy = false;
+      }
+    },
+  },
+  template: /*html*/ `
+    <Modal title="Total monthly budget" size="sm" @close="$emit('close')">
+      <form @submit.prevent="save" class="space-y-4">
+        <Field label="Monthly budget" :hint="hint">
+          <div class="relative">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-ink-3">{{ symbol }}</span>
+            <input class="input num has-prefix" inputmode="decimal" :value="value" @input="onInput" placeholder="No overall limit" />
+          </div>
+        </Field>
+        <p v-if="error" class="rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">{{ error }}</p>
+        <button type="submit" class="hidden"></button>
+      </form>
+      <template #footer>
+        <Btn variant="secondary" @click="$emit('close')">Cancel</Btn>
+        <Btn @click="save" :loading="busy">Save</Btn>
+      </template>
+    </Modal>`,
+};
+
 const CategoryCard = {
   components: { CategoryIcon },
   props: { c: { type: Object, required: true }, kind: String, currency: String },
@@ -127,11 +177,12 @@ const CategoryCard = {
 };
 
 export default {
-  components: { CategoryEditor, CategoryCard },
+  components: { CategoryEditor, CategoryCard, TotalBudgetEditor },
   data: () => ({
     store,
     kind: 'expense',
     editing: null, // null | 'new' | category
+    editingTotal: false,
     deleting: null,
     kinds: [
       { value: 'expense', label: 'Expenses' },
@@ -149,8 +200,18 @@ export default {
     archived() {
       return this.list.filter((c) => c.archived);
     },
-    totalBudget() {
+    categoryBudgets() {
       return this.active.reduce((a, c) => a + c.budget, 0);
+    },
+    /** The overall budget when one is set, else the sum of the categories' */
+    totalBudget() {
+      return store.user.monthlyBudget > 0 ? store.user.monthlyBudget : this.categoryBudgets;
+    },
+    budgetNote() {
+      if (!(store.user.monthlyBudget > 0)) return this.categoryBudgets ? 'The sum of your category budgets' : 'Set one here, or give categories a budget';
+      const diff = this.totalBudget - this.categoryBudgets;
+      if (!this.categoryBudgets) return 'Your overall limit';
+      return diff >= 0 ? `Categories add up to ${money0(this.categoryBudgets, this.cur)}` : `Categories add up to ${money0(this.categoryBudgets, this.cur)}, more than this`;
     },
     totalSpent() {
       return this.active.reduce((a, c) => a + c.monthSpent, 0);
@@ -190,12 +251,16 @@ export default {
         <Btn icon="plus" @click="editing = 'new'">New category</Btn>
       </PageHeader>
 
-      <div v-if="kind === 'expense' && totalBudget > 0" class="card mb-5 flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:gap-8">
-        <div>
-          <div class="text-xs text-ink-3">Total monthly budget</div>
-          <div class="num font-display text-2xl font-extrabold">{{ money0(totalBudget, cur) }}</div>
+      <div v-if="kind === 'expense'" class="card mb-5 flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:gap-8">
+        <div class="flex items-start gap-2">
+          <div>
+            <div class="text-xs text-ink-3">Total monthly budget</div>
+            <div class="num font-display text-2xl font-extrabold">{{ totalBudget ? money0(totalBudget, cur) : '—' }}</div>
+            <div class="text-xs text-ink-3">{{ budgetNote }}</div>
+          </div>
+          <IconButton icon="pencil" label="Edit total monthly budget" @click="editingTotal = true" />
         </div>
-        <div class="flex-1">
+        <div v-if="totalBudget > 0" class="flex-1">
           <div class="mb-1.5 flex justify-between text-xs text-ink-3">
             <span><span class="num font-semibold text-ink">{{ money(totalSpent, cur) }}</span> spent this month</span>
             <span class="num">{{ money(Math.max(totalBudget - totalSpent, 0), cur) }} left</span>
@@ -220,7 +285,8 @@ export default {
         </div>
       </template>
 
-      <CategoryEditor v-if="editing" :category="editing === 'new' ? null : editing" :kind="kind" @close="editing = null" />
+      <TotalBudgetEditor v-if="editingTotal" :category-budgets="categoryBudgets" @close="editingTotal = false" />
+      <CategoryEditor v-if="editing":category="editing === 'new' ? null : editing" :kind="kind" @close="editing = null" />
       <ConfirmDialog v-if="deleting" :title="'Delete “' + deleting.name + '”?'" :message="deleteMessage" :confirm="remove" @close="deleting = null" />
     </div>`,
 };

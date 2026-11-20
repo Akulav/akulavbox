@@ -9,17 +9,16 @@ async function main() {
   try { await api('/api/session', { method: 'POST' }); } catch (e) { if (e.status === 401) return; }
 
   let data;
-  let profile = {};
   try {
-    [data, profile] = await Promise.all([api('/api/apps'), api('/api/user/profile').catch(() => ({}))]);
+    data = await api('/api/apps');
   } catch (e) {
     $('boot').textContent = e.message;
     return;
   }
-  const user = { ...data.user, profile_image: profile.profile_image };
+  const user = data.user;
 
   $('lockup').innerHTML = `${mark(30)}<b class="brand-text">AkulavBox</b>`;
-  accountMenu($('account'), user, { admin: user.role === 'admin' });
+  accountMenu($('account'), user);
 
   const h = new Date().getHours();
   $('greet').textContent = `${h < 5 ? 'Good night' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'}, ${user.username}`;

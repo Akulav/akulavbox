@@ -1,19 +1,16 @@
 const fs = require('fs');
 const path = require('path');
+const { addColumn, runSteps } = require('./sqlite');
 
 // ---------------------------------------------------------------------------
-// Versioned schema migrations, tracked with SQLite's `PRAGMA user_version`.
+// AkulavBox's schema steps (the accounts database), run with core/sqlite.js
+// runSteps and counted with SQLite's `PRAGMA user_version`.
 //
 // Databases made by versions before 2.0 have user_version = 0 but already
 // contain most tables, so every step is idempotent: tables use IF NOT EXISTS
 // and columns are only added when missing. Append new steps at the end and
 // never edit a step that has shipped.
 // ---------------------------------------------------------------------------
-
-const columnsOf = (db, table) => db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name);
-function addColumn(db, table, column, definition) {
-  if (!columnsOf(db, table).includes(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
-}
 
 const MIGRATIONS = [
   {
@@ -375,33 +372,27 @@ const LATEST = MIGRATIONS.length;
  * data/backups before the first pending step, so an upgrade can always be undone.
  */
 function migrate(db, { backupsDir, version, log = console.log } = {}) {
-  const current = db.prepare('PRAGMA user_version').get().user_version;
-  if (current >= LATEST) return { from: current, to: current, backup: null };
-
-  const hasData = !!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users'").get();
-  let backup = null;
-  if (hasData && backupsDir) {
+  // an existing database is snapshotted first, so an upgrade can always be undone
+  const snapshot = (current) => {
+    const hasData = !!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users'").get();
+    if (!hasData || !backupsDir) return null;
     fs.mkdirSync(backupsDir, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    backup = path.join(backupsDir, `akulavbox-schema${current}-before-v${version || 'next'}-${stamp}.db`);
-    db.exec(`VACUUM INTO '${backup.replace(/'/g, "''")}'`);
-    log(`[db] Backed up the database to ${backup}`);
+    const file = path.join(backupsDir, `akulavbox-schema${current}-before-v${version || 'next'}-${stamp}.db`);
+    db.exec(`VACUUM INTO '${file.replace(/'/g, "''")}'`);
+    log(`[db] Backed up the database to ${file}`);
+    return file;
+  };
+  try {
+    const r = runSteps(db, MIGRATIONS, {
+      before: snapshot,
+      describe: (n, step) => `Database migration ${n} (${step.name})`,
+      onStep: (n, step) => log(`[db] Migration ${n}/${LATEST}: ${step.name}`),
+    });
+    return { from: r.from, to: r.to, backup: r.extra || null };
+  } catch (e) {
+    throw new Error(`${e.message}${e.extra ? `\nYour data is safe in ${e.extra}` : ''}`);
   }
-
-  for (let v = current; v < LATEST; v++) {
-    const step = MIGRATIONS[v];
-    db.exec('BEGIN');
-    try {
-      step.up(db);
-      db.exec(`PRAGMA user_version = ${v + 1}`);
-      db.exec('COMMIT');
-      log(`[db] Migration ${v + 1}/${LATEST}: ${step.name}`);
-    } catch (e) {
-      db.exec('ROLLBACK');
-      throw new Error(`Database migration ${v + 1} (${step.name}) failed: ${e.message}${backup ? `\nYour data is safe in ${backup}` : ''}`);
-    }
-  }
-  return { from: current, to: LATEST, backup };
 }
 
-module.exports = { migrate, LATEST, addColumn, columnsOf };
+module.exports = { migrate, LATEST };

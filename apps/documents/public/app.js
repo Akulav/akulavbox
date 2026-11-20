@@ -1,7 +1,7 @@
 // e-Management: aplicația (rutele, bara de sus). Importat direct (fără import map), ca politica CSP
 // să poată interzice orice script inline. Modulele sunt în js/.
 import { createApp } from '/docs/vendor/vue.js';
-import { store, spaceLabel, clearSession, api, switchSpace, loadSession } from '/docs/js/state.js';
+import { store, spaceLabel, switchSpace, loadSession } from '/docs/js/state.js';
 import { DialogHost, Brand, NoAccess } from '/docs/js/ui.js';
 import { DocsView } from '/docs/js/documents.js';
 import { CategoriesView } from '/docs/js/categories.js';
@@ -25,6 +25,8 @@ const App = {
       const item = ROUTES.find((n) => n[0] === store.route);
       return item ? item[2] : 'DocsView';
     },
+    // culoarea spațiului, și pentru meniul contului
+    accent: () => (store.space === 'work' ? '#0f766e' : '#2563eb'),
     pageClass() {
       return { wide: this.view === 'CategoriesView', fit: this.view === 'SettingsView' };
     },
@@ -33,20 +35,7 @@ const App = {
       return (item ? item[1] + ' · ' + spaceLabel() + ' · ' : '') + 'e-Management';
     },
   },
-  methods: {
-    switchSpace,
-    async logout() {
-      // ieșirea este comună tuturor aplicațiilor; chiar dacă serverul nu răspunde, pagina nu mai afișează datele
-      clearSession();
-      await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
-      try {
-        localStorage.removeItem('akulavToken');
-        localStorage.removeItem('akulavRole');
-        localStorage.removeItem('akulavWeak');
-      } catch {}
-      location.assign('/login?out=1');
-    },
-  },
+  methods: { switchSpace },
   watch: {
     // titlul ferestrei arată pagina și spațiul curent
     title: {
@@ -75,11 +64,8 @@ const App = {
             <nav class="nav">
               <a v-for="n in nav" :key="n[0]" :href="'#' + n[0]" :class="{ on: view === n[2] }">{{ n[1] }}</a>
             </nav>
-            <div class="userbox">
-              <a class="btn sm" href="/" title="Toate aplicațiile">Aplicații</a>
-              <span class="name">{{ store.me.full_name }}</span>
-              <button class="btn sm" @click="logout">Ieșire</button>
-            </div>
+            <!-- meniul contului, comun tuturor aplicațiilor (hub/account.js), cu poza din AkulavBox -->
+            <div class="userbox"><akb-account :accent="accent" :username="store.me.username" :role="store.me.role"></akb-account></div>
           </div>
         </header>
         <main class="page" :class="pageClass"><component :is="view" /></main>
@@ -90,5 +76,8 @@ const App = {
     <div v-if="store.toast" class="toast" :class="{ err: store.toast.err }" :role="store.toast.err ? 'alert' : 'status'" @click="store.toast = null">{{ store.toast.msg }}</div>`,
 };
 
-createApp(App).mount('#app');
+const app = createApp(App);
+// <akb-account> este meniul comun al contului (hub/account.js), nu o componentă Vue
+app.config.compilerOptions.isCustomElement = (tag) => tag.startsWith('akb-');
+app.mount('#app');
 loadSession();

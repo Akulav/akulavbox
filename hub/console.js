@@ -183,11 +183,9 @@ async function main() {
     $('boot').textContent = e.message;
     return;
   }
-  let profile = {};
-  try { profile = await api('/api/user/profile'); } catch (e) { /* just no avatar */ }
   $('lockup').innerHTML = `${mark(30)}<b class="brand-text">AkulavBox</b>`;
   $('console-chip').innerHTML = `${icon('shield')}Admin`;
-  accountMenu($('account'), { ...s, profile_image: profile.profile_image }, { admin: true });
+  accountMenu($('account'), s);
   $('create-title').innerHTML = `<span style="display:inline-flex;gap:8px;align-items:center">${icon('user-plus')}Create an account</span>`;
   $('create-btn').innerHTML = `${icon('user-plus')}Create`;
   $('refresh').innerHTML = `${icon('rotate')}Refresh`;

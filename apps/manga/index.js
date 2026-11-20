@@ -84,9 +84,8 @@ module.exports = async function manga(app, opts) {
   app.register(require('@fastify/static'), { root: FONTS, prefix: '/fonts/', decorateReply: false, index: false, immutable: true, maxAge: '1y' });
   app.register(require('@fastify/static'), { root: path.join(PUBLIC, 'root'), prefix: '/', decorateReply: false, index: false, wildcard: false, maxAge: '7d' });
 
-  // the one inline script (theme before first paint) is allowed by hash
-  const themeHash = crypto.createHash('sha256').update("try{var t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t}catch(e){}").digest('base64');
-  const csp = ["default-src 'self'", `script-src 'self' 'sha256-${themeHash}'`, "style-src 'self' 'unsafe-inline'", "img-src 'self' data: blob:", "font-src 'self'", "connect-src 'self'", "form-action 'self'", "frame-ancestors 'none'", "base-uri 'none'", "object-src 'none'"].join('; ');
+  // no inline scripts at all: the theme (before first paint) and the account menu come from /hub/
+  const csp = ["default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com", "img-src 'self' data: blob:", "font-src 'self' https://fonts.gstatic.com", "connect-src 'self'", "form-action 'self'", "frame-ancestors 'none'", "base-uri 'none'", "object-src 'none'"].join('; ');
   app.addHook('onSend', async (req, reply) => {
     reply.header('Content-Security-Policy', csp);
     reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');

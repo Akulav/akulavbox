@@ -1,5 +1,7 @@
 const path = require('path');
+const crypto = require('crypto');
 const config = require('../core/config');
+const db = require('../core/db');
 const session = require('../core/session');
 const apps = require('../core/apps');
 const { verifyUser, readToken } = require('../core/auth');
@@ -37,6 +39,27 @@ module.exports = async function (fastify) {
     const s = session.userOf(request, reply);
     if (!s) return reply.code(401).send({ error: 'Not signed in' });
     return { token: s.token, id: s.user.id, username: s.user.username, role: s.user.role };
+  });
+
+  // For the account menu of the other apps (hub/account.js), which only have the cookie: who is
+  // signed in, and their AkulavBox profile picture. Read-only; other sites can't read the answer
+  // (no CORS with credentials) and SameSite=Lax keeps the cookie off their requests anyway.
+  const pictureOf = db.prepare('SELECT profile_image FROM users WHERE id = ?');
+  const pictureVersion = (img) => crypto.createHash('sha1').update(img).digest('hex').slice(0, 12);
+  fastify.get('/api/session/me', async (request, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    const s = session.userOf(request, reply);
+    if (!s) return reply.code(401).send({ error: 'Not signed in' });
+    const img = pictureOf.get(s.user.id)?.profile_image;
+    return { id: s.user.id, username: s.user.username, role: s.user.role, avatar: img ? `/api/session/avatar?v=${pictureVersion(img)}` : null };
+  });
+  fastify.get('/api/session/avatar', async (request, reply) => {
+    const s = session.userOf(request, reply);
+    if (!s) return reply.code(401).send({ error: 'Not signed in' });
+    const m = /^data:(image\/(?:png|jpeg|webp|gif));base64,(.+)$/s.exec(pictureOf.get(s.user.id)?.profile_image || '');
+    if (!m) return reply.code(404).send({ error: 'No profile picture' });
+    // the URL carries the picture's version (?v=), so it may be kept until it changes
+    return reply.type(m[1]).header('Cache-Control', 'private, max-age=31536000, immutable').header('X-Content-Type-Options', 'nosniff').send(Buffer.from(m[2], 'base64'));
   });
 
   fastify.post('/api/logout', async (request, reply) => {

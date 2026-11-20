@@ -7,13 +7,7 @@ const store = {
   set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) { /* private mode */ } },
 };
 
-// ---------- theme (shared with AkulavBox: akulavTheme) ----------
-export function applyTheme() {
-  let t = store.get('akulavTheme');
-  if (!t || t === 'system') t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
-  document.documentElement.dataset.theme = t;
-  return t;
-}
+// ---------- theme (shared by every app: akulavTheme, applied before paint by hub/theme.js) ----------
 export function toggleTheme() {
   const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
   store.set('akulavTheme', next);
@@ -43,11 +37,6 @@ export function saveSession(token, { weak } = {}) {
 }
 export function forgetSession() {
   for (const k of ['akulavToken', 'akulavRole', 'akulavWeak']) store.set(k, null);
-}
-export async function signOut() {
-  forgetSession();
-  await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
-  location.assign('/login');
 }
 /** A path on this server to go to after signing in, never another site */
 export function safeNext(n) {
@@ -191,31 +180,9 @@ export function dialog({ title, message = '', fields = [], confirm = 'OK', dange
   });
 }
 
-/** The account menu in the top bar of the launcher and the console */
-export function accountMenu(root, user, { admin } = {}) {
-  root.innerHTML = `
-    <button class="icon-btn" data-theme-btn title="Switch theme" aria-label="Switch theme">${icon(document.documentElement.dataset.theme === 'dark' ? 'sun' : 'moon')}</button>
-    <div class="menu-wrap">
-      <button class="icon-btn" style="width:auto;height:auto;padding:2px;border-radius:50%" data-menu-btn aria-haspopup="menu" aria-expanded="false" title="${esc(user.username)}">${avatar(user.username, user.profile_image)}</button>
-      <div class="menu" role="menu" hidden>
-        <div class="menu-head"><b>${esc(user.username)}</b><br><span class="muted" style="font-size:12px;text-transform:capitalize">${esc(user.role)}</span></div>
-        <a href="/" role="menuitem">${icon('grid')}All apps</a>
-        <a href="/box/#/profile" role="menuitem">${icon('user')}Profile &amp; password</a>
-        ${admin ? `<a href="/admin" role="menuitem">${icon('shield')}Admin console</a>` : ''}
-        <button type="button" role="menuitem" data-signout>${icon('logout')}Sign out</button>
-      </div>
-    </div>`;
-  const btn = root.querySelector('[data-menu-btn]');
-  const menu = root.querySelector('.menu');
-  const set = (open) => { menu.hidden = !open; btn.setAttribute('aria-expanded', String(open)); };
-  btn.onclick = (e) => { e.stopPropagation(); set(menu.hidden); };
-  document.addEventListener('click', (e) => { if (!menu.contains(e.target)) set(false); });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') set(false); });
-  root.querySelector('[data-signout]').onclick = () => signOut();
-  root.querySelector('[data-theme-btn]').onclick = (e) => {
-    const t = toggleTheme();
-    e.currentTarget.innerHTML = icon(t === 'dark' ? 'sun' : 'moon');
-  };
+/** The account menu in the top bar: the one every app shares (hub/account.js) */
+export function accountMenu(root, user) {
+  root.innerHTML = `<akb-account accent="#E8A33D" username="${esc(user.username)}" role="${esc(user.role)}"></akb-account>`;
 }
 
 export function madeBy(version) {

@@ -73,7 +73,7 @@ const APP_ENTRY = /^apps\/(documents|manga|budget)\/((?:[\w.-]+\/)*[\w.-]+)$/;
 function listApps() {
   const files = [], dbs = [];
   for (const id of APP_IDS) {
-    const root = config.appDir(id);
+    const root = config.appDataDir(id);
     const walk = (dir, rel) => {
       let entries = [];
       try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return; }

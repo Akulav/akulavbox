@@ -11,7 +11,7 @@ let data = null;
 
 function openData() {
   if (data) return data;
-  const dataDir = config.appDir('manga');
+  const dataDir = config.appDataDir('manga');
   const worksDir = path.join(dataDir, 'works');
   const tmpDir = path.join(dataDir, 'tmp');
   fs.mkdirSync(worksDir, { recursive: true });

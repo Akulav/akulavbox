@@ -1,9 +1,11 @@
 'use strict';
 // SQLite through Node's built-in driver (no native addon to compile).
-// Schema changes are numbered migrations; `PRAGMA user_version` remembers how far a database got.
+// Schema changes are numbered steps (src/core/sqlite.js runSteps); `PRAGMA user_version` remembers
+// how far a database got.
 const { DatabaseSync } = require('node:sqlite');
 const path = require('node:path');
 const fs = require('node:fs');
+const { tx, runSteps } = require('../../../src/core/sqlite');
 
 const MIGRATIONS = [
   `
@@ -86,18 +88,7 @@ function openDb(dataDir) {
   fs.mkdirSync(dataDir, { recursive: true });
   const db = new DatabaseSync(path.join(dataDir, 'koma-shelf.sqlite'));
   db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
-  const { user_version: at } = db.prepare('PRAGMA user_version').get();
-  for (let i = at; i < MIGRATIONS.length; i++) {
-    db.exec('BEGIN');
-    try {
-      db.exec(MIGRATIONS[i]);
-      db.exec(`PRAGMA user_version = ${i + 1}`);
-      db.exec('COMMIT');
-    } catch (e) {
-      db.exec('ROLLBACK');
-      throw e;
-    }
-  }
+  runSteps(db, MIGRATIONS, { describe: (n) => `Koma Shelf database migration ${n}` });
   // prepared statements are cached per SQL text
   const cache = new Map();
   const stmt = (sql) => {
@@ -113,17 +104,7 @@ function openDb(dataDir) {
     get: (sql, ...a) => stmt(sql).get(...a),
     all: (sql, ...a) => stmt(sql).all(...a),
     run: (sql, ...a) => stmt(sql).run(...a),
-    tx(fn) {
-      db.exec('BEGIN');
-      try {
-        const r = fn();
-        db.exec('COMMIT');
-        return r;
-      } catch (e) {
-        db.exec('ROLLBACK');
-        throw e;
-      }
-    },
+    tx: (fn) => tx(db, fn),
     close: () => db.close(),
   };
 }

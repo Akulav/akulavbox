@@ -1,4 +1,4 @@
-/* Koma Shelf — ink & paper. Light by default for light systems, dark for dark ones, toggle overrides. */
+/* Koma Shelf: ink and paper, in the theme every app shares. */
 
 @font-face {
   font-family: 'Dela Gothic One';
@@ -17,86 +17,62 @@
   unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
+/* The neutrals and body font are AkulavBox's (frontend/index.html, hub/hub.css), so every app on the
+   server feels like one product; the pink and the Dela Gothic headlines are Koma Shelf's own.
+   The theme is the one every app shares (hub/theme.js sets data-theme before the page paints). */
 :root {
-  --bg: #f6f3ee;
-  --bg-2: #efebe4;
+  --bg: #f3f5f4;
+  --bg-2: #eaeeed;
   --surface: #ffffff;
-  --surface-2: #f1ede6;
-  --line: #e1dbd1;
-  --line-2: #cfc7bb;
-  --text: #16141c;
-  --muted: #6b6573;
+  --surface-2: #ecf0ef;
+  --line: #dbe1e0;
+  --line-2: #c3cecd;
+  --text: #141f22;
+  --muted: #58696d;
   --accent: #e52b57;
   --accent-hover: #cc1f49;
   --accent-soft: rgba(229, 43, 87, 0.1);
   --on-accent: #ffffff;
-  --ok: #138a5b;
-  --ok-soft: rgba(19, 138, 91, 0.1);
-  --danger: #c8283b;
-  --danger-soft: rgba(200, 40, 59, 0.09);
-  --tone: rgba(22, 20, 28, 0.13);
-  --shadow: 0 1px 2px rgba(22, 20, 28, 0.06), 0 8px 24px rgba(22, 20, 28, 0.08);
-  --shadow-lg: 0 2px 6px rgba(22, 20, 28, 0.08), 0 24px 60px rgba(22, 20, 28, 0.18);
-  --header-bg: rgba(246, 243, 238, 0.82);
-  --logo-bg: #16141c;
-  --logo-fg: #f6f3ee;
+  --ok: #1d8a5a;
+  --ok-soft: rgba(29, 138, 90, 0.1);
+  --danger: #cc4034;
+  --danger-soft: rgba(204, 64, 52, 0.09);
+  --tone: rgba(20, 31, 34, 0.13);
+  --shadow: 0 1px 2px rgba(16, 24, 26, 0.06), 0 8px 24px rgba(16, 24, 26, 0.08);
+  --shadow-lg: 0 2px 6px rgba(16, 24, 26, 0.08), 0 24px 60px rgba(16, 24, 26, 0.18);
+  --header-bg: rgba(243, 245, 244, 0.82);
+  --logo-bg: #141f22;
+  --logo-fg: #f3f5f4;
 
-  --font: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Noto Sans JP', sans-serif;
+  --font: Geist, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', 'Noto Sans JP', sans-serif;
   --font-display: 'Dela Gothic One', var(--font);
-  --radius: 12px;
-  --radius-sm: 8px;
+  --radius: 14px;
+  --radius-sm: 10px;
   --gutter: clamp(16px, 4vw, 32px);
   color-scheme: light;
 }
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --bg: #0d0c11;
-    --bg-2: #121118;
-    --surface: #18171f;
-    --surface-2: #211f29;
-    --line: #2a2833;
-    --line-2: #3a3745;
-    --text: #f1ede6;
-    --muted: #9b96a5;
-    --accent: #f03862;
-    --accent-hover: #ff4f76;
-    --accent-soft: rgba(240, 56, 98, 0.14);
-    --ok: #3ccf91;
-    --ok-soft: rgba(60, 207, 145, 0.12);
-    --danger: #ff5a6b;
-    --danger-soft: rgba(255, 90, 107, 0.12);
-    --tone: rgba(241, 237, 230, 0.09);
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
-    --shadow-lg: 0 2px 6px rgba(0, 0, 0, 0.5), 0 30px 70px rgba(0, 0, 0, 0.6);
-    --header-bg: rgba(13, 12, 17, 0.78);
-    --logo-bg: #f1ede6;
-    --logo-fg: #0d0c11;
-    color-scheme: dark;
-  }
-}
 :root[data-theme='dark'] {
-  --bg: #0d0c11;
-  --bg-2: #121118;
-  --surface: #18171f;
-  --surface-2: #211f29;
-  --line: #2a2833;
-  --line-2: #3a3745;
-  --text: #f1ede6;
-  --muted: #9b96a5;
+  --bg: #0d1518;
+  --bg-2: #111b1f;
+  --surface: #131e22;
+  --surface-2: #1c2a2f;
+  --line: #28393f;
+  --line-2: #3a4f56;
+  --text: #e3ebe9;
+  --muted: #8ea1a4;
   --accent: #f03862;
   --accent-hover: #ff4f76;
   --accent-soft: rgba(240, 56, 98, 0.14);
-  --ok: #3ccf91;
-  --ok-soft: rgba(60, 207, 145, 0.12);
-  --danger: #ff5a6b;
-  --danger-soft: rgba(255, 90, 107, 0.12);
-  --tone: rgba(241, 237, 230, 0.09);
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
-  --shadow-lg: 0 2px 6px rgba(0, 0, 0, 0.5), 0 30px 70px rgba(0, 0, 0, 0.6);
-  --header-bg: rgba(13, 12, 17, 0.78);
-  --logo-bg: #f1ede6;
-  --logo-fg: #0d0c11;
+  --ok: #60c798;
+  --ok-soft: rgba(96, 199, 152, 0.12);
+  --danger: #f06c60;
+  --danger-soft: rgba(240, 108, 96, 0.12);
+  --tone: rgba(227, 235, 233, 0.09);
+  --shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 30px 70px rgba(0, 0, 0, 0.6);
+  --header-bg: rgba(13, 21, 24, 0.78);
+  --logo-bg: #e3ebe9;
+  --logo-fg: #0d1518;
   color-scheme: dark;
 }
 
@@ -406,78 +382,6 @@ code {
 }
 :root[data-theme='dark'] .theme-toggle svg:last-child {
   display: none;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .theme-toggle svg:first-child {
-    display: block;
-  }
-  :root:not([data-theme='light']) .theme-toggle svg:last-child {
-    display: none;
-  }
-}
-.user-menu {
-  position: relative;
-}
-.user-menu summary {
-  list-style: none;
-  cursor: pointer;
-  border-radius: 999px;
-}
-.user-menu summary::-webkit-details-marker {
-  display: none;
-}
-.user-menu .menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 10px);
-  min-width: 220px;
-  padding: 6px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-lg);
-  animation: menu-in 0.14s ease-out;
-}
-@keyframes menu-in {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-}
-.menu-head {
-  padding: 10px 12px;
-  font-size: 0.85rem;
-  color: var(--muted);
-  border-bottom: 1px solid var(--line);
-  margin-bottom: 4px;
-}
-.menu-head strong {
-  color: var(--text);
-}
-.menu a,
-.menu button {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 9px 12px;
-  border-radius: var(--radius-sm);
-  text-decoration: none;
-  background: none;
-  border: 0;
-  font: inherit;
-  font-size: 0.93rem;
-  color: var(--text);
-  cursor: pointer;
-}
-.menu a:hover,
-.menu button:hover {
-  background: var(--surface-2);
-  color: var(--text);
-}
-.menu form {
-  margin: 4px 0 0;
-  border-top: 1px solid var(--line);
-  padding-top: 4px;
 }
 
 .avatar {

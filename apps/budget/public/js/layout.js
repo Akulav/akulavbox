@@ -1,6 +1,5 @@
 // The frame around every page: the sidebar (a drawer on phones), the theme switch and the account.
-import { store, openTransaction, logout } from './store.js';
-import { initials } from './format.js';
+import { store, openTransaction } from './store.js';
 import { RouterLink } from './router.js';
 import { Logo } from './icons.js';
 
@@ -25,14 +24,12 @@ const Sidebar = {
     nav() {
       return store.user?.role === 'admin' ? [...NAV, { to: '/admin', label: 'Admin', icon: 'shield-check' }] : NAV;
     },
-    initials: () => initials(store.user?.name),
   },
   methods: {
     add() {
       openTransaction();
       this.$emit('navigate');
     },
-    logout,
   },
   template: /*html*/ `
     <div class="flex h-full flex-col gap-6 p-4">
@@ -54,15 +51,8 @@ const Sidebar = {
           </button>
         </div>
         <div class="border-t border-line pt-3">
-          <div class="flex items-center gap-3 rounded-xl p-2">
-            <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand to-brand-strong text-[13px] font-bold text-white">{{ initials }}</div>
-            <div class="min-w-0 flex-1">
-              <div class="truncate text-sm font-semibold">{{ store.user?.name }}</div>
-              <div class="truncate text-xs text-ink-3">{{ store.user?.username }}</div>
-            </div>
-            <a href="/" class="rounded-lg p-2 text-ink-3 transition hover:bg-surface-2 hover:text-ink" aria-label="All apps" title="All apps"><Icon name="layout-grid" /></a>
-            <button type="button" @click="logout" class="rounded-lg p-2 text-ink-3 transition hover:bg-surface-2 hover:text-danger" aria-label="Sign out" title="Sign out"><Icon name="log-out" /></button>
-          </div>
+          <!-- the account menu every app shares (hub/account.js), with the AkulavBox profile picture -->
+          <akb-account expanded up no-theme accent="#1baf7a" :username="store.user?.username" :role="store.user?.role"></akb-account>
         </div>
         <div class="px-2 text-[11px] text-ink-3">Florin v{{ store.config.version }}</div>
       </div>

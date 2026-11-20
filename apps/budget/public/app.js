@@ -73,6 +73,8 @@ const Root = {
 };
 
 const app = createApp(Root);
+// <akb-account> is the shared account menu (hub/account.js), not a Vue component
+app.config.compilerOptions.isCustomElement = (tag) => tag.startsWith('akb-');
 for (const [name, c] of Object.entries(UI)) app.component(name, c);
 app.mount('#app');
 

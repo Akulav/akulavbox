@@ -76,7 +76,7 @@ function withBase(prefix, s) {
     .replace(/(\s(?:href|src|action|poster|srcset)=")\/(?!\/)/g, `$1${prefix}/`)
     .replace(/(\s\d+w,\s*)\/(?!\/)/g, `$1${prefix}/`)
     .replace(/url\('\/(?!\/)/g, `url('${prefix}/`)
-    .replace(/(\s(?:href|action)=")~\//g, '$1/');
+    .replace(/(\s(?:href|src|action)=")~\//g, '$1/');
 }
 
 module.exports = { esc, raw, html, toString, timeAgo, compact, plural, paragraphs, withBase };

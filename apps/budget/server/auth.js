@@ -13,6 +13,7 @@ function publicUser(u) {
     username: u.username,
     role: u.role,
     baseCurrency: u.base_currency,
+    monthlyBudget: u.monthly_budget || 0,
     createdAt: u.created_at,
     lastLoginAt: u.last_login_at,
   };

@@ -81,12 +81,3 @@ export function changePct(current, previous) {
   if (!previous) return null;
   return ((current - previous) / previous) * 100;
 }
-
-export function initials(name = '') {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((p) => p[0].toUpperCase())
-    .join('');
-}

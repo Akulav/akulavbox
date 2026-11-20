@@ -1,6 +1,6 @@
 'use strict';
 // The apps that live next to AkulavBox, each a Fastify plugin under its own prefix. Each keeps its
-// files in its own folder of the data folder (config.appDir(id)), signs people in with the shared
+// files in its own folder of the data folder (config.appDataDir(id)), signs people in with the shared
 // cookie (src/core/session.js) and registers its hooks (usage, delete-user, …) in src/core/apps.js.
 // An app that can't start (Koma Shelf without sharp) answers with a short page saying why, and the
 // launcher and the Admin console show it; the rest of the server runs on.
