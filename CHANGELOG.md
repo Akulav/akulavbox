@@ -2,6 +2,11 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 5.3.1 (2026-11-20)
+
+### Changed
+- README: the same footer as Akulav's other projects.
+
 ## 5.3.0 (2026-11-20)
 
 ### Added
