@@ -28,6 +28,7 @@ export const BackupView = {
       this.busy = true;
       try {
         const r = await api(sp('/import'), { method: 'POST', raw: this.file });
+        window.akbBus?.post('storage');
         await loadSpace();
         this.file = null;
         await ask({

@@ -1,16 +1,22 @@
-// What every Vue app of the server (Florin, Tasks) needs around its own routes, as Fastify helpers:
+// What every Vue app of the server (Florin, Tick) needs around its own routes, as Fastify helpers:
 //   - its security headers: a CSP that allows Vue's template compiler ('unsafe-eval'), Tailwind's
 //     <style> tags, the Google fonts, and the page's one inline script (the import map) by hash
 //   - an /api scope with the CSRF header check (X-Requested-With: <app>) and JSON errors
 //   - its page: public/ as static files, and index.html for every page path after the sign-in check
-const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const session = require('./session');
+const assets = require('./assets');
 
-/** The page's index.html and the CSP for it */
+/**
+ * The page's index.html (its asset URLs versioned, src/core/assets.js) and the CSP for it, which allows
+ * the import map by its hash. Both follow the revision, so they are worked out again when it changes.
+ */
+const csps = new WeakMap();
 function pageOf(publicDir) {
-  const html = fs.readFileSync(path.join(publicDir, 'index.html'), 'utf8');
+  const p = assets.page(path.join(publicDir, 'index.html'));
+  if (csps.has(p)) return { html: p.html, csp: csps.get(p), page: p };
+  const html = p.html;
   const map = /<script type="importmap">([\s\S]*?)<\/script>/.exec(html);
   const hash = map ? `'sha256-${crypto.createHash('sha256').update(map[1].replace(/\r\n?/g, '\n')).digest('base64')}'` : '';
   const csp = [
@@ -18,7 +24,8 @@ function pageOf(publicDir) {
     "font-src 'self' https://fonts.gstatic.com", "img-src 'self' data:", "connect-src 'self'",
     "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'self'",
   ].join('; ');
-  return { html, csp };
+  csps.set(p, csp);
+  return { html, csp, page: p };
 }
 
 /**
@@ -26,9 +33,8 @@ function pageOf(publicDir) {
  * Call first, in the app's plugin, with the same options as servePage.
  */
 function headers(app, { prefix, publicDir }) {
-  const { csp } = pageOf(publicDir);
   app.addHook('onSend', async (req, reply) => {
-    reply.header('Content-Security-Policy', csp);
+    reply.header('Content-Security-Policy', pageOf(publicDir).csp);
     reply.header('Cross-Origin-Resource-Policy', 'same-origin');
     reply.header('X-Content-Type-Options', 'nosniff');
     if (req.url.startsWith(`${prefix}/api/`)) reply.header('Cache-Control', 'no-store');
@@ -62,7 +68,6 @@ function api(app, { csrfName, routes }) {
  * only a not-found handler, because AkulavBox's own static files answer "/*" first otherwise.
  */
 function servePage(app, { prefix, publicDir }) {
-  const { html } = pageOf(publicDir);
   // maxAge 0: browsers revalidate (ETag), so an update shows on the next reload
   app.register(require('@fastify/static'), {
     root: publicDir, prefix: '/', decorateReply: false, wildcard: false, index: false, maxAge: 0,
@@ -70,7 +75,10 @@ function servePage(app, { prefix, publicDir }) {
   });
   const page = async (req, reply) => {
     if (!req.user && !req.noAccess) return reply.redirect(session.loginUrl(req.url));
-    return reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-cache').send(html);
+    const { page: p } = pageOf(publicDir);
+    reply.header('Cache-Control', 'no-cache').header('ETag', p.etag);
+    if (req.headers['if-none-match'] === p.etag) return reply.code(304).send();
+    return reply.type('text/html; charset=utf-8').send(p.html);
   };
   const apiPath = `${prefix}/api/`;
   const pageOr404 = (req, reply) => (req.url.startsWith(apiPath) ? reply.code(404).send({ error: 'Not found' }) : page(req, reply));

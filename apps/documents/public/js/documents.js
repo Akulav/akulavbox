@@ -64,6 +64,7 @@ export const DocForm = {
       this.busy = true;
       try {
         await api(this.doc ? sp('/documents/' + this.doc.id) : sp('/documents'), { method: this.doc ? 'PUT' : 'POST', form: fd });
+        window.akbBus?.post('storage'); // celelalte aplicații deschise afișează din nou spațiul folosit
         toast(this.doc ? 'Documentul a fost actualizat.' : 'Documentul a fost adăugat.');
         await loadDocs();
         this.$emit('saved');
@@ -160,6 +161,7 @@ export const DocCard = {
       if (!ok) return;
       await run(async () => {
         await api(sp('/documents/' + this.doc.id), { method: 'DELETE' });
+        window.akbBus?.post('storage');
         await loadDocs();
       }, 'Documentul a fost șters.');
     },

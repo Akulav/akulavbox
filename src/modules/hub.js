@@ -7,6 +7,7 @@ const db = require('../core/db');
 const session = require('../core/session');
 const apps = require('../core/apps');
 const { verifyUser, readToken } = require('../core/auth');
+const assets = require('../core/assets');
 
 // The pages of AkulavBox around the apps: sign-in (/login), the app launcher (/), the Admin
 // console (/admin), AI connectors (/connect), and Trove's page at /box/. They are static files;
@@ -14,51 +15,29 @@ const { verifyUser, readToken } = require('../core/auth');
 const HUB = path.join(__dirname, '../../hub');
 const TROVE = path.join(__dirname, '../../apps/trove/public');
 const BRAND = path.join(HUB, 'brand');
+const APPS_DIR = path.join(__dirname, '../../apps');
 
-/** A short hash of everything in hub/ (except brand/): changes whenever any of its files does */
-function hubRevision() {
-  const h = crypto.createHash('sha1');
-  const walk = (dir) => {
-    for (const e of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
-      const p = path.join(dir, e.name);
-      if (e.isDirectory()) { if (e.name !== 'brand') walk(p); } else { h.update(e.name); h.update(fs.readFileSync(p)); }
-    }
-  };
-  walk(HUB);
-  return h.digest('base64url').slice(0, 10);
-}
+// Every page's scripts and styles are versioned (src/core/assets.js): cached for a year, never mixed
+// across an update. Trove's files live at the site's root paths but are versioned under /box/.
+assets.addRoot('/hub/', HUB, { skip: /[\\/]hub[\\/](brand|vendor)([\\/]|$)/ });
+assets.addRoot('/docs/', path.join(APPS_DIR, 'documents', 'public'));
+assets.addRoot('/budget/', path.join(APPS_DIR, 'budget', 'public'));
+assets.addRoot('/tasks/', path.join(APPS_DIR, 'tasks', 'public'));
+assets.addRoot('/', TROVE, { versioned: '/box/' });
+// Vue and Tailwind's browser build for every app's page, from node_modules: no CDN, works offline
+const VENDOR = {
+  'vue.js': require.resolve('vue/dist/vue.esm-browser.prod.js'),
+  'tailwind.js': require.resolve('@tailwindcss/browser'),
+};
+for (const [name, file] of Object.entries(VENDOR)) assets.addVendor(`/hub/vendor/${name}`, file);
 
 module.exports = async function (fastify) {
+  // unversioned /hub/… still works (revalidated on every use)
   fastify.register(require('@fastify/static'), { root: HUB, prefix: '/hub/', decorateReply: false, index: false, maxAge: 0 });
+  assets.routes(fastify);
 
-  // The hub's pages load their scripts and styles from /hub/~<revision>/…: the revision changes with
-  // their contents, so a browser never mixes an old cached module with a new one (Safari on iPhone kept
-  // an old common.js after an update and the launcher stopped at "Loading your apps…"), and the files
-  // can be kept for a year. Relative imports (./common.js) stay under the same revision. /hub/… without
-  // one still works (the other apps load /hub/account.js and /hub/vue/… that way).
-  const REV = hubRevision();
-  fastify.get('/hub/~:rev/*', async (request, reply) => {
-    const rel = request.params['*'];
-    if (!/^[\w./-]+$/.test(rel) || rel.includes('..') || rel.startsWith('vendor/')) return reply.code(404).send({ error: 'Not found' });
-    reply.header('Cache-Control', request.params.rev === REV ? 'public, max-age=31536000, immutable' : 'no-cache');
-    return reply.sendFile(rel, HUB, { cacheControl: false }); // keep the header above
-  });
-  const pages = new Map();
-  const hubPage = (file) => {
-    if (!pages.has(file)) {
-      const html = fs.readFileSync(path.join(HUB, file), 'utf-8').replace(/(["'(])\/hub\/(?!vendor\/|~)([\w./-]+\.(?:js|css))/g, `$1/hub/~${REV}/$2`);
-      pages.set(file, { html, etag: `"${crypto.createHash('sha1').update(html).digest('base64url').slice(0, 16)}"` });
-    }
-    return pages.get(file);
-  };
-
-  // Vue and Tailwind's browser build for every app's page (Trove too), from node_modules: no CDN, works
-  // offline. Read and gzipped once at start (≈430 KB → ≈130 KB on the wire), with an ETag, so a reload
-  // costs a 304 and no CPU. The file names carry no version, so they are revalidated daily.
-  const VENDOR = {
-    'vue.js': require.resolve('vue/dist/vue.esm-browser.prod.js'),
-    'tailwind.js': require.resolve('@tailwindcss/browser'),
-  };
+  // /hub/vendor/vue.js without a revision (pages from before 5.2, scripts that name it): read and
+  // gzipped once, with an ETag, revalidated daily
   const vendor = new Map(Object.entries(VENDOR).map(([name, file]) => {
     const body = fs.readFileSync(file);
     return [name, { body, gz: zlib.gzipSync(body, { level: 9 }), etag: `"${crypto.createHash('sha1').update(body).digest('base64url').slice(0, 20)}"` }];
@@ -73,13 +52,7 @@ module.exports = async function (fastify) {
     return reply.send(v.body);
   });
 
-  /** A hub page, its module and style URLs carrying the revision */
-  const page = (file) => async (request, reply) => {
-    const p = hubPage(file);
-    reply.header('Cache-Control', 'no-cache').header('ETag', p.etag);
-    if (request.headers['if-none-match'] === p.etag) return reply.code(304).send();
-    return reply.type('text/html; charset=utf-8').send(p.html);
-  };
+  const page = (file, dir = HUB) => async (request, reply) => assets.sendPage(request, reply, path.join(dir, file));
   fastify.get('/', page('index.html'));
   fastify.get('/login', page('login.html'));
   fastify.get('/admin', page('admin.html'));
@@ -87,10 +60,7 @@ module.exports = async function (fastify) {
   // an AI app asks to connect (the rest of OAuth is in modules/connector.js)
   fastify.get('/oauth/authorize', page('authorize.html'));
   fastify.get('/box', async (request, reply) => reply.redirect('/box/'));
-  fastify.get('/box/', async (request, reply) => {
-    reply.header('Cache-Control', 'no-cache');
-    return reply.sendFile('index.html', TROVE);
-  });
+  fastify.get('/box/', page('index.html', TROVE));
   // Trove's own install manifest (its files stay at the root paths, so it is mapped here)
   fastify.get('/box/manifest.webmanifest', async (request, reply) => {
     reply.header('Cache-Control', 'no-cache').type('application/manifest+json');

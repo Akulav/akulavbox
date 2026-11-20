@@ -2,6 +2,22 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 5.2.0 (2026-11-20)
+
+### Added
+- **The apps keep each other up to date.** Signing out in any app signs out every open tab of every app at once. Storing or deleting files in Trove or e-Management updates the storage shown on the launcher and in Trove straight away, and a new profile picture shows in every open app's menu. It all happens in the browser (one shared channel), with no polling and no extra connection to the server. On the server, the apps announce what happened on a small event bus (storage changed, account deleted, app access changed) instead of calling into each other.
+- **Admin console → Site icon in password managers:** checks the server's public address the way Bitwarden's icon service does (DNS, the HTTPS certificate chain, redirects, the icons it would pick) and says which step fails. “Ask Bitwarden” shows what Bitwarden's own icon service answers for the site right now.
+
+### Changed
+- **Every app loads its scripts and styles from versioned addresses** (5.1 did it for the launcher only): Trove, e-Management, Florin and Tick, Vue and Tailwind included, and the imports inside the scripts too. They're cached for a year and gzipped once, so **a reload asks the server for data only** (Trove made about 40 file requests per load before), and when anything changes, every address changes with it.
+- Florin's browser tab says which page you're on (“Transactions · Florin”), like the other apps. The launcher, Admin console and AI connector pages show the AkulavBox mark while they load, like the apps show theirs.
+- The code that moves Trove's tables into `box/trove.db` is split into small steps (snapshot, copy, drop), each in its own transaction, with the foreign-key handling in one place.
+
+### Fixed
+- **Pages sometimes came up broken until Ctrl+F5**, and `/box/` sometimes didn't load while `/box/#/files` did: the browser mixed cached scripts from before an update with new ones. The versioned addresses above rule that out.
+- **e-Management's space import ignored the storage limit:** an archive larger than the account's free space was imported anyway. It's now refused when it doesn't fit (counting the space it replaces).
+- CI's run without the optional native modules (no `sharp`, so no Koma Shelf) failed since 5.0 on a test that expected Koma Shelf's connector tools.
+
 ## 5.1.0 (2026-11-20)
 
 ### Added

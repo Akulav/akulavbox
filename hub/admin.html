@@ -76,6 +76,16 @@
             <p class="muted" style="font-size:13px">Full backups include every app’s data. They live in the server settings (Trove’s Admin page).</p></div>
           <a class="btn" href="/box/#/admin">Open server settings</a>
         </section>
+        <section class="panel" style="padding:18px;margin-top:16px">
+          <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+            <span class="tile" style="--c:#175ddc" id="icon-icon"></span>
+            <div style="flex:1;min-width:220px"><h3 style="font-size:16px">Site icon in password managers</h3>
+              <p class="muted" style="font-size:13px">Checks the server’s public address the way Bitwarden’s icon service does: DNS, HTTPS certificate, redirects and the icons it would pick.</p></div>
+            <button class="btn" id="icon-check">Check</button>
+            <button class="btn" id="icon-bw" title="Sends your domain name to Bitwarden’s icon service">Ask Bitwarden</button>
+          </div>
+          <ul class="checks" id="icon-result" hidden></ul>
+        </section>
       </div>
     </div>
     <footer class="footer" id="footer"></footer>

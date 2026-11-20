@@ -6,6 +6,7 @@ const { tx } = require('../db');
 const { fail, lastId, paramId } = require('../validate');
 const { readDocForm, discardUploads, removeStored } = require('../uploads');
 const apps = require('../../../../src/core/apps');
+const bus = require('../../../../src/core/bus');
 
 // doar acestea se deschid în browser; restul se descarcă (niciodată SVG sau HTML)
 const INLINE_TYPES = { '.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg' };
@@ -43,7 +44,7 @@ module.exports = async function documents(app, { auth, audit, stores }) {
   // cât mai încape în spațiul de stocare al contului AkulavBox (comun tuturor aplicațiilor) și,
   // dacă administratorul a stabilit una, în limita proprie a e-Management
   const limits = (req) => ({ room: apps.room(req.user.id, 'documents'), quota: apps.space(req.user.id)?.quota_bytes });
-  const changed = (req) => apps.changed(req.user.id, 'documents');
+  const changed = (req) => bus.emit('storage.changed', { userId: req.user.id, app: 'documents' });
 
   app.get(S + '/documents', auth, async (req) => listDocuments(req.store));
 

@@ -1,6 +1,7 @@
 // The frame around every page: the sidebar (a drawer on phones), the theme switch and the account.
+import { watchEffect } from 'vue';
 import { store, openTransaction } from './store.js';
-import { RouterLink } from './router.js';
+import { RouterLink, route } from './router.js';
 import { Logo } from './icons.js';
 
 const NAV = [
@@ -10,6 +11,13 @@ const NAV = [
   { to: '/categories', label: 'Categories & budgets', icon: 'shapes' },
   { to: '/settings', label: 'Settings', icon: 'settings' },
 ];
+// The browser tab says where you are, like every app ("Transactions · Florin")
+const PAGES = [...NAV, { to: '/admin', label: 'Admin' }];
+watchEffect(() => {
+  const p = PAGES.find((n) => (n.end ? route.path === n.to : route.path === n.to || route.path.startsWith(`${n.to}/`)));
+  document.title = p ? `${p.label} · Florin` : 'Florin';
+});
+
 const THEMES = [
   { v: 'light', icon: 'sun', label: 'Light' },
   { v: 'system', icon: 'monitor', label: 'System' },

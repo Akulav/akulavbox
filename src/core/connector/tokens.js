@@ -141,4 +141,7 @@ function sweep() {
   db.prepare("DELETE FROM oauth_clients WHERE last_used_at IS NULL AND created_at < datetime('now', '-30 days')").run();
 }
 
+// an account's connectors (and its pending OAuth codes) go with it
+require('../bus').on('account.deleted', ({ userId }) => forgetUser(userId));
+
 module.exports = { create, verify, refresh, list, revoke, revokeToken, update, forgetUser, sweep, cleanScopes, scopesFromString, scopesToString, sha, LEVELS, APP_IDS };

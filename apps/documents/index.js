@@ -10,6 +10,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const config = require('../../src/core/config');
 const session = require('../../src/core/session');
+const assets = require('../../src/core/assets');
 const apps = require('../../src/core/apps');
 const { createStores } = require('./src/db');
 const { fail } = require('./src/validate');
@@ -106,8 +107,8 @@ module.exports = async function documents(app, opts) {
   // Pagina aplicației: fără autentificare se trece prin pagina comună de intrare.
   const indexHtml = (req, reply) => {
     if (!session.userOf(req, reply)) return reply.redirect(session.loginUrl('/docs/'));
-    reply.header('Cache-Control', 'no-cache');
-    return reply.type('text/html; charset=utf-8').send(fs.createReadStream(path.join(PUBLIC, 'index.html')));
+    // scripturile și stilurile au adrese cu versiune (src/core/assets.js): păstrate un an, niciodată amestecate
+    return assets.sendPage(req, reply, path.join(PUBLIC, 'index.html'));
   };
   app.get('/', indexHtml);
   app.get('/index.html', indexHtml);

@@ -35,6 +35,17 @@ module.exports = async function appsCheck({ api, ok, base, tmp, login, adminToke
   const homeRes = homeJs && await get(homeJs);
   ok(homeRes?.status === 200 && /immutable/.test(homeRes.headers.get('cache-control') || '') && /\/hub\/~[\w-]+\/hub\.css/.test(rootHtml), 'the launcher’s scripts and styles carry a revision and are cached for good', homeJs);
   ok((await get('/hub/~nope/../../package.json')).status === 404 && (await get('/hub/home.js')).status === 200, 'the versioned path can’t leave hub/, and the plain one still works');
+  // every app's page is versioned the same way, and so are the absolute imports inside its scripts
+  const trovePage = await (await get('/box/')).text();
+  const troveApp = /src="(\/box\/~[\w-]+\/app\.js)"/.exec(trovePage)?.[1];
+  const troveJs = troveApp && await get(troveApp, { headers: { 'Accept-Encoding': 'gzip' } });
+  ok(troveJs?.status === 200 && /immutable/.test(troveJs.headers.get('cache-control') || '') && /"vue": "\/hub\/vendor\/~[\w-]+\/vue\.js"/.test(trovePage), 'Trove’s page: its modules and Vue versioned and cached for good', troveApp);
+  const docsHtml = await (await get('/docs/', { cookie: jar })).text();
+  const docsApp = /src="(\/docs\/~[\w-]+\/app\.js)"/.exec(docsHtml)?.[1];
+  const docsJs = docsApp && await (await get(docsApp)).text();
+  ok(docsJs && /from '\/docs\/~[\w-]+\/js\/state\.js'/.test(docsJs) && /from '\/hub\/vendor\/~[\w-]+\/vue\.js'/.test(docsJs), 'imports inside a script carry the revision too (e-Management)', docsApp);
+  ok((await get(docsApp.replace(/~[\w-]+/, '~old'))).headers.get('cache-control') === 'no-cache', 'an old revision still gets the current file, uncached');
+  ok((await get('/box/~x/../../.env')).status === 404 && (await get('/docs/~x/js/../../index.js')).status === 404, 'versioned paths stay inside their folders');
   // Trove's tables live in their own database (5.1)
   const { DatabaseSync: DS } = require('node:sqlite');
   const mainDb = new DS(path.join(tmp, 'akulavbox.db'), { readOnly: true });
@@ -134,10 +145,10 @@ module.exports = async function appsCheck({ api, ok, base, tmp, login, adminToke
   ok((await overview()).budget === sumOfCategories, 'clearing it goes back to the sum of the category budgets');
   const page = await get('/budget/', { cookie: jar });
   const pageText = await page.text();
-  ok(page.status === 200 && /src="\/budget\/app\.js"/.test(pageText), 'serves the page under /budget/');
+  ok(page.status === 200 && /src="\/budget\/~[\w-]+\/app\.js"/.test(pageText), 'serves the page under /budget/');
   ok((await get('/budget/')).status === 302, 'signed-out visitors go to the sign-in page');
   const deep = await get('/budget/settings', { cookie: jar });
-  ok(deep.status === 200 && /src="\/budget\/app\.js"/.test(await deep.text()), 'a deep link (/budget/settings) opens the page');
+  ok(deep.status === 200 && /src="\/budget\/~[\w-]+\/app\.js"/.test(await deep.text()), 'a deep link (/budget/settings) opens the page');
   // every module, script and stylesheet the page links is served
   const linked = [...pageText.matchAll(/(?:src|href)="(\/budget\/[^"]+)"/g)].map((m) => m[1]);
   const missing = [];
@@ -185,7 +196,7 @@ module.exports = async function appsCheck({ api, ok, base, tmp, login, adminToke
   ok(tdoneList?.total >= 0 && Array.isArray(tdoneList.items), 'done tasks are listed page by page');
   const tpage = await get('/tasks/', { cookie: jar });
   const tpageText = await tpage.text();
-  ok(tpage.status === 200 && /src="\/tasks\/app\.js"/.test(tpageText) && (await get('/tasks/list/5', { cookie: jar })).status === 200, 'serves the page, also for its deep links');
+  ok(tpage.status === 200 && /src="\/tasks\/~[\w-]+\/app\.js"/.test(tpageText) && (await get('/tasks/list/5', { cookie: jar })).status === 200, 'serves the page, also for its deep links');
   const tlinked = [...tpageText.matchAll(/(?:src|href)="(\/(?:tasks|hub)\/[^"]+)"/g)].map((m) => m[1]);
   const tmissing = [];
   for (const u of tlinked) if ((await get(u, { cookie: jar })).status !== 200) tmissing.push(u);
@@ -239,6 +250,8 @@ module.exports = async function appsCheck({ api, ok, base, tmp, login, adminToke
 
   // --- Admin console ---
   console.log('\nAdmin console');
+  const iconCheck = await api('/api/admin/site-icon');
+  ok(iconCheck.status === 200 && Array.isArray(iconCheck.data?.steps) && iconCheck.data.steps.length > 0, 'the site icon check reports its steps (here: an IP address, which Bitwarden refuses)', JSON.stringify(iconCheck.data?.steps?.[0]));
   const mk = await api('/api/admin/users', { method: 'POST', body: { username: 'appuser', password: 'apppass123', apps: { manga: { enabled: false } } } });
   ok(mk.status === 200, 'create an account, with Koma Shelf off from the start');
   const ul = await fetch(`${B}/api/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'appuser', password: 'apppass123' }) });

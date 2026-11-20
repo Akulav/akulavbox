@@ -307,7 +307,7 @@ function createIngest({ db, config, log = console }) {
       });
       // what the work takes on disk counts towards its creator's storage (the account's one space)
       db.run('UPDATE works SET bytes = ? WHERE id = ?', await folderBytes(outDir), id);
-      require('../../../src/core/apps').changed(null, 'manga');
+      require('../../../src/core/bus').emit('storage.changed', { app: 'manga' });
       log.info?.(`[ingest] ${id}: ${chapters.length} chapter(s), ${pageCount} slices`);
     } finally {
       src.close();

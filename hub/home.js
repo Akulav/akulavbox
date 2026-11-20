@@ -68,6 +68,12 @@ async function main() {
   for (const el of document.querySelectorAll('[data-go]')) el.innerHTML = icon('arrow');
   $('admin').hidden = user.role !== 'admin';
   $('footer').innerHTML = `${madeBy(data.version)}<span>${data.apps.length} app${data.apps.length === 1 ? '' : 's'} on this account</span>`;
+  // files stored or removed in another open app: the storage card follows (hub/account.js, akbBus)
+  let pending = null;
+  window.akbBus?.on('storage', () => {
+    clearTimeout(pending);
+    pending = setTimeout(async () => { try { const d = await api('/api/apps'); $('space').innerHTML = spaceHtml(d.space); } catch (e) { /* next time */ } }, 400);
+  });
   $('boot').hidden = true;
   $('page').hidden = false;
 }

@@ -244,6 +244,25 @@ async function main() {
     act(() => api('/api/admin/apps/defaults', { method: 'PUT', body }), `Defaults saved for ${appOf(id).name}`);
   });
 
+  $('icon-icon').innerHTML = icon('shield');
+  const iconCheck = async (askBitwarden) => {
+    const out = $('icon-result');
+    out.hidden = false;
+    out.innerHTML = `<li class="muted">${icon('loader', 'spin')}Checking…</li>`;
+    try {
+      const r = await api(`/api/admin/site-icon${askBitwarden ? '?bitwarden=1' : ''}`);
+      const bw = r.bitwarden;
+      out.innerHTML = [
+        `<li class="muted">Address: <span class="mono">${esc(r.address)}</span>${r.public_url_set ? '' : ' (from this page; set PUBLIC_URL in .env to the public address)'}</li>`,
+        ...r.steps.map((s) => `<li class="${s.ok ? 'ok' : 'bad'}">${icon(s.ok ? 'check' : 'alert')}<span>${esc(s.text)}</span></li>`),
+        bw ? `<li class="${bw.status === 200 ? 'ok' : 'bad'}">${icon(bw.status === 200 ? 'check' : 'alert')}<span>${bw.error ? `Bitwarden’s icon service couldn’t be reached: ${esc(bw.error)}` : bw.status === 200 ? `Bitwarden’s icon service has an icon for this site (${bw.bytes.toLocaleString()} bytes). If your app still shows none, it is its own cache (up to 7 days): remove and re-add the site, or reinstall the extension.` : `Bitwarden’s icon service answers ${bw.status}: no icon yet. It keeps a miss for up to 24 hours (and apps keep it up to 7 days), so a fix shows after that.`}</span></li>` : '',
+        `<li class="muted">${r.ok ? 'This server serves an icon Bitwarden can use.' : 'Fix the first failing step above.'} Bitwarden remembers a miss for 24 hours on its servers and up to 7 days in its apps.</li>`,
+      ].join('');
+    } catch (e) { out.innerHTML = `<li class="bad">${icon('alert')}<span>${esc(e.message)}</span></li>`; }
+  };
+  $('icon-check').onclick = () => iconCheck(false);
+  $('icon-bw').onclick = () => iconCheck(true);
+
   $('boot').hidden = true;
   $('page').hidden = false;
 }

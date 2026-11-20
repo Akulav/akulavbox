@@ -159,8 +159,6 @@ svg.i { width: 18px; height: 18px; flex-shrink: 0; fill: none; stroke: currentCo
 .stagger > *:nth-child(3) { animation-delay: .1s; }
 .stagger > *:nth-child(4) { animation-delay: .15s; }
 .stagger > *:nth-child(5) { animation-delay: .2s; }
-.spin { animation: spin 1s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
@@ -331,3 +329,21 @@ svg.i { width: 18px; height: 18px; flex-shrink: 0; fill: none; stroke: currentCo
 .auth-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
 .auth-actions .btn { min-width: 110px; justify-content: center; }
 @media (max-width: 520px) { .seg button { padding: 6px 8px; font-size: 12px; } .connector { padding: 12px 14px; } }
+
+/* a list of checks (Admin console → Site icon) */
+.checks { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 6px; font-size: 13px; }
+.checks li { display: flex; gap: 8px; align-items: flex-start; line-height: 1.45; }
+.checks li svg.i { width: 15px; height: 15px; margin-top: 2px; flex-shrink: 0; }
+.checks li.ok svg.i { color: rgb(var(--ok)); }
+.checks li.bad { color: rgb(var(--danger)); }
+.checks .mono { word-break: break-all; }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* the loading state of every hub page: the AkulavBox mark, like the apps show theirs */
+.boot { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center; }
+.boot::before { content: ''; width: 44px; height: 44px; background: url(/favicon.svg) center / contain no-repeat; animation: boot-pulse 1.4s ease-in-out infinite; }
+.boot[data-stuck]::before { animation: none; opacity: .5; }
+@keyframes boot-pulse { 50% { opacity: .45; transform: scale(.94); } }
+@media (prefers-reduced-motion: reduce) { .boot::before { animation: none; } }
+html[data-motion='off'] .boot::before { animation: none; }

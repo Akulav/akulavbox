@@ -63,6 +63,25 @@ module.exports = async function (fastify) {
     return { success: true, ...r };
   });
 
+  // Why doesn't a password manager (Bitwarden) show the site's icon? The server fetches its own public
+  // address the way Bitwarden's icon service does (core/site-icon.js). With ?bitwarden=1 it also asks
+  // Bitwarden's icon service what it answers now (that sends the domain name to Bitwarden, which its
+  // apps do anyway to show the icon).
+  fastify.get('/api/admin/site-icon', { preHandler: verifyAdmin }, async (request) => {
+    const address = config.publicUrl || `${request.protocol}://${request.host}`;
+    const result = await require('../core/site-icon').check(address);
+    let bitwarden = null;
+    if (request.query.bitwarden === '1') {
+      const host = new URL(address).hostname;
+      try {
+        const r = await fetch(`https://icons.bitwarden.net/${encodeURIComponent(host)}/icon.png`, { signal: AbortSignal.timeout(8000), headers: { 'User-Agent': 'AkulavBox site icon check' } });
+        const body = Buffer.from(await r.arrayBuffer());
+        bitwarden = { status: r.status, type: r.headers.get('content-type'), bytes: body.length, cached_for: r.headers.get('cache-control') };
+      } catch (e) { bitwarden = { error: e.message }; }
+    }
+    return { address, public_url_set: !!config.publicUrl, ...result, bitwarden };
+  });
+
   // What new accounts (and accounts without their own setting) get in each app
   fastify.put('/api/admin/apps/defaults', { preHandler: verifyAdmin }, async (request, reply) => {
     let d;

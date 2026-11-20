@@ -2,6 +2,8 @@
 // Copia de rezervă a unui spațiu (/docs/api/s/:store/export, /import) și jurnalul de activitate al
 // contului (/docs/api/audit). Copia completă a serverului (Admin → Backup) le include oricum pe toate.
 const backup = require('../backup');
+const apps = require('../../../../src/core/apps');
+const bus = require('../../../../src/core/bus');
 const { fail, str, validDate, today } = require('../validate');
 
 const AUDIT_RETENTION_DAYS = 90;
@@ -25,9 +27,18 @@ module.exports = async function backupAndAudit(app, { auth, requireUser, audit }
       req.body.resume();
       throw fail(409, 'Un import este deja în curs.');
     }
+    // Arhiva înlocuiește spațiul: trebuie să încapă în spațiul de stocare al contului, plus cât eliberează
+    // spațiul înlocuit (mărimea arhivei este aproape cea a fișierelor din ea).
+    const size = Number(req.headers['content-length']) || 0;
+    const freed = Number(req.store.db.prepare('SELECT COALESCE(SUM(size), 0) AS n FROM document_files').get().n);
+    if (size > apps.room(req.user.id, 'documents') + freed) {
+      req.body.resume();
+      throw fail(413, 'Arhiva nu încape în spațiul de stocare al contului. Eliberați spațiu sau cereți administratorului mai mult.');
+    }
     importing.add(req.user.id);
     try {
       const r = await backup.importArchive(req.body, req.store);
+      bus.emit('storage.changed', { userId: req.user.id, app: 'documents' });
       audit(req, 'import complet', `${r.documents} documente, backup din ${r.created_at}`);
       return r;
     } catch (e) {

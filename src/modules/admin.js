@@ -54,8 +54,6 @@ module.exports = async function (fastify) {
 
     db.tx(() => {
       activity.forgetUser(id);
-      // AI connectors (tokens and pending OAuth codes) stop with the account
-      require('../core/connector/tokens').forgetUser(id);
       db.prepare('DELETE FROM users WHERE id = ?').run(id);
     });
 

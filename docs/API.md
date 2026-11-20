@@ -111,6 +111,7 @@ The other apps (`/docs`, `/manga`, `/budget`, `/tasks`) use the same sign-in thr
 | GET | `/api/admin/updates` | `{ enabled, repo, branch, current, latest: { version, sha, notes, node_ok }, available, mode, applying, step, error, ready, rollback }` (`?check=1` asks GitHub now) |
 | POST | `/api/admin/updates/apply` | Install the newest version in the background; it runs after a restart |
 | POST | `/api/admin/updates/rollback` | Put back the code from before the last update |
+| GET | `/api/admin/site-icon?bitwarden=1` | The site icon check: `{ address, ok, icon, steps: [{ ok, text }], bitwarden }`. Fetches the public address the way Bitwarden's icon service does; `bitwarden=1` also asks that service (sends the domain name to Bitwarden) |
 | POST | `/api/admin/restart` | Stops the server cleanly so a service manager restarts it (applies a staged restore) |
 
 ## e-Management (`/docs`)

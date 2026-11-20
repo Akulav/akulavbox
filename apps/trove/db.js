@@ -39,62 +39,68 @@ const toTrove = (sql) => sql
   .replace(/^CREATE TABLE (IF NOT EXISTS )?(["`[]?)(\w+)\2\]?/i, (m, ine, qt, name) => `CREATE TABLE trove."${name}"`)
   .replace(/^CREATE (UNIQUE )?INDEX (IF NOT EXISTS )?(["`[]?)(\w+)\3\]?/i, (m, u, ine, qt, name) => `CREATE ${u || ''}INDEX trove."${name}"`);
 
-/**
- * Move Trove's tables from akulavbox.db into trove.db (and users.used_bytes into usage), when
- * akulavbox.db has them: a first start on 5.1, a fresh install, or a restored backup. Returns the
- * snapshot path (or null) and the tables moved.
- */
-function moveIn(db, { backupsDir, version, log = console.log } = {}) {
-  const present = TABLES.filter((t) => has(db, 'main', t));
-  if (!present.length) { db.exec(USAGE); return null; }
-
-  // an existing database is snapshotted first, like before a migration
-  let snapshot = null;
-  const hasData = has(db, 'main', 'users') && db.prepare('SELECT COUNT(*) AS n FROM main.users').get().n > 0;
-  if (hasData && backupsDir) {
-    fs.mkdirSync(backupsDir, { recursive: true });
-    snapshot = path.join(backupsDir, `akulavbox-before-trove-db-v${version || 'next'}-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.db`);
-    db.exec(`VACUUM main INTO ${q(snapshot)}`);
-  }
-
-  // node:sqlite enforces foreign keys by default: a table copied before the one it references would
-  // fail. Off for the copy (it has to be set outside a transaction), back as it was afterwards.
-  const fk = db.prepare('PRAGMA foreign_keys').get().foreign_keys;
-  db.exec('PRAGMA foreign_keys = OFF');
-  try {
-  // 1. copy into trove.db, replacing what an interrupted attempt may have left
+/** Run fn in a transaction on `db`; any error rolls it back and is thrown on */
+function inTransaction(db, fn) {
   db.exec('BEGIN');
-  try {
-    for (const t of present) db.exec(`DROP TABLE IF EXISTS trove."${t}"`);
-    for (const t of present) db.exec(toTrove(db.prepare("SELECT sql FROM main.sqlite_master WHERE type = 'table' AND name = ?").get(t).sql));
-    for (const t of present) {
-      db.exec(`INSERT INTO trove."${t}" SELECT * FROM main."${t}"`);
-      for (const ix of db.prepare("SELECT sql FROM main.sqlite_master WHERE type = 'index' AND tbl_name = ? AND sql IS NOT NULL").all(t)) db.exec(toTrove(ix.sql));
-    }
+  try { fn(); db.exec('COMMIT'); } catch (e) { db.exec('ROLLBACK'); throw e; }
+}
+
+/**
+ * Run fn with foreign keys off. node:sqlite turns them on by default, and copying tables one by one
+ * would trip over a table that references one not copied yet. The setting only changes outside a
+ * transaction; it is put back as it was.
+ */
+function withoutForeignKeys(db, fn) {
+  const was = db.prepare('PRAGMA foreign_keys').get().foreign_keys;
+  db.exec('PRAGMA foreign_keys = OFF');
+  try { return fn(); } finally { db.exec(`PRAGMA foreign_keys = ${was ? 'ON' : 'OFF'}`); }
+}
+
+/** A VACUUM INTO copy of akulavbox.db in backups/, before anything moves (like before a migration) */
+function snapshotMain(db, backupsDir, version) {
+  fs.mkdirSync(backupsDir, { recursive: true });
+  const file = path.join(backupsDir, `akulavbox-before-trove-db-v${version || 'next'}-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.db`);
+  db.exec(`VACUUM main INTO ${q(file)}`);
+  return file;
+}
+
+/** 1. Trove's tables (with their indexes) and its counter into trove.db, replacing a half-done copy */
+function copyToTrove(db, tables) {
+  const sqlOf = (type, name) => db.prepare(`SELECT sql FROM main.sqlite_master WHERE type = '${type}' AND ${type === 'table' ? 'name' : 'tbl_name'} = ? AND sql IS NOT NULL`).all(name).map((r) => r.sql);
+  inTransaction(db, () => {
+    for (const t of tables) db.exec(`DROP TABLE IF EXISTS trove."${t}"`);
+    for (const t of tables) db.exec(toTrove(sqlOf('table', t)[0]));
+    for (const t of tables) db.exec(`INSERT INTO trove."${t}" SELECT * FROM main."${t}"`);
+    for (const t of tables) for (const sql of sqlOf('index', t)) db.exec(toTrove(sql));
     db.exec('DROP TABLE IF EXISTS trove.usage');
     db.exec(USAGE);
     db.exec('INSERT INTO trove.usage (user_id, bytes) SELECT id, MAX(0, COALESCE(used_bytes, 0)) FROM main.users');
-    db.exec('COMMIT');
-  } catch (e) {
-    db.exec('ROLLBACK');
-    throw new Error(`Moving Trove’s tables into trove.db failed (nothing was changed): ${e.message}`);
-  }
-  // 2. only now do they leave akulavbox.db
-  db.exec('BEGIN');
-  try {
-    for (const t of present) db.exec(`DROP TABLE main."${t}"`);
-    db.exec('COMMIT');
-  } catch (e) {
-    db.exec('ROLLBACK');
-    throw e;
-  }
-  } finally {
-    db.exec(`PRAGMA foreign_keys = ${fk ? 'ON' : 'OFF'}`);
-  }
-  if (hasData) log(`[db] Trove’s ${present.length} tables moved into box/trove.db${snapshot ? ` (backup: ${snapshot})` : ''}`);
-  return { snapshot, tables: present };
+  });
 }
 
+/** 2. Only once the copy is committed do the tables leave akulavbox.db */
+function dropFromMain(db, tables) {
+  inTransaction(db, () => { for (const t of tables) db.exec(`DROP TABLE main."${t}"`); });
+}
+
+/**
+ * Move Trove's tables from akulavbox.db into trove.db (and users.used_bytes into usage), when
+ * akulavbox.db has them: a first start on 5.1, a fresh install, or a restored backup. Safe to
+ * interrupt: until step 2 commits, akulavbox.db still holds the real copy and the move runs again.
+ * Returns null when there was nothing to move, else { snapshot, tables }.
+ */
+function moveIn(db, { backupsDir, version, log = console.log } = {}) {
+  const tables = TABLES.filter((t) => has(db, 'main', t));
+  if (!tables.length) { db.exec(USAGE); return null; }
+  const hasData = has(db, 'main', 'users') && db.prepare('SELECT COUNT(*) AS n FROM main.users').get().n > 0;
+  const snapshot = hasData && backupsDir ? snapshotMain(db, backupsDir, version) : null;
+  withoutForeignKeys(db, () => {
+    try { copyToTrove(db, tables); } catch (e) { throw new Error(`Moving Trove’s tables into trove.db failed (nothing was changed): ${e.message}`); }
+    dropFromMain(db, tables);
+  });
+  if (hasData) log(`[db] Trove’s ${tables.length} tables moved into box/trove.db${snapshot ? ` (backup: ${snapshot})` : ''}`);
+  return { snapshot, tables };
+}
 /**
  * For full backups: put Trove's tables (and users.used_bytes) back into a snapshot of akulavbox.db,
  * so a backup keeps the format every version reads, and a restore moves them out again on start.
@@ -103,25 +109,24 @@ function moveIn(db, { backupsDir, version, log = console.log } = {}) {
 function mergeForBackup(liveDb, snapPath) {
   const tmp = `${snapPath}.trove`;
   fs.rmSync(tmp, { force: true });
-  liveDb.exec(`VACUUM trove INTO ${q(tmp)}`);
+  liveDb.exec(`VACUUM trove INTO ${q(tmp)}`); // a consistent copy, even while the server writes
   const s = new DatabaseSync(snapPath);
   try {
-    s.exec('PRAGMA foreign_keys = OFF'); // tables go in one by one, see moveIn
     s.exec(`ATTACH DATABASE ${q(tmp)} AS t`);
-    s.exec('BEGIN');
-    const objs = s.prepare("SELECT type, name, tbl_name, sql FROM t.sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' AND tbl_name != 'usage' ORDER BY type = 'index'").all();
-    for (const o of objs) if (o.type === 'table') { s.exec(`DROP TABLE IF EXISTS main."${o.name}"`); s.exec(o.sql); }
-    for (const o of objs) if (o.type === 'table') s.exec(`INSERT INTO main."${o.name}" SELECT * FROM t."${o.name}"`);
-    for (const o of objs) if (o.type === 'index') s.exec(o.sql);
-    s.exec('UPDATE main.users SET used_bytes = COALESCE((SELECT bytes FROM t.usage WHERE t.usage.user_id = users.id), 0)');
-    s.exec('COMMIT');
+    const objs = s.prepare("SELECT type, name, sql FROM t.sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' AND tbl_name != 'usage'").all();
+    const tables = objs.filter((o) => o.type === 'table');
+    withoutForeignKeys(s, () => inTransaction(s, () => {
+      for (const o of tables) { s.exec(`DROP TABLE IF EXISTS main."${o.name}"`); s.exec(o.sql); }
+      for (const o of tables) s.exec(`INSERT INTO main."${o.name}" SELECT * FROM t."${o.name}"`);
+      for (const o of objs) if (o.type === 'index') s.exec(o.sql);
+      s.exec('UPDATE main.users SET used_bytes = COALESCE((SELECT bytes FROM t.usage WHERE t.usage.user_id = users.id), 0)');
+    }));
     s.exec('DETACH DATABASE t');
   } finally {
     s.close();
     fs.rmSync(tmp, { force: true });
   }
 }
-
 /** Trove's storage counter, per account. Prepared on first use (after the attach). */
 let st = null;
 const stmts = (db) => st || (st = {

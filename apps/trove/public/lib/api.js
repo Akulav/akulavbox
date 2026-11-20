@@ -183,10 +183,30 @@ export function formatRelative(s) {
   return 'just now';
 }
 
-export async function refreshAccount() {
+// ---------- the apps' bus in the browser (the same channel as hub/account.js) ----------
+// Every open page of every app shares it: a sign-out anywhere signs this page out too, and storage or
+// picture changes made here reach the launcher and the other apps' menus at once (and theirs reach here).
+let channel = null;
+try { channel = new BroadcastChannel('akulavbox'); } catch (e) { /* very old browsers: this page on its own */ }
+const handlers = {};
+if (channel) channel.onmessage = (e) => { for (const fn of handlers[e.data?.type] || []) { try { fn(e.data.data || {}); } catch (err) { console.error(err); } } };
+export const bus = {
+  post: (type, data = {}) => { try { channel?.postMessage({ type, data }); } catch (e) { /* closed */ } },
+  on: (type, fn) => { (handlers[type] ||= []).push(fn); },
+};
+
+/** The account's details; when its storage or picture changed, the other open apps hear of it */
+export async function refreshAccount({ quiet = false } = {}) {
   if (!session.token) return;
+  const before = account.loaded ? { used: account.used_bytes, img: account.profile_image } : null;
   try {
     const p = await api('/api/user/profile');
     Object.assign(account, p, { loaded: true });
+    if (quiet || !before) return;
+    if (before.used !== account.used_bytes) bus.post('storage');
+    if (before.img !== account.profile_image) bus.post('account');
   } catch (e) { /* shell keeps last known values */ }
 }
+bus.on('storage', () => refreshAccount({ quiet: true }));
+bus.on('account', () => refreshAccount({ quiet: true }));
+bus.on('signed-out', () => { clearSession(); location.assign('/login?next=%2Fbox%2F'); });

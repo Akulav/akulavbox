@@ -10,7 +10,7 @@ import CustomAlbums from './pages/CustomAlbums.js';
 import Music from './pages/MusicApp.js';
 import MediaLibrary from './pages/MediaLibrary.js';
 import { forgetFolders } from './lib/library.js';
-import { session, clearSession, api, account, refreshAccount, formatBytes, storage, app as appInfo, checkVersion } from './lib/api.js';
+import { bus, session, clearSession, api, account, refreshAccount, formatBytes, storage, app as appInfo, checkVersion } from './lib/api.js';
 import { stop as stopPlayer, player } from './lib/player.js';
 import { toast } from './lib/ui.js';
 
@@ -319,6 +319,7 @@ createApp({
       stopPlayer();
       forgetFolders();
       await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
+      bus.post('signed-out'); // every other open app signs out too
       clearSession();
       location.assign('/login?out=1');
     };

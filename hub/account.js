@@ -55,6 +55,31 @@
   // another tab (or app) changed it
   window.addEventListener('storage', function (e) { if (e.key === KEY) apply(e.newValue); });
 
+  // ---------- the apps' bus in the browser ----------
+  // Every open page of every app shares one BroadcastChannel (same origin), so what happens in one
+  // reaches the others at once, without polling or a connection to the server:
+  //   signed-out   every other page goes to the sign-in page too
+  //   storage      files were stored or removed: pages that show storage read it again
+  //   account      the profile picture or name changed: account menus repaint
+  // window.akbBus.post(type, data) sends (not to the page itself); .on(type, fn) listens.
+  var channel = null;
+  try { channel = new BroadcastChannel('akulavbox'); } catch (e) { /* very old browsers: each page on its own */ }
+  var handlers = {};
+  if (channel) channel.onmessage = function (e) {
+    var m = e.data || {};
+    (handlers[m.type] || []).forEach(function (fn) { try { fn(m.data || {}); } catch (err) { console.error(err); } });
+  };
+  window.akbBus = window.akbBus || {
+    post: function (type, data) { try { if (channel) channel.postMessage({ type: type, data: data || {} }); } catch (e) { /* closed */ } },
+    on: function (type, fn) { (handlers[type] = handlers[type] || []).push(fn); },
+  };
+  // signed out elsewhere: this page's session is gone too
+  window.akbBus.on('signed-out', function () {
+    if (location.pathname === '/login') return;
+    try { ['akulavToken', 'akulavRole', 'akulavWeak'].forEach(function (k) { localStorage.removeItem(k); }); } catch (e) { /* storage unavailable */ }
+    location.assign('/login?next=' + encodeURIComponent(location.pathname + location.search + location.hash));
+  });
+
   // ---------- who is signed in (once per page) ----------
   var mePromise = null;
   function me() {
@@ -68,6 +93,7 @@
 
   async function signOut() {
     await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' }).catch(function () {});
+    window.akbBus.post('signed-out');
     try { ['akulavToken', 'akulavRole', 'akulavWeak'].forEach(function (k) { localStorage.removeItem(k); }); } catch (e) { /* storage unavailable */ }
     location.assign('/login?out=1');
   }
@@ -104,6 +130,8 @@
       this.paintTheme();
       this.paint();
       me().then((u) => { if (u) { this.user = u; this.paint(); } });
+      // a new picture or name in another app: ask again
+      window.akbBus.on('account', () => { mePromise = null; me().then((u) => { if (u) { this.user = u; this.paint(); } }); });
     }
     disconnectedCallback() {
       document.removeEventListener('click', this.onDoc);

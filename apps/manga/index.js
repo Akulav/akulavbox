@@ -56,7 +56,7 @@ function context(prefix) {
     chaptersOf: (id) => db.all('SELECT idx, title, pages FROM chapters WHERE work_id = ? ORDER BY idx', id),
     deleteWork: async (id) => {
       db.run('DELETE FROM works WHERE id = ?', id);
-      apps.changed(null, 'manga'); // the space it took is free again
+      require('../../src/core/bus').emit('storage.changed', { app: 'manga' }); // the space it took is free again
       await fs.promises.rm(path.join(worksDir, id), { recursive: true, force: true });
     },
     LIST_COLS: 'w.id, w.title, w.visibility, w.status, w.cover_rev, w.likes, w.views, w.chapters, w.created, w.published, u.username',

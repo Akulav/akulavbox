@@ -1,6 +1,7 @@
 const db = require('./db');
 const config = require('./config');
 const settings = require('./settings');
+const bus = require('./bus');
 
 // ---------------------------------------------------------------------------
 // The apps of an AkulavBox account. Trove ("box") is the core: every account has
@@ -111,7 +112,9 @@ function setAccess(userId, appId, { enabled, quota_bytes } = {}) {
       if (!(q > 0)) throw new Error('Limits must be larger than 0.');
     }
   }
-  upsert.run(userId, appId, (enabled === undefined ? cur.enabled : !!enabled) ? 1 : 0, app.quota ? q : null);
+  const on = (enabled === undefined ? cur.enabled : !!enabled);
+  upsert.run(userId, appId, on ? 1 : 0, app.quota ? q : null);
+  if (on !== cur.enabled) bus.emit('access.changed', { userId, app: appId, enabled: on });
   return access(userId, appId);
 }
 
@@ -124,6 +127,7 @@ function deleteUser(userId) {
   for (const [id, h] of hooks) {
     try { h.deleteUser?.(userId); } catch (e) { console.error(`[apps] ${id}: couldn’t remove the data of ${userId}: ${e.message}`); }
   }
+  bus.emit('account.deleted', { userId });
 }
 
 // What the other apps hold changes rarely, but Trove asks on every upload chunk: their answers are
@@ -144,7 +148,10 @@ function usage(userId, appId, { fresh = false } = {}) {
   return bytes;
 }
 
-/** An app stored or removed files of this account (or of every account when userId is null) */
+/**
+ * An app stored or removed files of this account (or of every account when userId is null). Apps announce
+ * it on the bus (storage.changed); this is what listens.
+ */
 function changed(userId, appId) {
   if (userId != null) { usageCache.delete(`${userId}:${appId}`); return; }
   for (const k of usageCache.keys()) if (!appId || k.endsWith(`:${appId}`)) usageCache.delete(k);
@@ -222,3 +229,6 @@ function close() { for (const h of hooks.values()) { try { h.close?.(); } catch 
 const connectorOf = (id) => (running(id) || byId.get(id)?.core ? hooks.get(id)?.connector || null : null);
 
 module.exports = { APPS, byId, boxUser, defaults, setDefaults, access, setAccess, deleteUser, usage, changed, space, describeSpace, room, summary, hasRoom, forUser, register, failed, failures, status, totals, close, connectorOf };
+
+// the apps announce storage changes on the bus (src/core/bus.js)
+bus.on('storage.changed', ({ userId, app }) => changed(userId ?? null, app));
