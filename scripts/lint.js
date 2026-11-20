@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 // Fast static checks (CI runs them before the end-to-end test; run them yourself with `npm run lint`):
 //   - every backend and frontend file parses (src/, scripts/, apps/, frontend/, hub/)
-//   - Florin's built page (apps/budget/dist) exists and links only files it has
-//   - the frontend's index.html keeps the import map above the module preloads,
-//     and every frontend module has a <link rel="modulepreload">
+//   - AkulavBox's and Florin's index.html keep the import map above the module preloads,
+//     and every module has a <link rel="modulepreload">
 //   - package.json, package-lock.json and CHANGELOG.md agree on the version
 // No dependencies and no network.
 
@@ -16,8 +15,8 @@ const root = path.join(__dirname, '..');
 const rel = (p) => path.relative(root, p).split(path.sep).join('/');
 const problems = [];
 
-// built output, browser code and the React sources are checked separately (or not at all)
-const NOT_BACKEND = /[\\/]apps[\\/](budget[\\/](client|dist)|documents[\\/]public|manga[\\/]public)([\\/]|$)/;
+// the apps' browser code is checked separately, as modules or classic scripts
+const NOT_BACKEND = /[\\/]apps[\\/](budget|documents|manga)[\\/]public([\\/]|$)/;
 function walk(dir, out = [], skip = null) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
@@ -39,21 +38,13 @@ const check = (file, asModule) => {
 };
 const backend = [...walk(path.join(root, 'src')), ...walk(path.join(root, 'scripts')), ...walk(path.join(root, 'test')), ...walk(path.join(root, 'apps'), [], NOT_BACKEND)];
 const frontend = walk(path.join(root, 'frontend'));
-// browser modules of the launcher, the Admin console and e-Management; Koma Shelf's scripts are classic ones
-const pages = [...walk(path.join(root, 'hub')), ...walk(path.join(root, 'apps', 'documents', 'public'))];
+// browser modules of the launcher, the Admin console, e-Management and Florin; Koma Shelf's scripts are classic ones
+const pages = [...walk(path.join(root, 'hub')), ...walk(path.join(root, 'apps', 'documents', 'public')), ...walk(path.join(root, 'apps', 'budget', 'public'))];
 const classic = walk(path.join(root, 'apps', 'manga', 'public'));
 for (const f of backend) check(f, false);
 for (const f of [...frontend, ...pages]) check(f, true);
 for (const f of classic) check(f, false);
 fs.rmSync(tmp, { recursive: true, force: true });
-
-// 1c. Florin's page is built ahead (npm run build:budget) and committed; it must be there and complete
-const dist = path.join(root, 'apps', 'budget', 'dist');
-const distHtml = fs.existsSync(path.join(dist, 'index.html')) ? fs.readFileSync(path.join(dist, 'index.html'), 'utf-8') : '';
-if (!distHtml) problems.push('apps/budget/dist/index.html is missing. Run: npm run build:budget');
-for (const m of distHtml.matchAll(/(?:src|href)="\/budget\/([^"]+)"/g)) {
-  if (!fs.existsSync(path.join(dist, m[1]))) problems.push(`apps/budget/dist/index.html links /budget/${m[1]}, which isn't in dist/. Run: npm run build:budget`);
-}
 
 // 1b. SQL: no numbered placeholders (?1). Node 22's node:sqlite can't bind them
 //     ("column index out of range"), while newer Node versions can, so tests on a new Node miss it.
@@ -64,18 +55,25 @@ for (const f of backend) {
   });
 }
 
-// 2. index.html: the import map must come first, and every module needs a preload
-const html = fs.readFileSync(path.join(root, 'frontend', 'index.html'), 'utf-8');
-const mapAt = html.indexOf('<script type="importmap">');
-const firstPreload = html.indexOf('rel="modulepreload"');
-if (mapAt === -1) problems.push('frontend/index.html has no import map.');
-else if (firstPreload !== -1 && firstPreload < mapAt) problems.push('frontend/index.html: the import map must stay above every <link rel="modulepreload">.');
-const preloaded = new Set([...html.matchAll(/rel="modulepreload" href="\/([^"]+)"/g)].map(m => m[1]));
-for (const f of frontend) {
-  const r = rel(f).replace(/^frontend\//, '');
-  if (!preloaded.has(r)) problems.push(`frontend/${r} has no <link rel="modulepreload" href="/${r}"> in index.html.`);
+// 2. AkulavBox's and Florin's index.html: the import map must come first, and every module needs a
+//    preload (`base` is the URL the folder is served at)
+function checkPreloads(dir, base, modules) {
+  const name = `${rel(dir)}/index.html`;
+  const html = fs.readFileSync(path.join(dir, 'index.html'), 'utf-8');
+  const mapAt = html.indexOf('<script type="importmap">');
+  const firstPreload = html.indexOf('rel="modulepreload"');
+  if (mapAt === -1) problems.push(`${name} has no import map.`);
+  else if (firstPreload !== -1 && firstPreload < mapAt) problems.push(`${name}: the import map must stay above every <link rel="modulepreload">.`);
+  const preloaded = new Set([...html.matchAll(/rel="modulepreload" href="([^"]+)"/g)].map((m) => m[1]).filter((h) => h.startsWith(base)).map((h) => h.slice(base.length)));
+  for (const f of modules) {
+    const r = path.relative(dir, f).split(path.sep).join('/');
+    if (!preloaded.has(r)) problems.push(`${rel(f)} has no <link rel="modulepreload" href="${base}${r}"> in ${name}.`);
+  }
+  for (const r of preloaded) if (!r.startsWith('vendor/') && !fs.existsSync(path.join(dir, r))) problems.push(`${name} preloads ${base}${r}, which doesn't exist.`);
 }
-for (const r of preloaded) if (!fs.existsSync(path.join(root, 'frontend', r))) problems.push(`index.html preloads /${r}, which doesn't exist.`);
+checkPreloads(path.join(root, 'frontend'), '/', frontend);
+const florin = path.join(root, 'apps', 'budget', 'public');
+checkPreloads(florin, '/budget/', walk(florin).filter((f) => path.basename(f) !== 'theme.js'));
 
 // 3. one version everywhere
 const pkg = require(path.join(root, 'package.json'));

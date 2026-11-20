@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Florin — Expense tracking that makes sense</title>
+    <meta name="description" content="Florin is a self-hosted budgeting app: track expenses in any currency, set budgets and see where your money goes." />
+    <meta name="theme-color" content="#0b8a67" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0d1412" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="/budget/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/budget/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/budget/apple-touch-icon.png" />
+    <link rel="manifest" href="/budget/site.webmanifest" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
+    <!-- the saved theme, before first paint -->
+    <script src="/budget/theme.js"></script>
+
+    <script type="importmap">
+      { "imports": { "vue": "/budget/vendor/vue.js" } }
+    </script>
+    <link rel="modulepreload" href="/budget/vendor/vue.js" />
+    <link rel="modulepreload" href="/budget/app.js" />
+    <link rel="modulepreload" href="/budget/js/api.js" />
+    <link rel="modulepreload" href="/budget/js/format.js" />
+    <link rel="modulepreload" href="/budget/js/store.js" />
+    <link rel="modulepreload" href="/budget/js/router.js" />
+    <link rel="modulepreload" href="/budget/js/icon-paths.js" />
+    <link rel="modulepreload" href="/budget/js/icons.js" />
+    <link rel="modulepreload" href="/budget/js/ui.js" />
+    <link rel="modulepreload" href="/budget/js/charts.js" />
+    <link rel="modulepreload" href="/budget/js/layout.js" />
+    <link rel="modulepreload" href="/budget/js/tx-modal.js" />
+    <link rel="modulepreload" href="/budget/js/pages/dashboard.js" />
+    <link rel="modulepreload" href="/budget/js/pages/transactions.js" />
+    <link rel="modulepreload" href="/budget/js/pages/analytics.js" />
+    <link rel="modulepreload" href="/budget/js/pages/categories.js" />
+    <link rel="modulepreload" href="/budget/js/pages/settings.js" />
+    <link rel="modulepreload" href="/budget/js/pages/admin.js" />
+
+    <!-- Tailwind compiles the classes in the browser (served by this server, no build step) -->
+    <script src="/budget/vendor/tailwind.js"></script>
+    <style type="text/tailwindcss">
+      @custom-variant dark (&:where(.dark, .dark *));
+      @theme inline {
+        --color-bg: var(--bg);
+        --color-surface: var(--surface);
+        --color-surface-2: var(--surface-2);
+        --color-line: var(--border);
+        --color-ink: var(--text);
+        --color-ink-2: var(--text-2);
+        --color-ink-3: var(--text-3);
+        --color-brand: var(--brand);
+        --color-brand-strong: var(--brand-strong);
+        --color-brand-soft: var(--brand-soft);
+        --color-gold: var(--gold);
+        --color-danger: var(--danger);
+        --color-warning: var(--warning);
+        --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+        --font-display: 'Plus Jakarta Sans', 'Inter', ui-sans-serif, system-ui, sans-serif;
+      }
+    </style>
+    <link rel="stylesheet" href="/budget/style.css" />
+  </head>
+  <body>
+    <div id="app" v-cloak></div>
+    <noscript><p style="padding:24px;font-family:sans-serif">Florin needs JavaScript turned on.</p></noscript>
+    <script type="module" src="/budget/app.js"></script>
+  </body>
+</html>

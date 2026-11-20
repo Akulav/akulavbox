@@ -73,9 +73,9 @@ To check that everything works, run the built-in test suite. It starts a throwaw
 npm run check
 ```
 
-`npm run lint` is the fast part: every file parses, `index.html` preloads every module, Florin's built page is present, and the version matches across `package.json`, the lockfile and the changelog. GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs both on every push and pull request, on Linux (Node 22.13 and 24, with and without the optional native modules) and Windows, plus `npm audit`.
+`npm run lint` is the fast part: every file parses, AkulavBox's and Florin's `index.html` preload every module, and the version matches across `package.json`, the lockfile and the changelog. GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs both on every push and pull request, on Linux (Node 22.13 and 24, with and without the optional native modules) and Windows, plus `npm audit`.
 
-Florin's page is a React app. Its built files (`apps/budget/dist/`) are part of the repository, so a server never needs the build tools. After changing anything in `apps/budget/client/`, rebuild it with `npm run build:budget` (uses the dev dependencies) and commit `dist/` too.
+No page needs a build step: edit the files and reload.
 
 ## Configuration
 
@@ -186,7 +186,7 @@ e-Management can also export and import a single space (Setări → Copie de rez
 ## Tech stack
 
 - **Server:** one [Fastify](https://fastify.dev/) 5 process in CommonJS: AkulavBox, the launcher and the console in `src/`, and each other app as a Fastify plugin in `apps/`. The built-in `node:sqlite`, JWT, bcrypt, archiver, sharp and yauzl
-- **Pages:** AkulavBox is Vue 3 and Tailwind from CDNs, plain ES modules with no build step; e-Management is Vue 3 served locally; Koma Shelf is rendered on the server; Florin is React, built ahead with Vite; the launcher, sign-in page and Admin console are plain JavaScript
+- **Pages:** AkulavBox is Vue 3 and Tailwind from CDNs, plain ES modules with no build step; e-Management is Vue 3 served locally; Florin is Vue 3 with Tailwind's browser build, both served locally; Koma Shelf is rendered on the server; the launcher, sign-in page and Admin console are plain JavaScript
 
 ## License
 

@@ -1,8 +1,8 @@
 'use strict';
 // Florin (/budget): expenses and income in any currency, with budgets and charts. A Fastify plugin of
 // the AkulavBox server; data in DATA_DIR/budget/florin.db, accounts from AkulavBox.
-// The page is the React app in client/, built into dist/ (npm run build:budget). The build is part of
-// the repository, so a server never needs the build tools.
+// The page (public/) is Vue 3 with string templates and Tailwind compiled in the browser, like the rest
+// of AkulavBox: no build step. Both libraries are served from node_modules, so it works offline.
 const fs = require('node:fs');
 const path = require('node:path');
 const session = require('../../src/core/session');
@@ -10,11 +10,21 @@ const apps = require('../../src/core/apps');
 const { db, getSetting, DB_PATH } = require('./server/db.js');
 const { loadUser, requireAuth, requireAdmin, rowOfBox } = require('./server/auth.js');
 
-const DIST = path.join(__dirname, 'dist');
+const PUBLIC = path.join(__dirname, 'public');
 const { version: VERSION } = require('./meta.json');
+const VENDOR = {
+  'vue.js': require.resolve('vue/dist/vue.esm-browser.prod.js'),
+  'tailwind.js': require.resolve('@tailwindcss/browser'),
+};
 
+const INDEX_HTML = fs.readFileSync(path.join(PUBLIC, 'index.html'), 'utf8');
+// the one inline script, the import map, is allowed by its hash
+const importMap = /<script type="importmap">([\s\S]*?)<\/script>/.exec(INDEX_HTML)[1];
+const importMapHash = require('node:crypto').createHash('sha256').update(importMap.replace(/\r\n?/g, '\n')).digest('base64');
+
+// Vue compiles the templates in the browser, hence 'unsafe-eval'; Tailwind writes <style> tags.
 const CSP = [
-  "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "default-src 'self'", `script-src 'self' 'unsafe-eval' 'sha256-${importMapHash}'`, "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com", "img-src 'self' data:", "connect-src 'self'",
   "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'self'",
 ].join('; ');
@@ -72,23 +82,25 @@ module.exports = async function budget(app, opts) {
     });
   }, { prefix: '/api' });
 
-  // The built page. Signed-out visitors go to the server's sign-in page first.
-  if (fs.existsSync(DIST)) {
-    // hashed file names under assets/ never change; index.html is served by `page` below
-    app.register(require('@fastify/static'), {
-      root: DIST, prefix: '/', decorateReply: false, wildcard: false, index: false, maxAge: '1h',
-      allowedPath: (p) => p !== '/index.html',
-      setHeaders: (res, file) => { if (file.includes(`${path.sep}assets${path.sep}`)) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable'); },
-    });
-  }
+  // The page's files. maxAge 0: browsers revalidate (ETag), so an update is picked up on reload.
+  // index.html is served by `page` below, which checks the sign-in first.
+  app.register(require('@fastify/static'), {
+    root: PUBLIC, prefix: '/', decorateReply: false, wildcard: false, index: false, maxAge: 0,
+    allowedPath: (p) => p !== '/index.html',
+  });
+  const vendor = Object.fromEntries(Object.entries(VENDOR).map(([name, file]) => [name, fs.readFileSync(file)]));
+  app.get('/vendor/:file', (req, reply) => {
+    const body = vendor[req.params.file];
+    if (!body) return reply.code(404).send({ error: 'Not found' });
+    return reply.type('text/javascript; charset=utf-8').header('Cache-Control', 'public, max-age=86400').send(body);
+  });
+
   const page = async (req, reply) => {
-    if (!fs.existsSync(DIST)) return reply.code(503).type('text/plain').send('Florin’s page has not been built. Run: npm run build:budget');
     if (!req.user && !req.noAccess) return reply.redirect(session.loginUrl(req.url));
-    reply.header('Cache-Control', 'no-cache');
-    return reply.sendFile('index.html', DIST);
+    return reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-cache').send(INDEX_HTML);
   };
-  // The React router handles every other path of the page. A wildcard route under the prefix, not
-  // only a not-found handler: AkulavBox's own static files answer "/*" first otherwise.
+  // The page's router handles every other path. A wildcard route under the prefix, not only a
+  // not-found handler: AkulavBox's own static files answer "/*" first otherwise.
   const apiPath = `${opts.prefix}/api/`;
   const pageOr404 = (req, reply) => (req.url.startsWith(apiPath) ? reply.code(404).send({ error: 'Not found' }) : page(req, reply));
   app.get('/', page);

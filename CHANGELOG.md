@@ -2,6 +2,19 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 4.0.1 (2026-11-20)
+
+### Changed
+- **Florin's page is rewritten in Vue 3**, the same way as the rest of AkulavBox: plain ES modules with string templates and no build step. It looks and works as before; the charts are now drawn by Florin itself (SVG) instead of Recharts. Vue and Tailwind's browser build are served by the server, so the page also works without internet.
+- React, Vite, Recharts and the other build tools are gone, and so are `npm run build:budget` and the committed `apps/budget/dist/`.
+
+### Fixed
+- Florin's dashboard showed its "Add" button on phones too, next to the one in the top bar.
+- Florin's tabs ("Exchange rates") and "Over budget" badges no longer wrap onto two lines.
+
+### Upgrading
+- Run `npm install` (or use Admin → Updates, which does it): there is a new dependency, `@tailwindcss/browser`.
+
 ## 4.0.0 (2026-11-19)
 
 AkulavBox becomes the home of four apps that share one account: AkulavBox, **e-Management** (documents), **Koma Shelf** (webtoons) and **Florin** (budgets).

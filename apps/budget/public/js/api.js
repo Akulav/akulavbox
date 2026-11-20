@@ -19,6 +19,7 @@ async function request(method, url, body) {
     method,
     credentials: 'same-origin',
     headers: {
+      // the CSRF defence: the server refuses changes without it
       'X-Requested-With': 'florin',
       ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
     },
@@ -26,7 +27,7 @@ async function request(method, url, body) {
   });
   const data = res.headers.get('content-type')?.includes('application/json') ? await res.json() : null;
   if (!res.ok) {
-    if (res.status === 401) window.dispatchEvent(new Event('florin:unauthorized'));
+    if (res.status === 401) toLogin();
     throw new ApiError(res.status, data?.error || `Request failed (${res.status})`);
   }
   return data;

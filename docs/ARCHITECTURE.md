@@ -8,7 +8,7 @@ browser ──HTTP──▶ Fastify ┼─ /box/ + /api/…     frontend/ (Vue 3
                          │                                              │    data/box/users/<owner>/<id>.enc (AES-256-CTR)
                          ├─ /docs/…   apps/documents (Vue 3)            ├──▶ data/documents/<account>/{personal,work}/
                          ├─ /manga/…  apps/manga (server-rendered)      ├──▶ data/manga/ (koma-shelf.sqlite, works/)
-                         └─ /budget/… apps/budget (React, prebuilt)    ─┘──▶ data/budget/florin.db
+                         └─ /budget/… apps/budget (Vue 3)              ─┘──▶ data/budget/florin.db
 ```
 
 ## One account for every app
@@ -27,7 +27,7 @@ Each app is a Fastify plugin registered by `apps/index.js` under its prefix, wit
 
 - **e-Management** (`apps/documents`, `/docs`, in Romanian): `index.js` (auth, headers, the page) and `src/routes/` (categories, documents, backup and the activity log). Two SQLite databases per account (`src/db.js`, opened on first use and kept open). Files are stored as random names next to them, PDFs and images open inline, everything else downloads. Uploads are checked against the account's quota as they arrive. The page is Vue 3 served from `node_modules` (`/docs/vendor/vue.js`), split into `public/js/`.
 - **Koma Shelf** (`apps/manga`, `/manga`): server-rendered pages (`src/views/`, an escaping `html```  template), routes in `src/routes/` (shelf, library, account, api, admin), uploads to disk (`src/uploads.js`) and a background queue that re-encodes strips to WebP slices with sharp (`src/ingest.js`). Views use root paths; `withBase` (`src/html.js`) adds `/manga` to every link on the way out, and `"~/…"` links to the server around it. `works.bytes` (measured after processing) counts towards the quota. API tokens (`ks_…`) for Koma are its own; they stop working when the account is deleted or loses access.
-- **Florin** (`apps/budget`, `/budget`): `index.js` and `server/routes/`. The page is React built with Vite into `apps/budget/dist/` (`npm run build:budget`), committed so servers need no build tools.
+- **Florin** (`apps/budget`, `/budget`): `index.js` and `server/routes/`. The page (`public/`) is Vue 3 with string templates and a small history router (`public/js/router.js`); `index.html` is sent for every page path after the sign-in check, so links and reloads work. Tailwind v4's browser build compiles the classes on the page. Vue and Tailwind are served from `node_modules` at `/budget/vendor/`, with no build step. The charts are SVG components in `public/js/charts.js`.
 
 ## Startup order
 

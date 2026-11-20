@@ -83,10 +83,18 @@ module.exports = async function appsCheck({ api, ok, base, tmp, login, adminToke
   ok(fs.existsSync(path.join(tmp, 'budget', 'florin.db')), 'its database lives in budget/ of the data folder');
   const page = await get('/budget/', { cookie: jar });
   const pageText = await page.text();
-  ok(page.status === 200 && /\/budget\/assets\//.test(pageText), 'serves the built page with its assets under /budget/');
+  ok(page.status === 200 && /src="\/budget\/app\.js"/.test(pageText), 'serves the page under /budget/');
   ok((await get('/budget/')).status === 302, 'signed-out visitors go to the sign-in page');
   const deep = await get('/budget/settings', { cookie: jar });
-  ok(deep.status === 200 && /\/budget\/assets\//.test(await deep.text()), 'a deep link (/budget/settings) opens the page');
+  ok(deep.status === 200 && /src="\/budget\/app\.js"/.test(await deep.text()), 'a deep link (/budget/settings) opens the page');
+  // every module, script and stylesheet the page links is served
+  const linked = [...pageText.matchAll(/(?:src|href)="(\/budget\/[^"]+)"/g)].map((m) => m[1]);
+  const missing = [];
+  for (const u of linked) if ((await get(u, { cookie: jar })).status !== 200) missing.push(u);
+  ok(linked.length > 10 && !missing.length, `the page's ${linked.length} files are served (Vue and Tailwind from this server)`, missing.join(', '));
+  const vueRes = await get('/budget/vendor/vue.js');
+  ok(/javascript/.test(vueRes.headers.get('content-type') || ''), 'Vue is served as JavaScript');
+  ok((await get('/budget/index.html')).status !== 200, 'index.html is not served past the sign-in check');
   ok((await get('/budget/api/nope', { cookie: jar })).status === 404, 'unknown API paths are a JSON 404');
 
   // --- Koma Shelf ---
