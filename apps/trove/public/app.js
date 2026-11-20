@@ -33,8 +33,11 @@ const SHORTCUTS = [
   ['Viewer', [['← / →', 'Previous / next file'], ['+ / − / 0', 'Zoom in, out, reset'], ['Space', 'Slideshow, or play and pause'], ['F', 'Full screen'], ['I', 'Details panel'], ['Ctrl + S', 'Save while editing']]],
 ];
 
+// names people (and other apps' links) use for a section
+const ALIASES = { photos: 'albums', home: 'files', settings: 'profile' };
 function parseHash() {
   const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
+  if (ALIASES[parts[0]]) parts[0] = ALIASES[parts[0]];
   const tab = TABS.some(t => t.id === parts[0]) ? parts[0] : 'files';
   const args = parts.slice(1).map(s => { try { return decodeURIComponent(s); } catch (e) { return s; } });
   return { tab, arg: args[0] || null, args };

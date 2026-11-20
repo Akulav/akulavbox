@@ -220,7 +220,7 @@ export default {
           <span v-if="!file.is_encrypted" class="tile-shared" title="Shared publicly"><Icon name="globe" :size="12" /></span>
           <div class="tile-cap">
             <p class="truncate text-[13px] font-semibold leading-tight">{{ file.filename }}</p>
-            <p class="text-[11px] leading-tight mt-0.5 tile-sub">{{ formatBytes(file.size_bytes) }} · {{ formatDate(file.created_at) }}</p>
+            <p class="text-[11px] leading-tight mt-0.5 tile-sub truncate">{{ formatBytes(file.size_bytes) }} · {{ formatDate(file.created_at) }}</p>
           </div>
           <input type="checkbox" class="checkbox tile-check" :class="isSel('file', file.id) ? '!opacity-100' : ''" :checked="isSel('file', file.id)" @click.stop="toggleSel('file', file.id, $event)" :aria-label="'Select ' + file.filename">
           <button class="tile-more" @click.stop="openMenu($event, 'file', file)" :aria-label="'Actions for ' + file.filename"><Icon name="more" :size="16" /></button>

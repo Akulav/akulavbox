@@ -67,13 +67,13 @@ export default {
               <Icon name="user" size="100%" :stroke="1.25" class="tile-mark" />
               <span class="tile-count">{{ a.name.charAt(0).toUpperCase() }}</span>
             </template>
-            <span class="absolute z-[3] bottom-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+            <span class="absolute z-[3] bottom-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 touch-show transition-opacity">
               <span class="w-8 h-8 rounded-full bg-black/55 backdrop-blur text-white grid place-items-center" role="button" :aria-label="'Shuffle ' + a.name" @click.stop="playArtist(a.name, true)"><Icon name="shuffle" :size="14" /></span>
               <span class="w-8 h-8 rounded-full bg-accent text-accent-fg grid place-items-center" role="button" :aria-label="'Play ' + a.name" @click.stop="playArtist(a.name, false)"><Icon name="play" :size="13" class="translate-x-[1px]" /></span>
             </span>
             <div class="tile-cap">
               <p class="truncate text-[13.5px] font-semibold leading-tight">{{ a.name }}</p>
-              <p class="text-[11px] leading-tight mt-0.5 tile-sub">{{ a.count }} song{{ a.count === 1 ? '' : 's' }}<template v-if="a.duration"> · {{ formatDuration(a.duration) }}</template></p>
+              <p class="text-[11px] leading-tight mt-0.5 tile-sub truncate">{{ a.count }} song{{ a.count === 1 ? '' : 's' }}<template v-if="a.duration"> · {{ formatDuration(a.duration) }}</template></p>
             </div>
           </button>
         </div>
@@ -87,13 +87,13 @@ export default {
             <div class="relative aspect-square rounded-xl overflow-hidden bg-elevated lift zoom-media">
               <img v-if="p.display_cover_id" :src="thumbUrl(p.display_cover_id, 480)" loading="lazy" alt="" class="w-full h-full object-cover">
               <div v-else class="w-full h-full grid place-items-center text-faint"><Icon name="disc" :size="44" :stroke="1.25" /></div>
-              <div class="absolute bottom-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 translate-y-1 group-hover:translate-y-0 transition">
+              <div class="absolute bottom-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 touch-show translate-y-1 group-hover:translate-y-0 transition">
                 <button class="w-10 h-10 rounded-full bg-black/55 backdrop-blur text-white grid place-items-center shadow-lg hover:bg-black/70"
                         @click.stop="playPlaylist(p, true)" :title="'Shuffle ' + p.title" :aria-label="'Shuffle ' + p.title"><Icon name="shuffle" :size="16" /></button>
                 <button class="w-10 h-10 rounded-full bg-accent text-accent-fg grid place-items-center shadow-lg"
                         @click.stop="playPlaylist(p)" :title="'Play ' + p.title" :aria-label="'Play ' + p.title"><Icon name="play" :size="16" class="translate-x-[1px]" /></button>
               </div>
-              <button class="absolute top-2 right-2 w-8 h-8 rounded-full grid place-items-center bg-black/45 backdrop-blur text-white opacity-0 group-hover:opacity-100 focus:opacity-100"
+              <button class="absolute top-2 right-2 w-8 h-8 rounded-full grid place-items-center bg-black/45 backdrop-blur text-white opacity-0 group-hover:opacity-100 focus:opacity-100 touch-show"
                       @click.stop="openMenu($event, { type: 'playlist', item: p })"><Icon name="more" :size="17" /></button>
               <span v-if="p.is_favorite" class="absolute top-2 left-2 w-8 h-8 rounded-full grid place-items-center bg-black/45 text-accent"><Icon name="star-fill" :size="15" /></span>
             </div>

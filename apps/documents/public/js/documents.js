@@ -224,6 +224,14 @@ export const DocsView = {
         return hay.join(' ').toLowerCase().includes(q);
       });
     },
+    // filtrul ales, ca o singură valoare ("cat:<id>") pentru lista de alegere de pe telefon
+    selKey: {
+      get() { return `${this.sel.type}:${this.sel.id ?? ''}`; },
+      set(v) {
+        const [type, id] = v.split(':');
+        this.sel = { type, id: id ? (Number.isNaN(Number(id)) ? id : Number(id)) : null };
+      },
+    },
     // Lista vine deja ordonată după data documentului (cele mai recente primele); aici doar o grupăm pe luni.
     groups() {
       const out = [];
@@ -276,6 +284,14 @@ export const DocsView = {
       <section>
         <div class="toolbar">
           <input v-model="q" type="search" placeholder="Caută după denumire, număr, descriere, fișier…" />
+          <!-- pe telefon, în locul listei din stânga -->
+          <select v-model="selKey" class="side-select" aria-label="Categoria">
+            <option value="all:">Toate documentele ({{ docs.length }})</option>
+            <optgroup v-for="c in store.categories" :key="c.id" :label="c.name">
+              <option :value="'cat:' + c.id">Toată categoria ({{ counts.cat[c.id] || 0 }})</option>
+              <option v-for="t in c.tags" :key="t.id" :value="'tag:' + t.id">{{ t.name }} ({{ counts.tag[t.id] || 0 }})</option>
+            </optgroup>
+          </select>
           <select v-model="year" aria-label="Anul">
             <option value="">Toți anii</option>
             <option v-for="y in years" :key="y">{{ y }}</option>

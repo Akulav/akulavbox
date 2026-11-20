@@ -1,7 +1,7 @@
 'use strict';
 // Florin (/budget): expenses and income in any currency, with budgets and charts. A Fastify plugin of
 // the AkulavBox server; data in DATA_DIR/budget/florin.db, accounts from AkulavBox.
-// The page (public/) is Vue 3 with string templates and Tailwind compiled in the browser, like the rest
+// The page (public/) is Vue 3 with string templates and Tailwind compiled by the server (src/core/tailwind.js), like the rest
 // of AkulavBox: no build step. Its headers, API scope and page come from src/core/vue-app.js.
 const fs = require('node:fs');
 const path = require('node:path');

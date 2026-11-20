@@ -206,6 +206,16 @@ svg.i { width: 18px; height: 18px; flex-shrink: 0; fill: none; stroke: currentCo
 .app-card .foot { margin-top: auto; display: grid; gap: 8px; }
 .app-card .row { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; }
 .app-card.off { opacity: .6; }
+/* phones: every app on one screen, a compact row each (the tagline is on the sign-in page and in the menu) */
+@media (max-width: 639px) {
+  .apps-grid { gap: 10px; }
+  .app-card { min-height: 0; padding: 14px 16px; gap: 6px; }
+  .app-card > .muted { display: none; }
+  .app-card h2 { font-size: 17px; }
+  .app-card .foot { margin-top: 0; padding-left: 62px; display: flex; justify-content: space-between; align-items: center; }
+  .app-card .foot .row { font-size: 12px; }
+  .app-card::after { width: 120px; height: 120px; inset: auto -40px -70px auto; }
+}
 .links-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); margin-bottom: 8px; }
 .link-card { min-height: 0; flex-direction: row; align-items: center; gap: 14px; padding: 16px 18px; }
 .link-card h2 { font-size: 16px; }

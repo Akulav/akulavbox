@@ -131,9 +131,9 @@ export default {
               <Thumb :file-id="item.id" :w="density === 'small' ? 240 : 480" :eager="index < 12" @dims="d => onDims(item, d)" />
               <div v-if="isSel(item.id)" class="absolute inset-0 bg-accent/20 pointer-events-none"></div>
               <span class="absolute top-1.5 left-1.5 w-6 h-6 rounded-full grid place-items-center border-2 transition-opacity"
-                    :class="[isSel(item.id) ? 'bg-accent border-accent text-accent-fg opacity-100' : 'border-white/90 bg-black/25 text-transparent', selecting || isSel(item.id) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100']"
+                    :class="[isSel(item.id) ? 'bg-accent border-accent text-accent-fg opacity-100' : 'border-white/90 bg-black/25 text-transparent', selecting || isSel(item.id) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 touch-show']"
                     @click.stop="toggleSel(item.id)" role="checkbox" :aria-checked="isSel(item.id)"><Icon name="check" :size="13" :stroke="3" /></span>
-              <div v-if="album && !selecting" class="absolute top-1.5 right-1.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div v-if="album && !selecting" class="absolute top-1.5 right-1.5 flex gap-1 opacity-0 group-hover:opacity-100 touch-show transition-opacity">
                 <button class="h-7 px-2 rounded-md bg-black/60 backdrop-blur text-white text-[11.5px] font-medium hover:bg-black/80" @click.stop="setCover(item)">Make cover</button>
               </div>
             </div>
@@ -146,9 +146,9 @@ export default {
             <Thumb :file-id="img.id" :w="density === 'small' ? 240 : 480" :eager="i < 12" @dims="d => onDims(img, d)" />
             <div v-if="isSel(img.id)" class="absolute inset-0 bg-accent/20 pointer-events-none"></div>
             <span class="absolute top-1.5 left-1.5 w-6 h-6 rounded-full grid place-items-center border-2 transition-opacity"
-                  :class="[isSel(img.id) ? 'bg-accent border-accent text-accent-fg opacity-100' : 'border-white/90 bg-black/25 text-transparent', selecting || isSel(img.id) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100']"
+                  :class="[isSel(img.id) ? 'bg-accent border-accent text-accent-fg opacity-100' : 'border-white/90 bg-black/25 text-transparent', selecting || isSel(img.id) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 touch-show']"
                   @click.stop="toggleSel(img.id)" role="checkbox" :aria-checked="isSel(img.id)"><Icon name="check" :size="13" :stroke="3" /></span>
-            <div v-if="album && !selecting" class="absolute top-1.5 right-1.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div v-if="album && !selecting" class="absolute top-1.5 right-1.5 flex gap-1 opacity-0 group-hover:opacity-100 touch-show transition-opacity">
               <button class="h-7 px-2 rounded-md bg-black/60 backdrop-blur text-white text-[11.5px] font-medium hover:bg-black/80" @click.stop="setCover(img)">Make cover</button>
             </div>
           </div>

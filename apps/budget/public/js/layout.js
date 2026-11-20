@@ -67,9 +67,11 @@ const Sidebar = {
     </div>`,
 };
 
+const TABS = NAV.map((n) => ({ ...n, short: { '/': 'Home', '/categories': 'Budgets' }[n.to] }));
+
 export const Layout = {
-  components: { Sidebar, Logo },
-  data: () => ({ mobileOpen: false, store }),
+  components: { Sidebar, Logo, RouterLink },
+  data: () => ({ mobileOpen: false, store, TABS }),
   mounted() {
     // "n" anywhere opens a new transaction
     this.onKey = (e) => {
@@ -91,10 +93,12 @@ export const Layout = {
         <Sidebar />
       </aside>
 
-      <header class="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-line bg-surface/85 px-4 backdrop-blur lg:hidden">
-        <button type="button" @click="mobileOpen = true" class="-ml-2 rounded-lg p-2 text-ink-2" aria-label="Open menu"><Icon name="menu" :size="20" /></button>
+      <!-- phones: the brand on the left and the account on the right, like every app; the menu keeps the rest -->
+      <header class="sticky top-0 z-20 flex h-14 items-center gap-1 border-b border-line bg-surface/85 px-3 backdrop-blur lg:hidden">
+        <button type="button" @click="mobileOpen = true" class="rounded-lg p-2 text-ink-2" aria-label="Open menu"><Icon name="menu" :size="20" /></button>
         <Logo :size="28" />
-        <button type="button" @click="openTransaction" class="-mr-2 rounded-lg p-2 text-brand" aria-label="Add transaction"><Icon name="plus" :size="22" /></button>
+        <button type="button" @click="openTransaction" class="ml-auto rounded-lg p-2 text-brand" aria-label="Add transaction"><Icon name="plus" :size="22" /></button>
+        <akb-account no-theme accent="#1baf7a" :username="store.user?.username" :role="store.user?.role"></akb-account>
       </header>
 
       <div v-if="mobileOpen" class="fixed inset-0 z-40 lg:hidden">
@@ -105,8 +109,18 @@ export const Layout = {
         </div>
       </div>
 
-      <main class="mx-auto w-full max-w-[1320px] px-4 py-6 sm:px-6 lg:px-10 lg:py-9">
+      <main class="mx-auto w-full max-w-[1320px] px-4 pt-6 pb-24 sm:px-6 lg:px-10 lg:py-9">
         <slot />
       </main>
+
+      <!-- phones: the sections in a bottom bar, one tap away (like Trove's); the menu keeps the account -->
+      <nav class="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-line bg-surface/90 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden" aria-label="Sections">
+        <RouterLink v-for="n in TABS" :key="n.to" :to="n.to" :end="n.end"
+          class="relative flex h-[60px] flex-col items-center justify-center gap-1 text-[10.5px] font-medium transition-colors"
+          active-class="text-brand" inactive-class="text-ink-3">
+          <Icon :name="n.icon" :size="19" />
+          <span class="max-w-full truncate px-0.5">{{ n.short || n.label }}</span>
+        </RouterLink>
+      </nav>
     </div>`,
 };

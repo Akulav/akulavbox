@@ -62,7 +62,7 @@ const Root = {
 
     <TransactionModal v-if="store.txModal && store.user" :transaction="store.txModal.transaction" :defaults="store.txModal.defaults" @close="closeTransaction" />
 
-    <div class="pointer-events-none fixed inset-x-0 bottom-4 z-[100] flex flex-col items-center gap-2 px-4 sm:items-end sm:pr-6" aria-live="polite">
+    <div class="pointer-events-none fixed inset-x-0 bottom-20 z-[100] lg:bottom-4 flex flex-col items-center gap-2 px-4 sm:items-end sm:pr-6" aria-live="polite">
       <div v-for="t in store.toasts" :key="t.id" class="animate-pop pointer-events-auto flex max-w-sm items-center gap-3 rounded-xl border border-line bg-surface px-4 py-3 text-sm shadow-lg shadow-black/5">
         <Icon v-if="t.type === 'error'" name="alert-circle" :size="18" class="text-danger" />
         <Icon v-else name="check-circle-2" :size="18" class="text-brand" />

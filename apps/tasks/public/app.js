@@ -3,7 +3,8 @@
 import { createApp } from 'vue';
 import { UI } from '/hub/vue/ui.js';
 import { store, load, dismiss } from './js/store.js';
-import { route, navigate } from './js/router.js';
+import { route, navigate, RouterLink } from './js/router.js';
+import { SMART, counts as smartCounts } from './js/views.js';
 import { Logo } from './js/icons.js'; // also registers Tasks' icons
 import { Sidebar } from './js/components/sidebar.js';
 import { TaskDetail } from './js/components/task-detail.js';
@@ -11,10 +12,15 @@ import { ListEditor } from './js/components/list-editor.js';
 import { Settings } from './js/components/settings.js';
 import { PageView } from './js/views/page.js';
 
+const TABS = SMART.filter((v) => ['inbox', 'today', 'upcoming', 'flagged'].includes(v.id));
+
 const Root = {
-  components: { Sidebar, TaskDetail, ListEditor, Settings, PageView, Logo },
-  data: () => ({ store, drawer: false, editing: undefined, settings: false }),
+  components: { Sidebar, TaskDetail, ListEditor, Settings, PageView, Logo, RouterLink },
+  data: () => ({ store, drawer: false, editing: undefined, settings: false, TABS }),
   computed: {
+    counts() {
+      return smartCounts.value;
+    },
     editingList() {
       return this.editing !== undefined;
     },
@@ -79,21 +85,36 @@ const Root = {
 
       <div class="flex min-w-0 flex-1">
         <main class="min-w-0 flex-1">
-          <header class="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-line bg-surface/85 px-3 backdrop-blur lg:hidden">
-            <button type="button" @click="drawer = true" class="rounded-lg p-2 text-ink-2" aria-label="Open menu"><Icon name="menu" :size="20" /></button>
+          <!-- phones: the brand on the left and the account on the right, like every app (the views are in the bottom bar) -->
+          <header class="sticky top-0 z-20 flex h-14 items-center gap-1 border-b border-line bg-surface/85 px-4 backdrop-blur lg:hidden">
             <Logo :size="26" />
-            <button type="button" @click="addOnPhone" class="rounded-lg p-2 text-brand" aria-label="Add a task"><Icon name="plus" :size="22" /></button>
+            <button type="button" @click="addOnPhone" class="ml-auto rounded-lg p-2 text-brand" aria-label="Add a task"><Icon name="plus" :size="22" /></button>
+            <akb-account accent="#8b5cf6" :username="store.user?.username" :role="store.user?.role"></akb-account>
           </header>
-          <PageView @edit-list="editing = $event" />
+          <div class="pb-20 lg:pb-0"><PageView @edit-list="editing = $event" /></div>
         </main>
         <TaskDetail />
       </div>
+
+      <!-- phones: the main views in a bottom bar, one tap away; "More" opens the lists, tags and search -->
+      <nav class="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line bg-surface/90 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden" aria-label="Views">
+        <RouterLink v-for="v in TABS" :key="v.id" :to="'/' + v.id"
+          class="relative flex h-[60px] flex-col items-center justify-center gap-1 text-[10.5px] font-medium transition-colors"
+          active-class="text-brand" inactive-class="text-ink-3">
+          <Icon :name="v.icon" :size="19" />
+          <span>{{ v.name }}</span>
+          <span v-if="counts[v.id]" class="absolute left-1/2 top-2 ml-2 min-w-4 rounded-full bg-brand px-1 text-center text-[9.5px] font-semibold leading-4 text-white tabular-nums">{{ counts[v.id] > 99 ? '99+' : counts[v.id] }}</span>
+        </RouterLink>
+        <button type="button" @click="drawer = true" class="flex h-[60px] flex-col items-center justify-center gap-1 text-[10.5px] font-medium text-ink-3">
+          <Icon name="menu" :size="19" /><span>More</span>
+        </button>
+      </nav>
     </div>
 
     <ListEditor v-if="editingList" :list="editing" @close="editing = undefined" />
     <Settings v-if="settings" @close="settings = false" />
 
-    <div class="pointer-events-none fixed inset-x-0 bottom-4 z-[100] flex flex-col items-center gap-2 px-4 sm:items-start sm:pl-6 lg:pl-[312px]" aria-live="polite">
+    <div class="pointer-events-none fixed inset-x-0 bottom-20 z-[100] lg:bottom-4 flex flex-col items-center gap-2 px-4 sm:items-start sm:pl-6 lg:pl-[312px]" aria-live="polite">
       <div v-for="t in store.toasts" :key="t.id" class="animate-pop pointer-events-auto flex max-w-sm items-center gap-3 rounded-xl border border-line bg-surface px-4 py-3 text-sm shadow-lg shadow-black/10">
         <Icon :name="t.error ? 'circle-alert' : 'circle-check'" :size="18" :class="t.error ? 'text-danger' : 'text-brand'" />
         <span class="text-ink">{{ t.message }}</span>

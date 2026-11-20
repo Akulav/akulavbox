@@ -141,7 +141,7 @@ export default {
             </template>
             <div class="tile-cap">
               <p class="truncate text-[13.5px] font-semibold leading-tight">{{ p.value }}</p>
-              <p class="text-[11px] leading-tight mt-0.5 tile-sub">{{ p.count }} video{{ p.count === 1 ? '' : 's' }}<template v-if="p.duration"> · {{ formatDuration(p.duration) }}</template></p>
+              <p class="text-[11px] leading-tight mt-0.5 tile-sub truncate">{{ p.count }} video{{ p.count === 1 ? '' : 's' }}<template v-if="p.duration"> · {{ formatDuration(p.duration) }}</template></p>
             </div>
           </a>
         </div>
@@ -195,9 +195,9 @@ export default {
               </span>
               <span v-if="kind === 'books'" class="absolute top-2 left-2 chip !bg-black/60 !text-white uppercase !text-[10px] tracking-wide">{{ ext(it) }}</span>
               <div v-if="kind === 'books' && progressOf(it) > 0" class="absolute inset-x-0 bottom-0 h-1 bg-black/40"><div class="h-full bg-accent" :style="{ width: Math.round(progressOf(it) * 100) + '%' }"></div></div>
-              <input v-if="!openCol" type="checkbox" class="checkbox absolute top-2 right-11 !w-5 !h-5 bg-black/30 border-white/80" :class="selecting || isSel(it.id) ? '' : 'opacity-0 group-hover:opacity-100'"
+              <input v-if="!openCol" type="checkbox" class="checkbox absolute top-2 right-11 !w-5 !h-5 bg-black/30 border-white/80" :class="selecting || isSel(it.id) ? '' : 'opacity-0 group-hover:opacity-100 touch-show'"
                      :checked="isSel(it.id)" @click.stop="toggleSel(it.id)" :aria-label="'Select ' + displayTitle(it)">
-              <button class="absolute top-1.5 right-1.5 w-8 h-8 rounded-full grid place-items-center bg-black/50 backdrop-blur text-white opacity-0 group-hover:opacity-100 focus:opacity-100"
+              <button class="absolute top-1.5 right-1.5 w-8 h-8 rounded-full grid place-items-center bg-black/50 backdrop-blur text-white opacity-0 group-hover:opacity-100 focus:opacity-100 touch-show"
                       @click.stop="openMenu($event, it)" :aria-label="'Actions for ' + displayTitle(it)"><Icon name="more" :size="17" /></button>
             </div>
             <div class="mt-2.5 px-0.5 min-w-0">

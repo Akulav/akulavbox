@@ -35,10 +35,10 @@ export default {
           <div class="flex flex-col items-center gap-3 text-center px-6"><Icon :name="status === 'error' ? 'alert' : 'loader'" :size="24" />{{ message }}</div>
         </div>
         <button class="absolute left-0 top-0 bottom-0 w-[12%] max-w-[90px] group grid place-items-center" @click="prev" aria-label="Previous page">
-          <span class="w-9 h-9 rounded-full bg-surface/90 border border-line grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity"><Icon name="chevron-left" :size="18" /></span>
+          <span class="w-9 h-9 rounded-full bg-surface/90 border border-line grid place-items-center opacity-0 group-hover:opacity-100 touch-show transition-opacity"><Icon name="chevron-left" :size="18" /></span>
         </button>
         <button class="absolute right-0 top-0 bottom-0 w-[12%] max-w-[90px] group grid place-items-center" @click="next" aria-label="Next page">
-          <span class="w-9 h-9 rounded-full bg-surface/90 border border-line grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity"><Icon name="chevron-right" :size="18" /></span>
+          <span class="w-9 h-9 rounded-full bg-surface/90 border border-line grid place-items-center opacity-0 group-hover:opacity-100 touch-show transition-opacity"><Icon name="chevron-right" :size="18" /></span>
         </button>
       </div>
       <div class="shrink-0 h-9 flex items-center gap-3 px-4 border-t border-line bg-surface text-xs text-muted">

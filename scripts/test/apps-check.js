@@ -154,6 +154,16 @@ module.exports = async function appsCheck({ api, ok, base, tmp, login, adminToke
   const missing = [];
   for (const u of linked) if ((await get(u, { cookie: jar })).status !== 200) missing.push(u);
   ok(linked.length > 10 && !missing.length, `the page's ${linked.length} files are served (Vue and Tailwind from this server)`, missing.join(', '));
+  // Tailwind is compiled on the server: the page links a stylesheet instead of the browser build
+  const twUrl = pageText.match(/href="(\/budget\/~[\w-]+\/tailwind\.css)"/)?.[1];
+  ok(twUrl && !/tailwind\.js|text\/tailwindcss/.test(pageText), 'the page links compiled Tailwind instead of compiling it in the browser');
+  const tw = twUrl ? await get(twUrl) : null;
+  const twText = tw ? await tw.text() : '';
+  ok(tw?.status === 200 && /immutable/.test(tw.headers.get('cache-control') || '') && /\.bg-surface\b/.test(twText) && /\.lg\\:hidden/.test(twText),
+    `the compiled stylesheet has the page's classes and is cached for good (${Math.round(twText.length / 1024)} KB)`);
+  const troveHtml = await (await get('/box/')).text();
+  const troveTw = troveHtml.match(/href="(\/box\/~[\w-]+\/tailwind\.css)"/)?.[1];
+  ok(troveTw && !/cdn\.tailwindcss\.com|cropper\.min\.js/.test(troveHtml) && (await get(troveTw)).status === 200, 'Trove loads its styles from this server, no blocking scripts from CDNs');
   const vueRes = await get('/hub/vendor/vue.js');
   ok(/javascript/.test(vueRes.headers.get('content-type') || ''), 'Vue is served as JavaScript');
   ok((await get('/budget/index.html')).status !== 200, 'index.html is not served past the sign-in check');

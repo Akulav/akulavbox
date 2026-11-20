@@ -73,34 +73,32 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,650;12..96,750&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 
-  <!-- Cropper.js (avatar editor) -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" crossorigin="anonymous" integrity="sha384-AMJcAgMUmNt1Zo4ranquGLeT5m7yOrVbtNsNk0oZohvxqKk6RRzXHqlEaS9gFXR7" />
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js" crossorigin="anonymous" integrity="sha384-jzwsV9ieM/KUDMeo+d8dc+jm0GEl7ywPNwg10alB5BodVuC/Kx9RpEnyrl2Om9zH"></script>
-
-  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
-  <script>
-    const v = (name) => `rgb(var(--${name}) / <alpha-value>)`;
-    tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-            display: ['"Bricolage Grotesque"', 'Geist', 'sans-serif'],
-            mono: ['"Geist Mono"', 'ui-monospace', 'monospace'],
-          },
-          colors: {
-            bg: v('bg'), surface: v('surface'), elevated: v('elevated'), line: v('line'),
-            fg: v('fg'), muted: v('muted'), faint: v('faint'),
-            accent: v('accent'), 'accent-fg': v('accent-fg'), 'accent-soft': v('accent-soft'),
-            danger: v('danger'), ok: v('ok'), info: v('info'), 'accent-hi': v('accent-hi'), teal: v('teal'),
-          },
-          borderRadius: { xl: '12px', '2xl': '16px' },
-        }
-      }
+  <!-- Tailwind's classes, compiled once on the server into a versioned stylesheet that takes this
+       block's place (src/core/assets.js): the page never waits for a script to style it. -->
+  <script src="/hub/vendor/tailwind.js"></script>
+  <style type="text/tailwindcss">
+    @theme inline {
+      --font-sans: Geist, ui-sans-serif, system-ui, sans-serif;
+      --font-display: "Bricolage Grotesque", Geist, sans-serif;
+      --font-mono: "Geist Mono", ui-monospace, monospace;
+      --color-bg: rgb(var(--bg)); --color-surface: rgb(var(--surface)); --color-elevated: rgb(var(--elevated)); --color-line: rgb(var(--line));
+      --color-fg: rgb(var(--fg)); --color-muted: rgb(var(--muted)); --color-faint: rgb(var(--faint));
+      --color-accent: rgb(var(--accent)); --color-accent-fg: rgb(var(--accent-fg)); --color-accent-soft: rgb(var(--accent-soft)); --color-accent-hi: rgb(var(--accent-hi));
+      --color-danger: rgb(var(--danger)); --color-ok: rgb(var(--ok)); --color-info: rgb(var(--info)); --color-teal: rgb(var(--teal));
+      --radius-sm: 0.125rem; --radius-xl: 12px; --radius-2xl: 16px;
     }
-  </script>
+    /* what Tailwind 3 did and Trove's classes expect: lines in the theme's colour, pointers on buttons */
+    @layer base {
+      *, ::after, ::before, ::backdrop, ::file-selector-button { border-color: rgb(var(--line)); }
+      button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
+    }
+  </style>
 
   <style>
+    /* Trove's own components sit in Tailwind's "components" layer, so a utility on the same element
+       (class="btn h-8") still wins, as it should */
+    @layer theme, base, components, utilities;
+    @layer components {
     /* ---------- Tokens ---------- */
     :root, :root[data-theme="dark"] {
       --bg: 13 21 24;          /* #0D1518 ink */
@@ -384,6 +382,8 @@
     :root[data-motion="off"] .app-bg .blob, :root[data-motion="off"] .meter > span::after, :root[data-motion="off"] .brand-lid,
     :root[data-motion="off"] .heart, :root[data-motion="off"] .glow-dot { animation: none !important; }
     :root[data-motion="off"] .stagger > *, :root[data-motion="off"] .rise { animation: none !important; }
+    /* phones: the background stays still (three screen-sized layers moving all the time cost battery and smooth scrolling) */
+    @media (max-width: 767px) { .app-bg .blob { animation: none; will-change: auto; } }
 
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; animation-iteration-count: 1 !important; }
@@ -449,6 +449,10 @@
     .data-table thead th.rownum { z-index: 2; }
 
     .cropper-view-box, .cropper-face { border-radius: 50%; }
+
+    /* touch screens have no hover: controls that appear on hover stay visible there */
+    @media (hover: none) { .touch-show { opacity: 1 !important; transform: none !important; } }
+    }
   </style>
 </head>
 <body>

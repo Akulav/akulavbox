@@ -2,6 +2,25 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 5.3.0 (2026-11-20)
+
+### Added
+- **Phones: every section one tap away.** Florin and Tick get a bottom bar like Trove's (Florin: Home, Transactions, Analytics, Budgets, Settings; Tick: Inbox, Today, Upcoming, Flagged with their counts, and More for lists, tags and search). Their phone headers now show the brand on the left and your account on the right, like every other app.
+- Trove understands `#/photos` (and `#/home`, `#/settings`) as the names of its sections, instead of falling back to Files.
+
+### Changed
+- **Styles are built on the server.** Trove used to style itself with Tailwind's script from `cdn.tailwindcss.com`, and Florin and Tick with Tailwind's browser build: a script that blocked the page, then rebuilt the styles on every change on the page (each row, each upload's progress). Now the server compiles each app's classes once, with the same Tailwind (no new dependency, no build step), into one versioned stylesheet cached for a year. Pages show up styled at once and use less CPU while you work.
+- Trove no longer loads the photo editor (Cropper.js) on every visit, only when you change your profile picture.
+- **Phones:**
+  - Controls that appeared only when pointing with a mouse now stay visible on touch screens: the ⋯ menu on photos and videos, selecting them, album actions, the play buttons in Music, and the page arrows in the book reader.
+  - e-Management lists its categories in a drop-down above the documents instead of a long list that pushed them off the screen.
+  - The launcher shows every app in a compact row, so they all fit on one screen.
+  - Trove's moving background stays still, which saves battery and keeps scrolling smooth.
+  - Trove's tile captions stay on one line.
+
+### Fixed
+- **Trove sometimes came up unstyled or half-styled, and Ctrl+F5 only fixed it some of the time.** Its styles came from a script on a CDN, built in the browser after the page had started drawing; when that script was slow, failed, or lost the race with the first render, the page broke. Its styles now come from this server, built in advance (above).
+
 ## 5.2.0 (2026-11-20)
 
 ### Added

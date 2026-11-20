@@ -12,7 +12,17 @@ const LIBS = {
   JSZip: [['https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js', 'sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG']],
   ePub: [['https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js', 'sha384-ZqmkDa/1AGF4SKdSmXgEG+3G+Gsb6yNqUSq2Mqp0jDf1GWk+UY5eNbEd7hgwiywI']],
   pdfjsLib: [['https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js', 'sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e']],
+  // the photo editor in Profile (it used to block every page load of Trove)
+  Cropper: [['https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js', 'sha384-jzwsV9ieM/KUDMeo+d8dc+jm0GEl7ywPNwg10alB5BodVuC/Kx9RpEnyrl2Om9zH']],
 };
+const STYLES = {
+  Cropper: ['https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css', 'sha384-AMJcAgMUmNt1Zo4ranquGLeT5m7yOrVbtNsNk0oZohvxqKk6RRzXHqlEaS9gFXR7'],
+};
+function loadStyle([href, integrity]) {
+  const l = document.createElement('link');
+  l.rel = 'stylesheet'; l.href = href; l.integrity = integrity; l.crossOrigin = 'anonymous';
+  document.head.appendChild(l);
+}
 const DEPS = { ePub: ['JSZip'] };
 const loading = {};
 
@@ -32,6 +42,7 @@ export function lib(name) {
   if (!loading[name]) {
     loading[name] = (async () => {
       for (const dep of DEPS[name] || []) await lib(dep);
+      if (STYLES[name]) loadStyle(STYLES[name]);
       for (const src of LIBS[name]) await loadScript(src);
       if (!window[name]) throw new Error(`${name} failed to load`);
       if (name === 'pdfjsLib') {

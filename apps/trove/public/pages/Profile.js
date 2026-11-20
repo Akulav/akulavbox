@@ -4,6 +4,7 @@ import { Avatar } from '../components/Shell.js';
 import { BrandMark, MadeBy } from '../components/Brand.js';
 import { api, account, refreshAccount, formatBytes, parseDbDate, session, setSession, storage, app } from '../lib/api.js';
 import { toast, attempt } from '../lib/ui.js';
+import { lib } from '../lib/cdn.js';
 
 const applyTheme = (choice) => {
   const t = choice === 'system' ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark') : choice;
@@ -221,10 +222,12 @@ export default {
       if (!file) return;
       const reader = new FileReader();
       reader.onload = async (evt) => {
+        const Cropper = await attempt(() => lib('Cropper'));
+        if (!Cropper) return;
         cropImageSrc.value = evt.target.result;
         await nextTick();
         if (cropper) cropper.destroy();
-        cropper = new window.Cropper(cropperImageRef.value, { aspectRatio: 1, viewMode: 1, dragMode: 'move', background: false, guides: false, autoCropArea: 0.85 });
+        cropper = new Cropper(cropperImageRef.value, { aspectRatio: 1, viewMode: 1, dragMode: 'move', background: false, guides: false, autoCropArea: 0.85 });
       };
       reader.readAsDataURL(file);
     }

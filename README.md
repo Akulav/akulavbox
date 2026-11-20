@@ -204,7 +204,7 @@ e-Management can also export and import a single space (Setări → Copie de rez
 ## Tech stack
 
 - **Server:** one [Fastify](https://fastify.dev/) 5 process in CommonJS: AkulavBox, the launcher and the console in `src/`, and each other app as a Fastify plugin in `apps/`. The built-in `node:sqlite`, JWT, bcrypt, archiver, sharp and yauzl
-- **Pages:** Trove is Vue 3 (served locally) and Tailwind from a CDN, plain ES modules with no build step; e-Management is Vue 3 served locally; Florin is Vue 3 with Tailwind's browser build, both served locally; Koma Shelf is rendered on the server; the launcher, sign-in page and Admin console are plain JavaScript
+- **Pages:** Trove, Florin and Tick are Vue 3 (served locally) with Tailwind compiled by the server into a cached stylesheet, plain ES modules with no build step; e-Management is Vue 3 served locally; Koma Shelf is rendered on the server; the launcher, sign-in page and Admin console are plain JavaScript
 
 ## License
 

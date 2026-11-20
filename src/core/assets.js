@@ -79,6 +79,8 @@ function revision() {
 /** The file behind a page URL ('/docs/js/ui.js'), and its versioned URL, or null */
 function resolve(url) {
   if (vendor.has(url)) return { file: vendor.get(url), versioned: url.replace(/\/([^/]+)$/, `/~${revision()}/$1`) };
+  const g = generated.get(url);
+  if (g) return { file: url, generated: g, versioned: `${g.versioned}~${revision()}/${g.rel}` };
   for (const r of roots) {
     if (!url.startsWith(r.prefix)) continue;
     const rel = url.slice(r.prefix.length);
@@ -101,13 +103,32 @@ function rewrite(text) {
   });
 }
 
+// ---------- Tailwind, compiled here ----------
+// A page with Tailwind's browser build and a `<style type="text/tailwindcss">` gets, in their place, a
+// link to `<its root>tailwind.css`: the same classes compiled once on the server (core/tailwind.js), so
+// the page never waits for a script to style it, and never shows up unstyled.
+const generated = new Map(); // '/budget/tailwind.css' -> { css, dirs, versioned, rel }
+const TW_STYLE = /<style type="text\/tailwindcss">([\s\S]*?)<\/style>/;
+const TW_SCRIPT = /[ \t]*<script src="\/hub\/vendor\/tailwind\.js"><\/script>\r?\n?/;
+const shared = path.join(__dirname, '..', '..', 'hub', 'vue'); // components the Vue apps share
+
+function withCompiledTailwind(file, html) {
+  const m = html.match(TW_STYLE);
+  if (!m) return html;
+  const r = roots.find((x) => file.startsWith(x.dir + path.sep));
+  if (!r) return html;
+  const url = `${r.prefix}tailwind.css`;
+  generated.set(url, { css: m[1], dirs: [r.dir, shared], skip: r.skip, versioned: r.versioned, rel: 'tailwind.css' });
+  return html.replace(TW_SCRIPT, '').replace(TW_STYLE, `<link rel="stylesheet" href="${url}">`);
+}
+
 /** A page's HTML with its asset URLs versioned (kept until the revision changes) */
 const pages = new Map();
 function page(file) {
   revision();
   let p = pages.get(file);
   if (!p) {
-    const html = rewrite(fs.readFileSync(file, 'utf-8'));
+    const html = rewrite(withCompiledTailwind(file, fs.readFileSync(file, 'utf-8')));
     p = { html, etag: `"${crypto.createHash('sha1').update(html).digest('base64url').slice(0, 16)}"` };
     pages.set(file, p);
   }
@@ -125,27 +146,54 @@ function sendPage(request, reply, file) {
 // ---------- serving ----------
 const TYPES = { '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
 
+const packed = (body, type) => ({ body, gz: body.length > 1024 ? zlib.gzipSync(body, { level: 9 }) : null, type });
+
 /** Load (rewrite, gzip) an asset for a versioned URL's path part */
 function load(file) {
   const raw = fs.readFileSync(file);
   // node_modules files are taken as they are; ours get their imports versioned
-  const body = vendor.size && [...vendor.values()].includes(file) ? raw : Buffer.from(rewrite(raw.toString('utf-8')));
-  return { body, gz: body.length > 1024 ? zlib.gzipSync(body, { level: 9 }) : null, type: TYPES[path.extname(file)] || 'application/octet-stream' };
+  const body = [...vendor.values()].includes(file) ? raw : Buffer.from(rewrite(raw.toString('utf-8')));
+  return packed(body, TYPES[path.extname(file)] || 'application/octet-stream');
+}
+
+// one compile at a time per stylesheet, however many requests ask for it at once
+const compiling = new Map();
+function loadGenerated(url, g) {
+  if (!compiling.has(url)) {
+    const at = rev;
+    compiling.set(url, require('./tailwind').compile(g.css, g.dirs, { skip: g.skip })
+      .then((css) => { const a = packed(Buffer.from(css), TYPES['.css']); if (at === rev) cache.set(url, a); return a; })
+      .finally(() => compiling.delete(url)));
+  }
+  return compiling.get(url);
 }
 
 /** The Fastify routes: one per versioned prefix (call once every root is added) */
 function routes(fastify) {
-  const send = (request, reply, url) => {
+  const send = async (request, reply, url) => {
     const current = revision();
     const hit = resolve(url);
     if (!hit || !ASSET.test(hit.file)) return reply.code(404).send({ error: 'Not found' });
     let a = cache.get(hit.file);
+    if (!a && hit.generated) {
+      try { a = await loadGenerated(hit.file, hit.generated); } catch (e) {
+        request.log.error(e);
+        return reply.code(500).header('Cache-Control', 'no-store').send({ error: 'The page’s styles could not be built.' });
+      }
+    }
     if (!a) { a = load(hit.file); cache.set(hit.file, a); }
     reply.header('Cache-Control', request.params.rev === current ? 'public, max-age=31536000, immutable' : 'no-cache')
       .header('Vary', 'Accept-Encoding').header('X-Content-Type-Options', 'nosniff').type(a.type);
     if (a.gz && /\bgzip\b/.test(String(request.headers['accept-encoding'] || ''))) return reply.header('Content-Encoding', 'gzip').send(a.gz);
     return reply.send(a.body);
   };
+  // the pages that use Tailwind, read now: their stylesheet must be known before any page asks for it
+  // (a browser holding a page from before a restart asks for the stylesheet directly)
+  for (const r of roots) {
+    for (const f of walk(r.dir, r.skip)) {
+      if (f.endsWith('.html') && TW_STYLE.test(fs.readFileSync(f, 'utf-8'))) page(f);
+    }
+  }
   const versionedPrefixes = new Set(roots.map((r) => r.versioned));
   for (const vp of versionedPrefixes) {
     fastify.get(`${vp}~:rev/*`, async (request, reply) => {
