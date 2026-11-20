@@ -1,5 +1,4 @@
 const crypto = require('crypto');
-const path = require('path');
 const config = require('../core/config');
 const db = require('../core/db');
 const apps = require('../core/apps');
@@ -23,7 +22,6 @@ const tools = require('../core/connector/tools');
 // through OAuth. Its scopes say, per app, 'read' or 'write'; the tools are in core/connector/tools.js.
 // ---------------------------------------------------------------------------
 
-const HUB = path.join(__dirname, '../../hub');
 const PROTOCOLS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
 const INSTRUCTIONS = 'AkulavBox is a self-hosted personal cloud. Its apps: Trove (files, photos, music, videos, books), e-Management (personal and work documents), Koma Shelf (webtoons), Florin (expenses, income, budgets) and Tick (to-dos). Call akulavbox_account first to see which apps this connector may use and whether it may change things. Tools are named after their app (trove_, docs_, koma_, florin_, tick_). Dates are YYYY-MM-DD. Ask before deleting anything.';
 
@@ -265,10 +263,7 @@ module.exports = async function (fastify) {
   });
 
   // ---------- OAuth: the person approves (a page of this server, signed in) ----------
-  fastify.get('/oauth/authorize', async (request, reply) => {
-    reply.header('Cache-Control', 'no-store');
-    return reply.sendFile('authorize.html', HUB);
-  });
+  // the page itself, /oauth/authorize, is served by modules/hub.js with the other hub pages
   // what the page shows: the app's name and where it goes back to (public: no account involved)
   fastify.get('/api/oauth/request', async (request, reply) => {
     const c = checkRequest(request.query || {});

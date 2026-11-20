@@ -81,7 +81,7 @@ async function stageImport(file, passphrase, { currentSchema }) {
     const { header, keys, headLength, head } = await openHeader(file, passphrase);
     const size = (await fs.promises.stat(file)).size;
     if (size < headLength + 32) throw new Error('The backup file is incomplete.');
-    const { hasRoomFor } = require('./storage');
+    const { hasRoomFor } = require('./disk');
     if (!hasRoomFor(size)) throw new Error('There isn’t enough free disk space to restore this backup.');
     fs.rmSync(stage, { recursive: true, force: true });
     fs.mkdirSync(stage, { recursive: true });
@@ -284,6 +284,9 @@ function applyPending() {
       [config.appDataDir(id), path.join(journal.aside, 'apps', id)],
       [path.join(stage, 'apps', id), config.appDataDir(id)],
     ]),
+    // Trove's database (5.1 and later): set aside; the restored akulavbox.db carries Trove's tables, and
+    // they move into a new box/trove.db on start. Last, so journals of older restores keep their steps.
+    ...['', '-wal', '-shm'].map(s => [config.troveDbPath + s, path.join(journal.aside, 'trove.db' + s)]),
   ];
   const save = () => fs.writeFileSync(journalPath, JSON.stringify(journal));
   if (journal.done.length) console.log(`[backup] Finishing a restore that was interrupted (${journal.done.length} of ${steps.length} steps done)`);

@@ -11,7 +11,7 @@ The other apps (`/docs`, `/manga`, `/budget`, `/tasks`) use the same sign-in thr
 | POST | `/api/login` | `{ username, password }` → `{ token, role, id, username, weak_password }`, and sets the `akb_session` cookie. Rate limited (429) |
 | POST | `/api/logout` | Clears the `akb_session` cookie (the page forgets its stored token) |
 | POST | `/api/session/resume` | Cookie only, same origin: → `{ token, id, username, role }` for a page that lost its stored token. Other origins get 403 |
-| GET | `/api/session/me` | Cookie only, for the shared account menu (`hub/account.js`): `{ id, username, role, avatar }`; `avatar` is `/api/session/avatar?v=<version>` or `null`. 401 when signed out |
+| GET | `/api/session/me` | Cookie only, for the shared account menu (`hub/account.js`): `{ id, username, role, avatar, apps: [{ id, name, path, color }] }` (`apps`: the ones the account may open, for the app switcher); `avatar` is `/api/session/avatar?v=<version>` or `null`. 401 when signed out |
 | GET | `/api/apps/catalog` | The apps of the server for the signed-out sign-in page: `{ name, version, apps: [{ id, name, path, tagline, short, color }] }` |
 | GET | `/api/session/avatar` | Cookie only: the account's profile picture as an image (PNG, JPEG, WebP or GIF), cached until its `?v=` changes. 404 without one |
 | GET | `/`, `/login`, `/admin`, `/connect`, `/box/` | The launcher, the sign-in page (`?next=/path` to come back to, `?out=1` after signing out), the Admin console, AI connectors, Trove's page |

@@ -1,5 +1,5 @@
-const { verifyUser } = require('../core/auth');
-const trash = require('../core/trash');
+const { verifyUser } = require('../../../src/core/auth');
+const trash = require('../lib/trash');
 
 const list = (v) => [].concat(v || []).map(String).slice(0, 5000);
 

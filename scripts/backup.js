@@ -47,7 +47,7 @@ async function main() {
       console.log('If the Admin page still says “Ready to restore” afterwards, it shows why the swap failed.');
     } finally { clearInterval(timer); }
   } else if (cmd === 'check') {
-    const m = require('../src/core/maintenance');
+    const m = require('../apps/trove/lib/maintenance');
     const r = m.scan();
     console.log(`On disk: ${r.disk_files} files, ${gb(r.disk_bytes)}. In the database: ${r.db_files} files, ${gb(r.db_bytes)}.`);
     console.log(`Not in the database: ${r.orphans.length} (${gb(r.orphan_bytes)}), ${r.recoverable} recoverable. Missing on disk: ${r.missing.length}. Usage counters off: ${r.usage.length}.`);

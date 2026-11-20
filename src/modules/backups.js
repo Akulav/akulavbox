@@ -5,7 +5,7 @@ const config = require('../core/config');
 const { verifyAdmin, fromForm } = require('../core/auth');
 const activity = require('../core/activity');
 const schedule = require('../core/schedule');
-const store = require('../core/storage');
+const store = require('../core/disk');
 const backup = require('../core/backup');
 const { LATEST } = require('../core/migrations');
 

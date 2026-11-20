@@ -90,6 +90,12 @@ createApp({
               <div v-if="userMenu" class="fixed inset-0 z-[229]" @click="userMenu = false"></div>
               <Transition name="pop">
                 <div v-if="userMenu" class="menu absolute right-0 top-12 z-[230] w-[270px] !p-0 overflow-hidden" role="menu" @click="userMenu = false">
+                  <!-- the app switcher, the same as in every other app's account menu (hub/account.js) -->
+                  <nav v-if="otherApps.length > 1" class="grid grid-cols-3 gap-1 p-2 border-b border-line" aria-label="All apps">
+                    <a v-for="a in otherApps" :key="a.id" :href="a.path" class="min-w-0 whitespace-nowrap flex flex-col items-center gap-1.5 rounded-[10px] px-0.5 py-2 text-[11px] font-medium text-center leading-tight hover:bg-elevated/60" :style="{ color: a.id === 'box' ? a.color : '' }" :aria-current="a.id === 'box' ? 'page' : undefined">
+                      <span class="w-[34px] h-[34px] rounded-[10px] grid place-items-center" :style="{ color: a.color, background: a.color + '2b', boxShadow: a.id === 'box' ? '0 0 0 2px ' + a.color : '' }"><Icon :name="APP_ICONS[a.id] || 'grid'" :size="18" /></span>{{ a.name }}
+                    </a>
+                  </nav>
                   <div class="p-4 flex items-center gap-3 border-b border-line">
                     <Avatar :name="session.username" :src="account.profile_image" :size="40" />
                     <div class="min-w-0">
@@ -256,6 +262,11 @@ createApp({
       if (route.tab === 'xxx' && account.loaded && !account.show_xxx) location.hash = '#/files';
     });
     const userMenu = ref(false);
+    // the account's apps, for the switcher in the account menu (the shared cookie answers /api/session/me)
+    const otherApps = ref([]);
+    const APP_ICONS = { box: 'layers', documents: 'file-text', manga: 'book-open', budget: 'wallet', tasks: 'square-check' };
+    const loadApps = () => fetch('/api/session/me', { credentials: 'same-origin' }).then(r => (r.ok ? r.json() : null)).then(m => { if (m?.apps) otherApps.value = m.apps; }).catch(() => {});
+    loadApps(); // once, so the menu opens complete
     // close the account menu when the page changes
     watch(() => route.tab, () => { userMenu.value = false; });
     const usedPct = computed(() => account.quota_bytes ? Math.min(100, Math.round((account.used_bytes / account.quota_bytes) * 100)) : 0);
@@ -318,7 +329,7 @@ createApp({
       else if (!t) stopPlayer();
     }, { immediate: true });
 
-    return { session, route, logout, theme, toggleTheme, visibleTabs, mobileTabs,
+    return { otherApps, APP_ICONS, session, route, logout, theme, toggleTheme, visibleTabs, mobileTabs,
       account, usedPct, formatBytes, player, goFolder, showTop, toTop, online, appInfo, banners, showKeys, shortcuts: SHORTCUTS, mainTabs, userMenu, newRelease };
   },
 }).mount('#app');

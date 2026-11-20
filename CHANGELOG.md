@@ -2,6 +2,23 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 5.1.0 (2026-11-20)
+
+### Added
+- **Switch apps from any app.** The account menu of every app now starts with your apps (Trove, e-Management, Koma Shelf, Florin, Tick), the current one marked, so you can jump straight from one to another without going back to the launcher.
+
+### Changed
+- **Trove is an app like the others** (`apps/trove`, with its page, its API and its library code), and **its data has a database of its own**, `box/trove.db`, next to its files. On the first start its tables (files, folders, albums, playlists, media details, link downloads) and its storage counter move there from `akulavbox.db`, after a snapshot of the database in `backups/`. The move is safe to interrupt: it runs again on the next start.
+- AkulavBox's own icons and install manifest live in `hub/brand/`; they're still served at the site's root.
+- The launcher, sign-in, Admin console and AI connector pages load their scripts and styles from versioned addresses, cached for a year and replaced the moment they change: fewer requests on every visit.
+
+### Fixed
+- **On iPhone the launcher could stay on “Loading your apps…”** after an update: Safari kept an older copy of a script the new page needed. The versioned addresses above make that impossible, and if the launcher still can't start (an error, or no answer for 15 seconds) it now says so and offers Reload and Sign in again.
+- “e-Management” no longer breaks in two in the app menus, and the account menu shows your role and “AkulavBox account” on separate lines.
+
+### Upgrading
+- Nothing to do. Trove's tables move into `box/trove.db` on the first start (a few seconds for a large library). Full backups keep their format: backups from any version restore, and backups made now restore on 5.0 too.
+
 ## 5.0.0 (2026-11-20)
 
 AkulavBox becomes the account and the server around its apps, the way a Google account holds its apps, and each app gets a name of its own: the files app is now **Trove**, and there is a new app, **Tick**.

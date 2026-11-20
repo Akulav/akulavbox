@@ -4,8 +4,8 @@ const fs = require('fs');
 const net = require('net');
 const path = require('path');
 const { pipeline } = require('stream/promises');
-const db = require('./db');
-const config = require('./config');
+const db = require('../../../src/core/db');
+const config = require('../../../src/core/config');
 const lib = require('./library');
 const store = require('./storage');
 const thumbs = require('./thumbs');
@@ -480,7 +480,7 @@ async function download(job, work) {
   }
 
   // what is left of the account's storage, which its other apps share
-  const left = require('./apps').room(ownerId, 'box');
+  const left = require('../../../src/core/apps').room(ownerId, 'box');
   const approx = info.filesize || info.filesize_approx || 0;
   if (approx && approx > left) throw new Error('Not enough storage left for this download');
 

@@ -434,12 +434,12 @@ async function main() {
       }
       // a restored database could hold ids that are paths: they must not reach files outside data/users
       fs.writeFileSync(path.join(tmp, 'outside.plain'), 'secret');
-      const evilDb = new (require('node:sqlite').DatabaseSync)(path.join(tmp, 'akulavbox.db'));
+      const evilDb = new (require('node:sqlite').DatabaseSync)(path.join(tmp, 'box', 'trove.db')); // Trove's tables (5.1+)
       evilDb.prepare("INSERT INTO files (id, owner_id, filename, size_bytes, mime_type, is_encrypted, created_at) VALUES ('../../outside', 'admin-uuid-0000', 'x.txt', 6, 'text/plain', 0, datetime('now'))").run();
       evilDb.close();
       const evil = await api(`/api/files/${encodeURIComponent('../../outside')}/view`, { raw: true });
       ok(evil.status === 404, 'file ids from the database never become paths outside data/users', String(evil.status));
-      const evilDb2 = new (require('node:sqlite').DatabaseSync)(path.join(tmp, 'akulavbox.db'));
+      const evilDb2 = new (require('node:sqlite').DatabaseSync)(path.join(tmp, 'box', 'trove.db'));
       evilDb2.prepare("DELETE FROM files WHERE id = '../../outside'").run();
       evilDb2.close();
       ok((await api('/api/login', { method: 'POST', body: { username: 'x'.repeat(5000), password: 'y' }, auth: false })).status === 401, 'absurdly long usernames are refused cheaply');
@@ -526,8 +526,9 @@ async function main() {
       const lost = await upload(Buffer.from('soon gone'), 'lost.txt', null);
       const lostRow = fs.readdirSync(adminDir).find(n => n.startsWith(lost.data.fileId));
       fs.unlinkSync(path.join(adminDir, lostRow));
-      const sdb = new (require('node:sqlite').DatabaseSync)(path.join(tmp, 'akulavbox.db'));
-      sdb.prepare("UPDATE users SET used_bytes = used_bytes + 999999 WHERE id = 'admin-uuid-0000'").run();
+      // Trove's counter lives in box/trove.db (since 5.1)
+      const sdb = new (require('node:sqlite').DatabaseSync)(path.join(tmp, 'box', 'trove.db'));
+      sdb.prepare("UPDATE usage SET bytes = bytes + 999999 WHERE user_id = 'admin-uuid-0000'").run();
       sdb.close();
       const scan = (await api('/api/admin/storage-check')).data;
       ok(scan.orphans.length === 3 && scan.orphan_bytes === 5000 + 109 + 3000 && scan.recoverable === 1, 'finds files the database doesn’t know', JSON.stringify(scan.orphans));
@@ -655,6 +656,17 @@ async function main() {
         ok(tasks2?.tasks?.some(t => t.title === appsState.taskTitle), 'Tasks came along');
         if (appsState.workId) ok((await fetch(`${base}/manga/w/${appsState.workId}`)).status === 200 && fs.existsSync(path.join(tmp2, 'manga', 'works', appsState.workId, 'cover.webp')), 'Koma Shelf webtoons came along');
         ok(fs.readdirSync(path.join(tmp2, 'backups')).some(n => n.startsWith('pre-import-')), 'the replaced data is kept in backups/');
+        // the backup carries Trove's tables inside akulavbox.db (one format for every version); on start
+        // they move into box/trove.db again
+        const { DatabaseSync: DS } = require('node:sqlite');
+        const main2 = new DS(path.join(tmp2, 'akulavbox.db'), { readOnly: true });
+        const leftInMain = main2.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table' AND name IN ('files', 'folders', 'media_meta')").get().n;
+        main2.close();
+        const trove2 = new DS(path.join(tmp2, 'box', 'trove.db'), { readOnly: true });
+        const troveFiles = trove2.prepare('SELECT COUNT(*) AS n FROM files').get().n;
+        const troveUsage = trove2.prepare("SELECT bytes FROM usage WHERE user_id = 'admin-uuid-0000'").get()?.bytes;
+        trove2.close();
+        ok(leftInMain === 0 && troveFiles > 0 && troveUsage > 0, 'restored: Trove’s tables and counter are in box/trove.db again', `${leftInMain} ${troveFiles} ${troveUsage}`);
       } finally {
         s2.kill();
         base = base1;

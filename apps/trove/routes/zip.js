@@ -1,9 +1,9 @@
-const db = require('../core/db');
+const db = require('../../../src/core/db');
 const fs = require('fs');
 const { ZipArchive } = require('archiver');
-const { verifyUser, fromForm } = require('../core/auth');
-const store = require('../core/storage');
-const { serveFile, cleanName } = require('../core/serve');
+const { verifyUser, fromForm } = require('../../../src/core/auth');
+const store = require('../lib/storage');
+const { serveFile, cleanName } = require('../lib/serve');
 
 const { diskPathOf } = store;
 

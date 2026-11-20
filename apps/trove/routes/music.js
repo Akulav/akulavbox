@@ -1,7 +1,7 @@
-const db = require('../core/db');
+const db = require('../../../src/core/db');
 const crypto = require('crypto');
-const { verifyUser } = require('../core/auth');
-const lib = require('../core/library');
+const { verifyUser } = require('../../../src/core/auth');
+const lib = require('../lib/library');
 
 const TITLE_MAX = 200;
 const cleanTitle = (v) => String(v ?? '').trim().slice(0, TITLE_MAX);

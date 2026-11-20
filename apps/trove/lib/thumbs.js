@@ -2,8 +2,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
-const db = require('./db');
-const config = require('./config');
+const db = require('../../../src/core/db');
+const config = require('../../../src/core/config');
 
 // sharp is optional. Without it the browser makes thumbnails once and uploads
 // them (PUT /api/files/:id/thumb), so grids are still fast after the first visit.

@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const db = require('./db');
+const db = require('../../../src/core/db');
 
 // ---------------------------------------------------------------------------
 // Collections group library items (videos, and later books) the way playlists

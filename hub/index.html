@@ -17,6 +17,19 @@
   <script>
     // links from before 4.0 (/#/files/…) belong to Trove, which lives at /box/
     if (/^#\//.test(location.hash)) location.replace('/box/' + location.hash);
+    // If the page's script can't start (an error, or a phone with an old copy of it cached) or the
+    // server doesn't answer, say so with a way out instead of "Loading your apps…" for ever.
+    (function () {
+      var stuck = function (why) {
+        var b = document.getElementById('boot');
+        if (!b || b.hidden || b.getAttribute('data-stuck')) return;
+        b.setAttribute('data-stuck', '1');
+        b.innerHTML = '<div style="text-align:center;max-width:420px;padding:0 16px"><p style="margin:0 0 6px;font-weight:600">Your apps didn’t load.</p><p style="margin:0 0 14px;font-size:13px">' + why + '</p><button class="btn btn-primary" onclick="location.reload()">Reload</button> <a class="btn" href="/login?out=1">Sign in again</a></div>';
+      };
+      window.addEventListener('error', function (e) { stuck('Something on this page failed to start' + (e && e.message ? ': ' + String(e.message).replace(/[<>&]/g, '') : '') + '. Reloading usually fixes it.'); });
+      window.addEventListener('unhandledrejection', function () { stuck('A request failed. Check your connection, then reload.'); });
+      setTimeout(function () { stuck('The server is taking too long to answer. Check your connection, then reload.'); }, 15000);
+    })();
   </script>
   <script src="/hub/theme.js"></script>
   <script src="/hub/account.js" defer></script>

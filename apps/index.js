@@ -1,6 +1,7 @@
 'use strict';
-// The apps that live next to AkulavBox, each a Fastify plugin under its own prefix. Each keeps its
-// files in its own folder of the data folder (config.appDataDir(id)), signs people in with the shared
+// The apps of AkulavBox, each a Fastify plugin. Trove (apps/trove, the core: every account has it) keeps
+// its API at /api/… and its files in box/; the others live under their own prefix, keep their files in
+// their own folder of the data folder (config.appDataDir(id)), sign people in with the shared
 // cookie (src/core/session.js) and registers its hooks (usage, delete-user, …) in src/core/apps.js.
 // An app that can't start (Koma Shelf without sharp) answers with a short page saying why, and the
 // launcher and the Admin console show it; the rest of the server runs on.
@@ -32,6 +33,7 @@ function sharpMissing() {
 
 /** Register every app on the server */
 function load(fastify) {
+  fastify.register(require('./trove'));
   fastify.register(require('./documents'), { prefix: '/docs', onClose });
   const noSharp = sharpMissing();
   if (noSharp) {

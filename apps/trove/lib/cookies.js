@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const config = require('./config');
+const config = require('../../../src/core/config');
 const store = require('./storage');
 
 // ---------------------------------------------------------------------------

@@ -27,7 +27,7 @@ async function main() {
   try {
     data = await api('/api/apps');
   } catch (e) {
-    $('boot').textContent = e.message;
+    $('boot').innerHTML = `<div style="text-align:center"><p style="margin:0 0 12px">${esc(e.message)}</p><button class="btn btn-primary" onclick="location.reload()">Try again</button></div>`;
     return;
   }
   const user = data.user;

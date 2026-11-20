@@ -1,6 +1,6 @@
 const db = require('../core/db');
 const config = require('../core/config');
-const store = require('../core/storage');
+const store = require('../core/disk');
 const apps = require('../core/apps');
 const activity = require('../core/activity');
 const { verifyAdmin } = require('../core/auth');
@@ -17,7 +17,7 @@ module.exports = async function (fastify) {
 
   fastify.get('/api/admin/console', { preHandler: verifyAdmin }, async () => {
     const users = db.prepare(`
-      SELECT u.id, u.username, u.role, u.quota_bytes, u.used_bytes, u.profile_image, u.created_at, u.last_login_at,
+      SELECT u.id, u.username, u.role, u.quota_bytes, COALESCE((SELECT bytes FROM trove.usage g WHERE g.user_id = u.id), 0) AS used_bytes, u.profile_image, u.created_at, u.last_login_at,
         (SELECT COUNT(*) FROM files f WHERE f.owner_id = u.id AND f.trashed_at IS NULL) AS file_count
       FROM users u ORDER BY u.role = 'admin' DESC, u.username COLLATE NOCASE
     `).all();

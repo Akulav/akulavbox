@@ -1,6 +1,6 @@
-const db = require('../core/db');
-const { verifyUser } = require('../core/auth');
-const lib = require('../core/library');
+const db = require('../../../src/core/db');
+const { verifyUser } = require('../../../src/core/auth');
+const lib = require('../lib/library');
 
 // Sections backed by a locked folder + per-file details (title, participants, tags…)
 const SECTIONS = { videos: 'videos', books: 'books', music: 'music', photos: 'gallery', xxx: 'xxx' };

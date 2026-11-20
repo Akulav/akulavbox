@@ -9,7 +9,7 @@ const apps = require('../core/apps');
 
 module.exports = async function (fastify) {
   fastify.get('/api/user/profile', { preHandler: verifyUser }, async (request) => {
-    const p = db.prepare('SELECT id, username, role, quota_bytes, used_bytes, profile_image, created_at, show_xxx FROM users WHERE id = ?').get(request.user.id);
+    const p = db.prepare('SELECT u.id, u.username, u.role, u.quota_bytes, COALESCE(g.bytes, 0) AS used_bytes, u.profile_image, u.created_at, u.show_xxx FROM users u LEFT JOIN trove.usage g ON g.user_id = u.id WHERE u.id = ?').get(request.user.id);
     const t = db.prepare('SELECT COALESCE(SUM(size_bytes), 0) AS bytes FROM files WHERE owner_id = ? AND trashed_at IS NOT NULL').get(request.user.id);
     // used_bytes is the whole account's storage (every app); trove_bytes Trove's part of it
     const space = apps.space(request.user.id);

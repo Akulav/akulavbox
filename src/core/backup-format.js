@@ -97,7 +97,7 @@ function listApps() {
 function estimate(db) {
   const files = listData(db);
   let dbBytes = 0;
-  try { dbBytes = fs.statSync(config.dbPath).size; } catch (e) { /* none */ }
+  for (const f of [config.dbPath, config.troveDbPath]) { try { dbBytes += fs.statSync(f).size; } catch (e) { /* none */ } }
   for (const d of listApps().dbs) { try { dbBytes += fs.statSync(d.path).size; } catch (e) { /* gone */ } }
   return { files: files.length, bytes: files.reduce((a, f) => a + f.size, 0) + Math.round(dbBytes / 3) };
 }

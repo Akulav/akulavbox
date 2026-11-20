@@ -30,6 +30,17 @@ module.exports = async function appsCheck({ api, ok, base, tmp, login, adminToke
   ok(!badIcons.length, 'the site’s icons are served as images (Bitwarden finds them)', badIcons.join(', '));
   const rootHtml = await (await get('/')).text();
   ok(/<link rel="icon" href="\/favicon\.ico"/.test(rootHtml) && /apple-touch-icon/.test(rootHtml), 'the launcher links its PNG and ICO icons');
+  // the hub's modules come from a versioned path, so a phone never mixes an old cached module with a new one
+  const homeJs = /src="(\/hub\/~[\w-]+\/home\.js)"/.exec(rootHtml)?.[1];
+  const homeRes = homeJs && await get(homeJs);
+  ok(homeRes?.status === 200 && /immutable/.test(homeRes.headers.get('cache-control') || '') && /\/hub\/~[\w-]+\/hub\.css/.test(rootHtml), 'the launcher’s scripts and styles carry a revision and are cached for good', homeJs);
+  ok((await get('/hub/~nope/../../package.json')).status === 404 && (await get('/hub/home.js')).status === 200, 'the versioned path can’t leave hub/, and the plain one still works');
+  // Trove's tables live in their own database (5.1)
+  const { DatabaseSync: DS } = require('node:sqlite');
+  const mainDb = new DS(path.join(tmp, 'akulavbox.db'), { readOnly: true });
+  const inMain = mainDb.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table' AND name IN ('files', 'folders', 'albums', 'media_meta')").get().n;
+  mainDb.close();
+  ok(inMain === 0 && fs.existsSync(path.join(tmp, 'box', 'trove.db')), 'Trove keeps its tables in box/trove.db, not in akulavbox.db');
   const cat = await json(await get('/api/apps/catalog'));
   ok(cat?.name === 'AkulavBox' && cat.apps.map((a) => a.name).join() === 'Trove,e-Management,Koma Shelf,Florin,Tick', 'the sign-in page reads the app names from the server', JSON.stringify(cat?.apps?.map((a) => a.name)));
   const vz = await get('/hub/vendor/vue.js', { headers: { 'Accept-Encoding': 'gzip' } });

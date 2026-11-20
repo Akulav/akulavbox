@@ -1,5 +1,5 @@
-const db = require('./db');
-const config = require('./config');
+const db = require('../../../src/core/db');
+const config = require('../../../src/core/config');
 const { purgeFile } = require('./storage');
 
 // ---------------------------------------------------------------------------

@@ -61,6 +61,9 @@ function exportStream(db, passphrase, { onProgress } = {}) {
   async function* body() {
     try {
       snapshotDb(db, tmpDb);
+      // Trove's tables (box/trove.db since 5.1) go back into the snapshot: a backup keeps the format every
+      // version reads, and a restore moves them out again on start (apps/trove/db.js)
+      require('../../apps/trove/db').mergeForBackup(db, tmpDb);
       const snap = new DatabaseSync(tmpDb, { readOnly: true });
       const schema = snap.prepare('PRAGMA user_version').get().user_version;
       const counts = snap.prepare('SELECT (SELECT COUNT(*) FROM users) AS users, (SELECT COUNT(*) FROM files) AS files').get();

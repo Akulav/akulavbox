@@ -12,10 +12,45 @@ const { verifyUser, readToken } = require('../core/auth');
 // console (/admin), AI connectors (/connect), and Trove's page at /box/. They are static files;
 // each page asks the API who is signed in and goes to /login when nobody is.
 const HUB = path.join(__dirname, '../../hub');
-const FRONTEND = path.join(__dirname, '../../frontend');
+const TROVE = path.join(__dirname, '../../apps/trove/public');
+const BRAND = path.join(HUB, 'brand');
+
+/** A short hash of everything in hub/ (except brand/): changes whenever any of its files does */
+function hubRevision() {
+  const h = crypto.createHash('sha1');
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) { if (e.name !== 'brand') walk(p); } else { h.update(e.name); h.update(fs.readFileSync(p)); }
+    }
+  };
+  walk(HUB);
+  return h.digest('base64url').slice(0, 10);
+}
 
 module.exports = async function (fastify) {
   fastify.register(require('@fastify/static'), { root: HUB, prefix: '/hub/', decorateReply: false, index: false, maxAge: 0 });
+
+  // The hub's pages load their scripts and styles from /hub/~<revision>/…: the revision changes with
+  // their contents, so a browser never mixes an old cached module with a new one (Safari on iPhone kept
+  // an old common.js after an update and the launcher stopped at "Loading your apps…"), and the files
+  // can be kept for a year. Relative imports (./common.js) stay under the same revision. /hub/… without
+  // one still works (the other apps load /hub/account.js and /hub/vue/… that way).
+  const REV = hubRevision();
+  fastify.get('/hub/~:rev/*', async (request, reply) => {
+    const rel = request.params['*'];
+    if (!/^[\w./-]+$/.test(rel) || rel.includes('..') || rel.startsWith('vendor/')) return reply.code(404).send({ error: 'Not found' });
+    reply.header('Cache-Control', request.params.rev === REV ? 'public, max-age=31536000, immutable' : 'no-cache');
+    return reply.sendFile(rel, HUB, { cacheControl: false }); // keep the header above
+  });
+  const pages = new Map();
+  const hubPage = (file) => {
+    if (!pages.has(file)) {
+      const html = fs.readFileSync(path.join(HUB, file), 'utf-8').replace(/(["'(])\/hub\/(?!vendor\/|~)([\w./-]+\.(?:js|css))/g, `$1/hub/~${REV}/$2`);
+      pages.set(file, { html, etag: `"${crypto.createHash('sha1').update(html).digest('base64url').slice(0, 16)}"` });
+    }
+    return pages.get(file);
+  };
 
   // Vue and Tailwind's browser build for every app's page (Trove too), from node_modules: no CDN, works
   // offline. Read and gzipped once at start (≈430 KB → ≈130 KB on the wire), with an ETag, so a reload
@@ -38,26 +73,40 @@ module.exports = async function (fastify) {
     return reply.send(v.body);
   });
 
-  const page = (file, dir = HUB) => async (request, reply) => {
-    reply.header('Cache-Control', 'no-cache');
-    return reply.sendFile(file, dir);
+  /** A hub page, its module and style URLs carrying the revision */
+  const page = (file) => async (request, reply) => {
+    const p = hubPage(file);
+    reply.header('Cache-Control', 'no-cache').header('ETag', p.etag);
+    if (request.headers['if-none-match'] === p.etag) return reply.code(304).send();
+    return reply.type('text/html; charset=utf-8').send(p.html);
   };
   fastify.get('/', page('index.html'));
   fastify.get('/login', page('login.html'));
   fastify.get('/admin', page('admin.html'));
   fastify.get('/connect', page('connect.html'));
+  // an AI app asks to connect (the rest of OAuth is in modules/connector.js)
+  fastify.get('/oauth/authorize', page('authorize.html'));
   fastify.get('/box', async (request, reply) => reply.redirect('/box/'));
-  fastify.get('/box/', page('index.html', FRONTEND));
+  fastify.get('/box/', async (request, reply) => {
+    reply.header('Cache-Control', 'no-cache');
+    return reply.sendFile('index.html', TROVE);
+  });
   // Trove's own install manifest (its files stay at the root paths, so it is mapped here)
   fastify.get('/box/manifest.webmanifest', async (request, reply) => {
     reply.header('Cache-Control', 'no-cache').type('application/manifest+json');
-    return reply.sendFile('trove.webmanifest', FRONTEND);
+    return reply.sendFile('trove.webmanifest', TROVE);
   });
-  // the name iOS and some icon fetchers try first
-  fastify.get('/apple-touch-icon-precomposed.png', async (request, reply) => {
-    reply.header('Cache-Control', 'public, max-age=86400');
-    return reply.sendFile('apple-touch-icon.png', FRONTEND);
-  });
+
+  // AkulavBox's own icons and install manifest, at the site's root where browsers and password
+  // managers (Bitwarden) look for them. /apple-touch-icon-precomposed.png is the name iOS tries first.
+  const BRAND_FILES = { 'favicon.ico': 'favicon.ico', 'favicon.svg': 'favicon.svg', 'favicon-32x32.png': 'favicon-32x32.png', 'favicon-96x96.png': 'favicon-96x96.png', 'icon-192.png': 'icon-192.png', 'icon-512.png': 'icon-512.png', 'apple-touch-icon.png': 'apple-touch-icon.png', 'apple-touch-icon-precomposed.png': 'apple-touch-icon.png', 'manifest.webmanifest': 'manifest.webmanifest' };
+  for (const [url, file] of Object.entries(BRAND_FILES)) {
+    fastify.get(`/${url}`, async (request, reply) => {
+      reply.header('Cache-Control', file.endsWith('.webmanifest') ? 'no-cache' : 'public, max-age=86400');
+      if (file.endsWith('.webmanifest')) reply.type('application/manifest+json');
+      return reply.sendFile(file, BRAND);
+    });
+  }
 
   // The apps of this server, for the signed-out sign-in page: names, colours and taglines only.
   const catalog = JSON.stringify({ name: config.name, version: config.version, apps: apps.APPS.map((a) => ({ id: a.id, name: a.name, path: a.path, tagline: a.tagline, short: a.short, color: a.color })) });
@@ -89,7 +138,9 @@ module.exports = async function (fastify) {
     const s = session.userOf(request, reply);
     if (!s) return reply.code(401).send({ error: 'Not signed in' });
     const img = pictureOf.get(s.user.id)?.profile_image;
-    return { id: s.user.id, username: s.user.username, role: s.user.role, avatar: img ? `/api/session/avatar?v=${pictureVersion(img)}` : null };
+    // the apps the account may open, for the app switcher in the account menu
+    const list = apps.APPS.filter((a) => apps.access(s.user.id, a.id).enabled && apps.status(a.id) === 'running').map((a) => ({ id: a.id, name: a.name, path: a.path, color: a.color }));
+    return { id: s.user.id, username: s.user.username, role: s.user.role, avatar: img ? `/api/session/avatar?v=${pictureVersion(img)}` : null, apps: list };
   });
   fastify.get('/api/session/avatar', async (request, reply) => {
     const s = session.userOf(request, reply);

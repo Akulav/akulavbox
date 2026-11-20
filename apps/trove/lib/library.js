@@ -1,4 +1,4 @@
-const db = require('./db');
+const db = require('../../../src/core/db');
 const crypto = require('crypto');
 const { extOf } = require('./mime');
 

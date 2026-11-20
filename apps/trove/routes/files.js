@@ -1,21 +1,21 @@
-const db = require('../core/db');
+const db = require('../../../src/core/db');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { pipeline } = require('stream/promises');
 const { Transform } = require('stream');
-const config = require('../core/config');
-const { verifyUser } = require('../core/auth');
-const activity = require('../core/activity');
-const { guessMime } = require('../core/mime');
-const lib = require('../core/library');
-const thumbs = require('../core/thumbs');
-const store = require('../core/storage');
-const trash = require('../core/trash');
-const apps = require('../core/apps');
+const config = require('../../../src/core/config');
+const { verifyUser } = require('../../../src/core/auth');
+const activity = require('../../../src/core/activity');
+const { guessMime } = require('../lib/mime');
+const lib = require('../lib/library');
+const thumbs = require('../lib/thumbs');
+const store = require('../lib/storage');
+const trash = require('../lib/trash');
+const apps = require('../../../src/core/apps');
 
 const { MASTER_KEY, userDirOf, diskPathOf } = store;
-const { cleanName } = require('../core/serve');
+const { cleanName } = require('../lib/serve');
 const UPLOAD_ID_RE = /^[A-Za-z0-9-]{8,64}$/;
 
 // Folders, uploads, moving, renaming, trashing and sharing files, and editing text files in place.
@@ -147,7 +147,7 @@ module.exports = async function (fastify) {
     const sysKey = lib.systemKeyOf(folderId);
     if (sysKey && !lib.accepts(sysKey, file.filename, file.mime_type)) return lib.rejectMessage(sysKey);
     db.prepare('UPDATE files SET folder_id = ? WHERE id = ? AND owner_id = ?').run(folderId, id, userId);
-    if (sysKey === 'videos' || sysKey === 'xxx') require('../core/downloader').probeSoon();
+    if (sysKey === 'videos' || sysKey === 'xxx') require('../lib/downloader').probeSoon();
     return null;
   }
   const errCode = (msg) => (/not found/i.test(msg) ? 404 : 400);
@@ -325,14 +325,14 @@ module.exports = async function (fastify) {
       db.tx(() => {
         db.prepare(`INSERT INTO files (id, owner_id, folder_id, filename, size_bytes, mime_type, is_encrypted, iv_hex, created_at)
           VALUES (?, ?, ?, ?, ?, ?, 1, ?, datetime('now'))`).run(fileId, uid, folderId, filename, finalSize, finalMime, meta.iv);
-        db.prepare('UPDATE users SET used_bytes = used_bytes + ? WHERE id = ?').run(finalSize, uid);
+        store.addUsage(uid, finalSize);
       });
 
       if (lib.categoryOf(filename, finalMime) === 'image') {
         thumbs.warm(db.prepare('SELECT * FROM files WHERE id = ?').get(fileId), encPath, MASTER_KEY);
       }
       // a video in Videos or XXX: read its codec in the background (the format badge, "Convert to AV1")
-      if (sysKey === 'videos' || sysKey === 'xxx') require('../core/downloader').probeSoon();
+      if (sysKey === 'videos' || sysKey === 'xxx') require('../lib/downloader').probeSoon();
       return { success: true, fileId };
     } catch (err) {
       const quota = err.code === 'QUOTA';
@@ -478,7 +478,7 @@ module.exports = async function (fastify) {
     }
 
     db.prepare('UPDATE files SET size_bytes = ?, iv_hex = ? WHERE id = ?').run(buf.length, ivHex, file.id);
-    db.prepare('UPDATE users SET used_bytes = MAX(0, used_bytes + ?) WHERE id = ?').run(delta, request.user.id);
+    store.addUsage(request.user.id, delta);
     thumbs.purge(file.owner_id, file.id);
     return { success: true, size_bytes: buf.length, public_hash: file.public_hash };
   });

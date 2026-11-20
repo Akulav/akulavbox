@@ -1,8 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const db = require('./db');
-const config = require('./config');
+const db = require('../../../src/core/db');
+const config = require('../../../src/core/config');
 const store = require('./storage');
 const { guessMime } = require('./mime');
 
@@ -15,7 +15,7 @@ const { guessMime } = require('./mime');
 //              "Recovered files" folder when their owner still exists.
 //  - missing:  file rows whose data is gone. Removed with purgeFile() so every
 //              album, playlist and cover reference goes too.
-//  - usage:    users.used_bytes drifting from the real total, fixed in place.
+//  - usage:    Trove's counter (trove.db, usage) drifting from the real total, fixed in place.
 // Files written in the last hour are left alone: an upload may be finishing.
 // ---------------------------------------------------------------------------
 
@@ -23,7 +23,7 @@ const NAME_RE = /^([\w-]{1,64})\.(enc|plain)$/;
 const FRESH_MS = 60 * 60 * 1000;
 
 function scan() {
-  const users = new Map(db.prepare('SELECT id, username, used_bytes FROM users').all().map(u => [u.id, u]));
+  const users = new Map(db.prepare('SELECT u.id, u.username, COALESCE(g.bytes, 0) AS used_bytes FROM users u LEFT JOIN trove.usage g ON g.user_id = u.id').all().map(u => [u.id, u]));
   const rows = db.prepare('SELECT id, owner_id, filename, size_bytes, is_encrypted, iv_hex, trashed_at FROM files').all();
   const expected = new Map(rows.map(r => [`${r.owner_id}/${r.id}.${r.is_encrypted ? 'enc' : 'plain'}`, r]));
   const byId = new Map(rows.map(r => [r.id, r]));
@@ -174,7 +174,7 @@ function clean(what = {}) {
   if (opt.usage) {
     // measured after the steps above, which change the totals
     for (const u of scan().usage) {
-      db.prepare('UPDATE users SET used_bytes = ? WHERE id = ?').run(u.actual, u.id);
+      require('../db').usage.set(db, u.id, u.actual);
       done.usage_fixed++;
     }
   }

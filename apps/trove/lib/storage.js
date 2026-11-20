@@ -1,9 +1,15 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const db = require('./db');
-const config = require('./config');
+const db = require('../../../src/core/db');
+const config = require('../../../src/core/config');
 const thumbs = require('./thumbs');
+const { usage } = require('../db');
+
+/** Bytes Trove stores for an account (the counter in trove.db's usage table) */
+const usedBy = (userId) => usage.get(db, userId);
+/** Change that counter by delta bytes (never below 0) */
+const addUsage = (userId, delta) => usage.add(db, userId, delta);
 const { pipeline } = require('stream/promises');
 
 // ---------------------------------------------------------------------------
@@ -57,34 +63,8 @@ function readAll(file) {
   return readRange(file, 0, size - 1);
 }
 
-// ---------------------------------------------------------------------------
-// Disk space
-// ---------------------------------------------------------------------------
-function diskSpace() {
-  try {
-    const s = fs.statfsSync(config.storageDir);
-    const total = s.blocks * s.bsize, free = s.bavail * s.bsize;
-    return { total, free, used: total - s.bfree * s.bsize };
-  } catch (e) { return null; }
-}
-
-/** Is there room for `bytes` more, keeping the configured reserve free? */
-function hasRoomFor(bytes) {
-  const d = diskSpace();
-  return !d || d.free - bytes >= config.diskReserveBytes;
-}
-
-async function dirSize(dir) {
-  let bytes = 0, files = 0;
-  let entries;
-  try { entries = await fs.promises.readdir(dir, { withFileTypes: true }); } catch (e) { return { bytes, files }; }
-  for (const e of entries) {
-    const p = path.join(dir, e.name);
-    if (e.isDirectory()) { const s = await dirSize(p); bytes += s.bytes; files += s.files; }
-    else { try { bytes += (await fs.promises.stat(p)).size; files++; } catch (err) { /* vanished */ } }
-  }
-  return { bytes, files };
-}
+// Disk space: src/core/disk.js (shared by every app)
+const { diskSpace, hasRoomFor, dirSize } = require('../../../src/core/disk');
 
 // ---------------------------------------------------------------------------
 // Permanent deletion (the trash calls this when it is emptied)
@@ -105,13 +85,12 @@ const PURGE = [
   'DELETE FROM media_meta WHERE file_id = ?',
   'UPDATE media_meta SET thumb_file_id = NULL WHERE thumb_file_id = ?',
 ].map(sql => ({ st: db.prepare(sql), n: sql.split('?').length - 1 }));
-const giveBack = db.prepare('UPDATE users SET used_bytes = MAX(0, used_bytes - ?) WHERE id = ?');
 
 function purgeFile(file) {
   // one transaction: a crash halfway must not leave references to a deleted row or a wrong quota
   db.tx(() => {
     for (const { st, n } of PURGE) st.run(...Array(n).fill(file.id));
-    giveBack.run(file.size_bytes, file.owner_id);
+    addUsage(file.owner_id, -file.size_bytes);
   });
   // the data goes once the row is gone (a leftover file is an orphan the storage check removes)
   try { fs.unlinkSync(diskPathOf(file)); } catch (e) { /* already gone */ }
@@ -125,7 +104,7 @@ function purgeFile(file) {
 async function storeFile({ ownerId, folderId, srcPath, filename, mime }) {
   const size = fs.statSync(srcPath).size;
   // the account's one storage space, shared with its other apps
-  if (!require('./apps').hasRoom(ownerId, 'box', size)) throw Object.assign(new Error('Storage quota exceeded'), { code: 'QUOTA' });
+  if (!require('../../../src/core/apps').hasRoom(ownerId, 'box', size)) throw Object.assign(new Error('Storage quota exceeded'), { code: 'QUOTA' });
   if (!hasRoomFor(size)) throw Object.assign(new Error('The server’s disk is full'), { code: 'DISK' });
   const id = crypto.randomUUID();
   const iv = crypto.randomBytes(16).toString('hex');
@@ -135,7 +114,7 @@ async function storeFile({ ownerId, folderId, srcPath, filename, mime }) {
   db.tx(() => {
     db.prepare(`INSERT INTO files (id, owner_id, folder_id, filename, size_bytes, mime_type, is_encrypted, iv_hex, created_at)
       VALUES (?, ?, ?, ?, ?, ?, 1, ?, datetime('now'))`).run(id, ownerId, folderId, filename, size, mime, iv);
-    db.prepare('UPDATE users SET used_bytes = used_bytes + ? WHERE id = ?').run(size, ownerId);
+    addUsage(ownerId, size);
   });
   return db.prepare('SELECT * FROM files WHERE id = ?').get(id);
 }
@@ -149,7 +128,7 @@ async function storeFile({ ownerId, folderId, srcPath, filename, mime }) {
 async function replaceFile(file, srcPath, { filename, mime } = {}) {
   const size = fs.statSync(srcPath).size;
   const delta = size - file.size_bytes;
-  if (delta > 0 && !require('./apps').hasRoom(file.owner_id, 'box', delta)) throw Object.assign(new Error('Storage quota exceeded'), { code: 'QUOTA' });
+  if (delta > 0 && !require('../../../src/core/apps').hasRoom(file.owner_id, 'box', delta)) throw Object.assign(new Error('Storage quota exceeded'), { code: 'QUOTA' });
   if (!hasRoomFor(size)) throw Object.assign(new Error('The server’s disk is full'), { code: 'DISK' });
   const dest = diskPathOf(file);
   const tmp = `${dest}.${crypto.randomBytes(6).toString('hex')}.tmp`;
@@ -165,7 +144,7 @@ async function replaceFile(file, srcPath, { filename, mime } = {}) {
   db.tx(() => {
     db.prepare('UPDATE files SET size_bytes = ?, iv_hex = ?, filename = COALESCE(?, filename), mime_type = COALESCE(?, mime_type) WHERE id = ?')
       .run(size, iv, filename || null, mime || null, file.id);
-    db.prepare('UPDATE users SET used_bytes = MAX(0, used_bytes + ?) WHERE id = ?').run(delta, file.owner_id);
+    addUsage(file.owner_id, delta);
   });
   thumbs.purge(file.owner_id, file.id);
   return db.prepare('SELECT * FROM files WHERE id = ?').get(file.id);
@@ -197,4 +176,4 @@ function appendToZip(archive, entries) {
   }
 }
 
-module.exports = { MASTER_KEY, segment, userDirOf, diskPathOf, ctrAt, readRange, readAll, diskSpace, hasRoomFor, dirSize, purgeFile, appendToZip, storeFile, replaceFile };
+module.exports = { usedBy, addUsage, MASTER_KEY, segment, userDirOf, diskPathOf, ctrAt, readRange, readAll, diskSpace, hasRoomFor, dirSize, purgeFile, appendToZip, storeFile, replaceFile };

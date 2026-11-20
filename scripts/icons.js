@@ -1,13 +1,14 @@
 #!/usr/bin/env node
-// Regenerates the PNG/ICO icons from the SVG marks in frontend/ (needs `sharp`).
+// Regenerates the PNG/ICO icons from the SVG marks (needs `sharp`).
 //   node scripts/icons.js
-// favicon.svg is AkulavBox's mark (the sign-in page, the launcher, the site icon password managers
-// such as Bitwarden pick up); trove.svg is Trove's (the files app at /box/); Tick's is in apps/tasks/public.
+// hub/brand/favicon.svg is AkulavBox's mark (the sign-in page, the launcher, the site icon password managers
+// such as Bitwarden pick up); apps/trove/public/trove.svg is Trove's; Tick's is in apps/tasks/public.
 const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
 
-const dir = path.join(__dirname, '..', 'frontend');
+const dir = path.join(__dirname, '..', 'hub', 'brand');
+const troveDir = path.join(__dirname, '..', 'apps', 'trove', 'public');
 
 /** An .ico holding PNGs of the given sizes */
 function ico(pngs, sizes) {
@@ -49,7 +50,7 @@ async function icons(svgName, out, where = dir) {
     png: { 'trove-32.png': 32, 'trove-192.png': 192 },
     tile: { 'trove-512.png': [512, 400], 'trove-touch.png': [180, 150] },
     ico: 'trove.ico',
-  });
+  }, troveDir);
   // Tick (apps/tasks) draws its own mark; the other apps keep the icons in their folders as they are
   const k = await icons('favicon.svg', {
     png: { 'favicon-32x32.png': 32, 'icon-192.png': 192 },

@@ -74,11 +74,13 @@ fastify.addHook('onSend', async (request, reply, payload) => {
   return gzip(payload, { level: 5 });
 });
 
-// Serve the static frontend SPA (revalidated on every load so updates show up immediately)
+// Trove's page files (apps/trove/public), at the site's root paths as they always were (revalidated
+// on every load, so updates show up immediately). Registered here, not in Trove's plugin, because it
+// also gives every module reply.sendFile.
 fastify.register(require('@fastify/static'), {
-  root: path.join(__dirname, '../frontend'),
+  root: path.join(__dirname, '../apps/trove/public'),
   prefix: '/',
-  // "/" is the app launcher (modules/hub.js); AkulavBox's page is at /box/
+  // "/" is the app launcher (modules/hub.js); Trove's index.html is served at /box/
   index: false,
   cacheControl: true,
   maxAge: 0,
@@ -106,18 +108,9 @@ fastify.register(require('./modules/backups'));
 fastify.register(require('./modules/updates'));
 fastify.register(require('./modules/console'));
 fastify.register(require('./modules/connector'));
-fastify.register(require('./modules/files'));
-fastify.register(require('./modules/media'));
-fastify.register(require('./modules/zip'));
 fastify.register(require('./modules/user'));
-fastify.register(require('./modules/trash'));
-fastify.register(require('./modules/albums'));
-fastify.register(require('./modules/music'));
-fastify.register(require('./modules/library'));
-fastify.register(require('./modules/collections'));
-fastify.register(require('./modules/downloads'));
 
-// The other apps: e-Management (/docs), Koma Shelf (/manga) and Florin (/budget)
+// The apps: Trove (/box/ and /api/…), e-Management (/docs), Koma Shelf (/manga), Florin (/budget), Tick (/tasks)
 require('../apps').load(fastify);
 
 // Errors nobody caught: client mistakes (bad JSON, too large, wrong type) keep their

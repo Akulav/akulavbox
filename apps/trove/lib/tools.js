@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { pipeline } = require('stream/promises');
 const { Readable } = require('stream');
-const config = require('./config');
+const config = require('../../../src/core/config');
 
 // ---------------------------------------------------------------------------
 // External tools for link downloads, installed by AkulavBox itself into

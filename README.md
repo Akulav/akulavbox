@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="frontend/favicon.svg" width="96" height="96" alt="AkulavBox logo">
+<img src="hub/brand/favicon.svg" width="96" height="96" alt="AkulavBox logo">
 
 # AkulavBox
 
@@ -131,6 +131,10 @@ By hand, upgrade in place. Your existing data keeps working:
 2. Start it. Pending database migrations run automatically, and **the database is snapshotted to `data/backups/` first**.
 3. Encrypted files on disk use the same format as 1.x and are never rewritten.
 
+### Upgrading to 5.1
+
+Trove becomes an app like the others (`apps/trove`) and gets its own database, `box/trove.db`. On the first start its tables move there from `akulavbox.db`, after a snapshot of the database in `backups/`; the move is safe to interrupt (it simply runs again). Backups keep their format: backups from any version restore, and backups made now restore on older versions too. Nothing else changes: addresses, files on disk and sign-ins stay as they are.
+
 ### Upgrading to 5.0
 
 5.0 makes AkulavBox the account around its apps and gives the files app its own name, **Trove**, and the to-do app the name **Tick**. Addresses don't change (`/box/`, `/tasks/`), and nothing moves on disk. On the first start:
@@ -157,9 +161,10 @@ Everything lives in the data folder (`data/` unless `DATA_DIR` says otherwise), 
 
 ```
 data/
-  akulavbox.db (+ -wal, -shm)   accounts, app access and quotas, settings, activity log, and AkulavBox's own tables
+  akulavbox.db (+ -wal, -shm)   accounts, app access, storage sizes, AI connectors, settings, activity log
   box/
-    users/<id>/<file>.enc       AkulavBox's encrypted files (.plain while shared publicly)
+    trove.db (+ -wal, -shm)     Trove's tables: files, folders, albums, playlists, media details, its storage counter
+    users/<id>/<file>.enc       Trove's encrypted files (.plain while shared publicly)
     thumbs/                     encrypted thumbnail cache (safe to delete)
     private/cookies/            saved sign-in cookies for link downloads (encrypted)
   documents/<account>/

@@ -74,7 +74,8 @@ const userRow = db.prepare('SELECT id, username, role, token_version FROM users 
 const boxUser = (id) => userRow.get(id) || null;
 
 const rowOf = db.prepare('SELECT enabled, quota_bytes FROM user_apps WHERE user_id = ? AND app = ?');
-const boxRow = db.prepare('SELECT quota_bytes, used_bytes FROM users WHERE id = ?');
+// the account's storage size; what Trove stores is its counter in trove.db (apps/trove/db.js)
+const boxRow = db.prepare('SELECT u.quota_bytes, COALESCE(g.bytes, 0) AS used_bytes FROM users u LEFT JOIN trove.usage g ON g.user_id = u.id WHERE u.id = ?');
 
 /** { enabled, quota_bytes, custom_quota } of an app for an account */
 function access(userId, appId) {

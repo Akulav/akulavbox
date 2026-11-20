@@ -1,8 +1,8 @@
-const { verifyUser, verifyAdmin } = require('../core/auth');
-const dl = require('../core/downloader');
-const tools = require('../core/tools');
-const cookies = require('../core/cookies');
-const lib = require('../core/library');
+const { verifyUser, verifyAdmin } = require('../../../src/core/auth');
+const dl = require('../lib/downloader');
+const tools = require('../lib/tools');
+const cookies = require('../lib/cookies');
+const lib = require('../lib/library');
 
 module.exports = async function (fastify) {
   // Is the downloader ready? (yt-dlp, ffmpeg, AV1, and whether they're being installed right now)

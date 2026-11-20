@@ -1,9 +1,9 @@
-const db = require('../core/db');
+const db = require('../../../src/core/db');
 const crypto = require('crypto');
 const { ZipArchive } = require('archiver');
-const { verifyUser } = require('../core/auth');
-const lib = require('../core/library');
-const store = require('../core/storage');
+const { verifyUser } = require('../../../src/core/auth');
+const lib = require('../lib/library');
+const store = require('../lib/storage');
 
 const TITLE_MAX = 200;
 const NOTES_MAX = 10000;

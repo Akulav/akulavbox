@@ -1,10 +1,10 @@
-const db = require('../core/db');
+const db = require('../../../src/core/db');
 const fs = require('fs');
-const { verifyUser } = require('../core/auth');
-const lib = require('../core/library');
-const thumbs = require('../core/thumbs');
-const store = require('../core/storage');
-const { serveFile } = require('../core/serve');
+const { verifyUser } = require('../../../src/core/auth');
+const lib = require('../lib/library');
+const thumbs = require('../lib/thumbs');
+const store = require('../lib/storage');
+const { serveFile } = require('../lib/serve');
 
 const { MASTER_KEY, diskPathOf } = store;
 

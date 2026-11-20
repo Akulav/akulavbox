@@ -42,6 +42,8 @@ const config = {
   dbPath: path.join(STORAGE_DIR, 'akulavbox.db'),
   // AkulavBox's own files: box/{users,thumbs,private}
   boxDir: layout.boxDir,
+  // Trove's database (its tables were in akulavbox.db until 5.1), next to its files
+  troveDbPath: path.join(layout.boxDir, 'trove.db'),
   usersDir: layout.usersDir,
   thumbsDir: layout.thumbsDir,
   privateDir: layout.privateDir,

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Fast static checks (CI runs them before the end-to-end test; run them yourself with `npm run lint`):
-//   - every backend and frontend file parses (src/, scripts/, apps/, frontend/, hub/)
+//   - every backend and browser file parses (src/, scripts/, apps/, hub/)
 //   - AkulavBox's and Florin's index.html keep the import map above the module preloads,
 //     and every module has a <link rel="modulepreload">
 //   - package.json, package-lock.json and CHANGELOG.md agree on the version
@@ -16,7 +16,7 @@ const rel = (p) => path.relative(root, p).split(path.sep).join('/');
 const problems = [];
 
 // the apps' browser code is checked separately, as modules or classic scripts
-const NOT_BACKEND = /[\\/]apps[\\/](budget|documents|manga|tasks)[\\/]public([\\/]|$)/;
+const NOT_BACKEND = /[\\/]apps[\\/](trove|budget|documents|manga|tasks)[\\/]public([\\/]|$)/;
 function walk(dir, out = [], skip = null) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
@@ -37,7 +37,8 @@ const check = (file, asModule) => {
   catch (e) { problems.push(`${rel(file)} doesn't parse:\n${String(e.stderr || e.message).split('\n').slice(0, 6).join('\n')}`); }
 };
 const backend = [...walk(path.join(root, 'src')), ...walk(path.join(root, 'scripts')), ...walk(path.join(root, 'test')), ...walk(path.join(root, 'apps'), [], NOT_BACKEND)];
-const frontend = walk(path.join(root, 'frontend'));
+const trovePage = path.join(root, 'apps', 'trove', 'public');
+const frontend = walk(trovePage);
 // browser modules of the launcher, the Admin console, e-Management and Florin; Koma Shelf's scripts are classic ones
 const pages = [...walk(path.join(root, 'hub')), ...walk(path.join(root, 'apps', 'documents', 'public')), ...walk(path.join(root, 'apps', 'budget', 'public')), ...walk(path.join(root, 'apps', 'tasks', 'public'))];
 const classic = walk(path.join(root, 'apps', 'manga', 'public'));
@@ -76,7 +77,7 @@ function checkPreloads(dir, base, modules) {
     if (!fs.existsSync(file)) problems.push(`${name} preloads ${base}${r}, which doesn't exist.`);
   }
 }
-checkPreloads(path.join(root, 'frontend'), '/', frontend);
+checkPreloads(trovePage, '/', frontend);
 const florin = path.join(root, 'apps', 'budget', 'public');
 checkPreloads(florin, '/budget/', walk(florin));
 const tasks = path.join(root, 'apps', 'tasks', 'public');

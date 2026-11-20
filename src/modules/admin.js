@@ -6,11 +6,10 @@ const crypto = require('crypto');
 const config = require('../core/config');
 const { verifyAdmin, revokeSessions, setPassword, PASSWORD_MIN } = require('../core/auth');
 const activity = require('../core/activity');
-const thumbs = require('../core/thumbs');
-const store = require('../core/storage');
-const cookies = require('../core/cookies');
-const maintenance = require('../core/maintenance');
-const downloader = require('../core/downloader');
+const thumbs = require('../../apps/trove/lib/thumbs');
+const disk = require('../core/disk');
+const maintenance = require('../../apps/trove/lib/maintenance');
+const downloader = require('../../apps/trove/lib/downloader');
 const apps = require('../core/apps');
 
 const USERNAME_RE = /^[\p{L}\p{N}._ -]{1,32}$/u;
@@ -36,7 +35,6 @@ module.exports = async function (fastify) {
     const hash = await bcrypt.hash(String(password), 10);
     db.prepare("INSERT INTO users (id, username, password_hash, role, quota_bytes, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))")
       .run(id, username, hash, role, Number(quota) > 0 ? Math.floor(Number(quota)) : 5368709120);
-    fs.mkdirSync(store.userDirOf(id), { recursive: true });
     // optional per-app choices from the Admin console: { documents: { enabled, quota_bytes }, … }
     const choices = request.body?.apps && typeof request.body.apps === 'object' ? request.body.apps : {};
     for (const [app, c] of Object.entries(choices)) {
@@ -55,32 +53,14 @@ module.exports = async function (fastify) {
     if (!target) return notFound(reply);
 
     db.tx(() => {
-      const cleanup = [
-        'DELETE FROM album_images WHERE album_id IN (SELECT id FROM albums WHERE owner_id = ?)',
-        'DELETE FROM albums WHERE owner_id = ?',
-        'DELETE FROM collections WHERE owner_id = ?',
-        'DELETE FROM playlist_songs WHERE playlist_id IN (SELECT id FROM playlists WHERE owner_id = ?)',
-        'DELETE FROM playlists WHERE owner_id = ?',
-        'DELETE FROM song_covers WHERE file_id IN (SELECT id FROM files WHERE owner_id = ?)',
-        'DELETE FROM media_meta WHERE owner_id = ?',
-        'DELETE FROM media_collection_items WHERE collection_id IN (SELECT id FROM media_collections WHERE owner_id = ?)',
-        'DELETE FROM media_collections WHERE owner_id = ?',
-        'DELETE FROM downloads WHERE owner_id = ?',
-        'DELETE FROM files WHERE owner_id = ?',
-        'DELETE FROM folders WHERE owner_id = ?',
-      ];
-      for (const sql of cleanup) db.prepare(sql).run(id);
       activity.forgetUser(id);
       // AI connectors (tokens and pending OAuth codes) stop with the account
       require('../core/connector/tokens').forgetUser(id);
       db.prepare('DELETE FROM users WHERE id = ?').run(id);
     });
 
-    const userDir = store.userDirOf(id);
-    if (fs.existsSync(userDir)) fs.rmSync(userDir, { recursive: true, force: true });
-    thumbs.purgeUser(id);
-    cookies.remove(id);
-    // documents, webtoons, budget: every app forgets the account too
+    // every app forgets the account too: Trove its files, folders, albums and counter
+    // (apps/trove/index.js), e-Management, Koma Shelf, Florin and Tick theirs
     apps.deleteUser(id);
     activity.log(request, 'admin.user_deleted', { target: target.username });
     return { success: true };
@@ -129,7 +109,7 @@ module.exports = async function (fastify) {
   // Get all users
   fastify.get('/api/admin/users', { preHandler: verifyAdmin }, async () => {
     return db.prepare(`
-      SELECT u.id, u.username, u.role, u.quota_bytes, u.used_bytes, u.profile_image, u.created_at, u.last_login_at,
+      SELECT u.id, u.username, u.role, u.quota_bytes, COALESCE((SELECT bytes FROM trove.usage g WHERE g.user_id = u.id), 0) AS used_bytes, u.profile_image, u.created_at, u.last_login_at,
         (SELECT COUNT(*) FROM files f WHERE f.owner_id = u.id AND f.trashed_at IS NULL) AS file_count,
         (SELECT COALESCE(SUM(size_bytes), 0) FROM files f WHERE f.owner_id = u.id AND f.trashed_at IS NOT NULL) AS trash_bytes
       FROM users u ORDER BY u.role = 'admin' DESC, u.username COLLATE NOCASE
@@ -139,30 +119,31 @@ module.exports = async function (fastify) {
   // Server health: free disk space where storage lives, what AkulavBox uses, versions
   let breakdownCache = null;
   fastify.get('/api/admin/system', { preHandler: verifyAdmin }, async (request) => {
-    const disk = store.diskSpace();
+    const space = disk.diskSpace();
     if (!breakdownCache || Date.now() - breakdownCache.at > 30_000 || request.query.fresh === '1') {
       const [users, thumbsDir, temp, backups] = await Promise.all(
-        [config.usersDir, config.thumbsDir, config.tempDir, config.backupsDir].map(d => store.dirSize(d)));
+        [config.usersDir, config.thumbsDir, config.tempDir, config.backupsDir].map(d => disk.dirSize(d)));
       let dbBytes = 0;
-      for (const suffix of ['', '-wal', '-shm']) { try { dbBytes += fs.statSync(config.dbPath + suffix).size; } catch (e) { /* none */ } }
-      breakdownCache = { at: Date.now(), parts: { files: users, thumbnails: thumbsDir, uploads_in_progress: temp, backups, database: { bytes: dbBytes, files: 1 } } };
+      // akulavbox.db and Trove's trove.db, with their write-ahead logs
+      for (const file of [config.dbPath, config.troveDbPath]) for (const suffix of ['', '-wal', '-shm']) { try { dbBytes += fs.statSync(file + suffix).size; } catch (e) { /* none */ } }
+      breakdownCache = { at: Date.now(), parts: { files: users, thumbnails: thumbsDir, uploads_in_progress: temp, backups, database: { bytes: dbBytes, files: 2 } } };
     }
     const totals = db.prepare(`SELECT
         (SELECT COUNT(*) FROM users) AS users,
         (SELECT COUNT(*) FROM files WHERE trashed_at IS NULL) AS files,
         (SELECT COALESCE(SUM(size_bytes), 0) FROM files WHERE trashed_at IS NOT NULL) AS trash_bytes,
         (SELECT COALESCE(SUM(quota_bytes), 0) FROM users) AS allocated,
-        (SELECT COALESCE(SUM(used_bytes), 0) FROM users) AS used`).get();
+        (SELECT COALESCE(SUM(bytes), 0) FROM trove.usage) AS used`).get();
     const parts = breakdownCache.parts;
     const appBytes = Object.values(parts).reduce((s, p) => s + p.bytes, 0);
     return {
-      disk,                                     // { total, free, used } of the drive holding data/
+      disk: space,                              // { total, free, used } of the drive holding data/
       storage_dir: config.storageDir,
       app_bytes: appBytes,
       parts,
       totals,
       // quotas promised to users beyond what the disk can still hold
-      overcommitted: disk ? Math.max(0, (totals.allocated - totals.used) - disk.free) : 0,
+      overcommitted: space ? Math.max(0, (totals.allocated - totals.used) - space.free) : 0,
       reserve_bytes: config.diskReserveBytes,
       version: config.version,
       schema: db.prepare('PRAGMA user_version').get().user_version,

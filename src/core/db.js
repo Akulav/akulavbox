@@ -17,9 +17,15 @@ if (process.env.AKB_NO_RESTORE !== '1') {
 const db = new DatabaseSync(config.dbPath);
 db.restored = restored;
 
+// Trove's tables live in their own file, box/trove.db, attached as the schema "trove" (apps/trove/db.js)
+const troveDb = require('../../apps/trove/db');
+troveDb.attach(db, config.troveDbPath, { wal: process.env.SQLITE_WAL !== '0' });
+
 // Bring older databases up to date before any module prepares statements
 const result = migrate(db, { backupsDir: config.backupsDir, version: config.version });
 db.schema = result;
+// then Trove's tables move out of akulavbox.db if it still has them (5.0 and older, restored backups)
+db.troveMove = troveDb.moveIn(db, { backupsDir: config.backupsDir, version: config.version });
 
 // WAL lets readers (thumbnails, listings) run while an upload is being written.
 // Set SQLITE_WAL=0 if the storage folder is on a network drive.

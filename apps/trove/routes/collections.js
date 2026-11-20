@@ -1,7 +1,7 @@
-const db = require('../core/db');
-const { verifyUser } = require('../core/auth');
-const lib = require('../core/library');
-const col = require('../core/collections');
+const db = require('../../../src/core/db');
+const { verifyUser } = require('../../../src/core/auth');
+const lib = require('../lib/library');
+const col = require('../lib/collections');
 
 const cleanTitle = (v) => String(v ?? '').trim().slice(0, col.TITLE_MAX);
 
