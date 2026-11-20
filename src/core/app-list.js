@@ -14,6 +14,8 @@ const APPS = [
   { id: 'manga', name: 'Koma Shelf', path: '/manga/', short: 'Webtoons made with Koma', tagline: 'Webtoons made with Koma: a private library and a public shelf.', color: '#f03862', quota: true },
   { id: 'budget', name: 'Florin', path: '/budget/', short: 'Expenses, budgets and charts', tagline: 'Expenses and income in any currency, with budgets and charts.', color: '#1baf7a', quota: false },
   { id: 'tasks', name: 'Tick', path: '/tasks/', short: 'To-dos, a board and a calendar', tagline: 'To-dos with lists, due dates, repeats, a board and a calendar.', color: '#8b5cf6', quota: false },
+  // a game (github.com/Akulav/strategy-game, built to WebAssembly): its saves are files of the account
+  { id: 'ironveil', name: 'Ironveil', path: '/ironveil/', short: 'Automation and tower-defense game', tagline: 'Mine, build supply lines and factories, and hold off the swarm. Your progress is saved to your account.', color: '#f0732e', quota: true },
 ];
 
 /** The apps with a data folder of their own, DATA_DIR/<id> (every one but Trove) */

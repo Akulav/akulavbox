@@ -161,6 +161,19 @@ Cookie sign-in. Changes need the header `X-Requested-With: florin`.
 | GET · PATCH | `/budget/api/admin/stats` · `/budget/api/admin/settings` | Admins: totals · `{ defaultCurrency }` |
 | PUT · POST | `/budget/api/admin/rates/:code` · `/rates/refresh` | Admins: `{ rate }` · fetch the latest rates |
 
+## Ironveil (`/ironveil`)
+
+Cookie sign-in. Changes need the header `X-Requested-With: ironveil` (and a same-origin request). The game's saves are JSON texts by name (`profile`, `run`; names are `[a-z][a-z0-9_-]{0,31}`, at most 16 per account, 32 MB each). They count in the account's storage.
+
+| Method | Path | What it does |
+|---|---|---|
+| GET | `/ironveil/` | The game's page (signed-out visitors go to `/login`) |
+| GET | `/ironveil/game/ironveil.wasm` | The game, gzipped, with an ETag (404 until `npm run ironveil` has built it) |
+| GET | `/ironveil/api/saves` | `{ saves: { name: text }, updated: { name: ISO date } }` |
+| PUT | `/ironveil/api/saves/:name` | Body: the save, as `text/plain`. `413` when the account's storage is full |
+| DELETE | `/ironveil/api/saves/:name` | Remove a save (a finished run's) |
+| GET | `/ironveil/api/profile` | The progress in plain words: `runs`, `best_wave`, `total_kills`, `play_time_hours`, `legacy_shards`, `achievements`, `run_in_progress` (the AI connector's `ironveil_progress`) |
+
 ## Tick (`/tasks`)
 
 Cookie sign-in. Changes need the header `X-Requested-With: tasks`. Every path is under `/tasks/api`; ids are integers, dates `YYYY-MM-DD`, times `HH:MM`.

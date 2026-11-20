@@ -1,0 +1,28 @@
+/* The page around the game: the canvas fills the window (as in the game's own web build), with
+   AkulavBox's way back and account menu in a corner, a loading screen, and a status line for saves. */
+html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #06080e; color: #e3ebe9; font-family: Geist, ui-sans-serif, system-ui, sans-serif; }
+[hidden] { display: none !important; }
+canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; outline: none; touch-action: none; }
+
+/* the middle of the left edge: the game's own bars take the top, the bottom and the corners */
+/* (centred with a margin, not a transform: a transform would trap the account menu, which is fixed) */
+.corner { position: fixed; z-index: 10; left: 6px; top: 50%; margin-top: -42px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 4px; border-radius: 999px;
+  background: rgb(6 8 14 / .55); border: 1px solid rgb(255 255 255 / .08); opacity: .45; transition: opacity .2s; }
+.corner:hover, .corner:focus-within { opacity: 1; }
+.home { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 999px; color: #c9d3d6; }
+.home:hover { background: rgb(255 255 255 / .08); color: #fff; }
+.home svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+.loading { position: fixed; inset: 0; z-index: 5; display: grid; place-content: center; justify-items: center; gap: 14px; background: #06080e; text-align: center; padding: 16px; }
+.loading .mark { width: 44px; height: 44px; fill: none; stroke: #f0732e; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; animation: pulse 1.6s ease-in-out infinite; }
+.loading p { margin: 0; color: #8ea1a4; font-size: 14px; }
+.loading.failed .mark { animation: none; stroke: #f06c60; }
+.touch-note { display: none; font-size: 12.5px !important; }
+@media (hover: none) and (pointer: coarse) { .touch-note { display: block; } }
+@keyframes pulse { 50% { opacity: .45; transform: scale(.94); } }
+@media (prefers-reduced-motion: reduce) { .loading .mark { animation: none; } }
+html[data-motion='off'] .loading .mark { animation: none; }
+
+.status { position: fixed; z-index: 10; left: 50%; bottom: 14px; transform: translateX(-50%); max-width: min(560px, calc(100% - 32px)); margin: 0;
+  padding: 8px 14px; border-radius: 10px; font-size: 13px; background: rgb(19 30 34 / .95); border: 1px solid rgb(255 255 255 / .1); }
+.status.warn { border-color: rgb(240 115 46 / .6); }

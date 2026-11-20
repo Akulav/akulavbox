@@ -23,6 +23,7 @@ assets.addRoot('/hub/', HUB, { skip: /[\\/]hub[\\/](brand|vendor)([\\/]|$)/ });
 assets.addRoot('/docs/', path.join(APPS_DIR, 'documents', 'public'));
 assets.addRoot('/budget/', path.join(APPS_DIR, 'budget', 'public'));
 assets.addRoot('/tasks/', path.join(APPS_DIR, 'tasks', 'public'));
+assets.addRoot('/ironveil/', path.join(APPS_DIR, 'ironveil', 'public'));
 assets.addRoot('/', TROVE, { versioned: '/box/' });
 // Vue for every app's page, from node_modules: no CDN, works offline. Tailwind's browser build is the
 // compiler src/core/tailwind.js runs on the server (pages get a compiled stylesheet, not the script)

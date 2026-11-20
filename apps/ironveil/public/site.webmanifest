@@ -1,0 +1,16 @@
+{
+  "name": "Ironveil",
+  "short_name": "Ironveil",
+  "description": "An automation and tower-defense game, with your progress saved to your AkulavBox account.",
+  "start_url": "/ironveil/",
+  "scope": "/ironveil/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#06080e",
+  "theme_color": "#06080e",
+  "icons": [
+    { "src": "/ironveil/favicon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "/ironveil/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/ironveil/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Ironveil</title>
+  <meta name="description" content="Ironveil: an automation and tower-defense game, with your progress saved to your account. Part of AkulavBox, made by Akulav.">
+  <meta name="theme-color" content="#06080e">
+  <link rel="icon" href="/ironveil/favicon.ico" sizes="48x48">
+  <link rel="icon" href="/ironveil/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/ironveil/favicon-32x32.png" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="/ironveil/apple-touch-icon.png" sizes="180x180">
+  <link rel="manifest" href="/ironveil/site.webmanifest">
+  <!-- the theme every app shares, before first paint; the shared account menu -->
+  <script src="/hub/theme.js"></script>
+  <script src="/hub/account.js" defer></script>
+  <link rel="stylesheet" href="/ironveil/play.css">
+</head>
+<body>
+  <canvas id="glcanvas" tabindex="1" aria-label="Ironveil"></canvas>
+
+  <!-- AkulavBox around the game: the way back to the other apps, and the account -->
+  <div class="corner">
+    <a class="home" href="/" title="All apps" aria-label="All apps"><svg viewBox="0 0 24 24" aria-hidden="true"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg></a>
+    <akb-account side no-theme accent="#f0732e"></akb-account>
+  </div>
+
+  <div id="loading" class="loading" role="status">
+    <svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" x2="19" y1="19" y2="13"/><line x1="16" x2="20" y1="16" y2="20"/><line x1="19" x2="21" y1="21" y2="19"/><polyline points="14.5 6.5 18 3 21 3 21 6 17.5 9.5"/><line x1="5" x2="9" y1="14" y2="18"/><line x1="7" x2="4" y1="17" y2="20"/><line x1="3" x2="5" y1="19" y2="21"/></svg>
+    <p id="loading-text">Loading your saves…</p>
+    <p class="touch-note">Ironveil is made for a keyboard and mouse.</p>
+  </div>
+  <p id="status" class="status" role="status" hidden></p>
+
+  <noscript><p style="padding:2rem;font-family:sans-serif;color:#e3ebe9">Ironveil needs JavaScript turned on.</p></noscript>
+  <!-- the game's own web build (game/, from npm run ironveil), then the bridge to the account -->
+  <script src="/ironveil/game/gl.js"></script>
+  <script src="/ironveil/game/audio.js"></script>
+  <script src="/ironveil/game/storage.js"></script>
+  <script src="/ironveil/play.js"></script>
+</body>
+</html>

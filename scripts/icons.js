@@ -57,5 +57,11 @@ async function icons(svgName, out, where = dir) {
     tile: { 'icon-512.png': [512, 400], 'apple-touch-icon.png': [180, 150] },
     ico: 'favicon.ico',
   }, path.join(__dirname, '..', 'apps', 'tasks', 'public'));
-  console.log(`Icons written: ${[...a, ...t, ...k].join(', ')}`);
+  // Ironveil (apps/ironveil)
+  const v = await icons('favicon.svg', {
+    png: { 'favicon-32x32.png': 32, 'icon-192.png': 192 },
+    tile: { 'icon-512.png': [512, 400], 'apple-touch-icon.png': [180, 150] },
+    ico: 'favicon.ico',
+  }, path.join(__dirname, '..', 'apps', 'ironveil', 'public'));
+  console.log(`Icons written: ${[...a, ...t, ...k, ...v].join(', ')}`);
 })().catch((e) => { console.error(e.message); process.exit(1); });

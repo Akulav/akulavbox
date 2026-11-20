@@ -267,7 +267,7 @@ createApp({
     const userMenu = ref(false);
     // the account's apps, for the switcher in the account menu (the shared cookie answers /api/session/me)
     const otherApps = ref([]);
-    const APP_ICONS = { box: 'layers', documents: 'file-text', manga: 'book-open', budget: 'wallet', tasks: 'square-check' };
+    const APP_ICONS = { box: 'layers', documents: 'file-text', manga: 'book-open', budget: 'wallet', tasks: 'square-check', ironveil: 'swords' };
     const loadApps = () => fetch('/api/session/me', { credentials: 'same-origin' }).then(r => (r.ok ? r.json() : null)).then(m => { if (m?.apps) otherApps.value = m.apps; }).catch(() => {});
     loadApps(); // once, so the menu opens complete
     // close the account menu when the page changes

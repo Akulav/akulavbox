@@ -19,7 +19,7 @@ let server = null;
 const bind = (fastify) => { server = fastify; };
 
 /** Which header each app's CSRF check wants (the Vue apps); the others check the origin */
-const CSRF = { budget: 'florin', tasks: 'tasks' };
+const CSRF = { budget: 'florin', tasks: 'tasks', ironveil: 'ironveil' };
 const HOST = 'connector.akulavbox.internal';
 
 /**

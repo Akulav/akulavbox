@@ -44,6 +44,7 @@ function load(fastify) {
   } else fastify.register(require('./manga'), { prefix: '/manga', onClose });
   fastify.register(require('./budget'), { prefix: '/budget', onClose });
   fastify.register(require('./tasks'), { prefix: '/tasks', onClose });
+  fastify.register(require('./ironveil'), { prefix: '/ironveil' });
 }
 
 async function close() {

@@ -4,7 +4,7 @@
 
 # AkulavBox
 
-**Your own cloud, your own apps.** AkulavBox is a self-hosted home for five apps that share **one account and one storage space**: Trove (encrypted files, photos, music, videos and books), e-Management (documents), Koma Shelf (webtoons), Florin (budgets) and Tick (to-dos). One Node.js server, one data folder, and an **AI connector** so Claude can work with all of them.
+**Your own cloud, your own apps.** AkulavBox is a self-hosted home for six apps that share **one account and one storage space**: Trove (encrypted files, photos, music, videos and books), e-Management (documents), Koma Shelf (webtoons), Florin (budgets), Tick (to-dos) and the game Ironveil. One Node.js server, one data folder, and an **AI connector** so Claude can work with all of them.
 
 [![CI](https://github.com/Akulav/akulavbox/actions/workflows/ci.yml/badge.svg)](https://github.com/Akulav/akulavbox/actions/workflows/ci.yml)
 ![Node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-5fb3a1)
@@ -27,6 +27,7 @@ AkulavBox is the account and the server, the way a Google account holds Gmail an
 | **Koma Shelf** | `/manga/` | Webtoons made with [Koma](https://github.com/Akulav/text-to-manga): a private library, unlisted links and a public shelf, with a reader built for long strips |
 | **Florin** | `/budget/` | Expenses and income in any currency, budgets per category, and charts |
 | **Tick** | `/tasks/` | To-dos with lists, tags, checklists, due dates and repeats, as a list, a board or a calendar |
+| **Ironveil** | `/ironveil/` | Akulav's automation and tower-defense game ([strategy-game](https://github.com/Akulav/strategy-game)) in the browser, with your progress saved to your account. Rebuild it with `npm run ironveil` (needs Rust and its `wasm32-unknown-unknown` target) |
 
 - **One account, one sign-in.** Accounts live in AkulavBox's database. Signing in, out, changing a password, or "sign out everywhere" applies to every app at once.
 - **The Admin console** (`/admin`, admins only) manages accounts for all apps: create and delete them, reset passwords, change roles, sign people out, turn each app on or off per account, set the size of each account's storage, optionally limit an app inside it, and choose the defaults for new accounts.

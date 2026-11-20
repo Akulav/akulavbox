@@ -2,6 +2,16 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 5.4.0 (2026-11-20)
+
+### Added
+- **Ironveil, a game, is an AkulavBox app** at `/ironveil/`: Akulav's automation and tower-defense game (mine, build supply lines and factories, hold off the swarm) in its browser build, with the same sign-in as every app. **Your progress is saved to your account**, so it follows you to any browser: the profile (Legacy shards, achievements, lifetime stats) and the quick save (F5) are written to the server in the background a moment after the game saves them, and a save that can't reach the server waits in the browser and goes out on the next visit.
+  - It's in the launcher (with your best wave), the app switcher of every app, and the Admin console, where it can be turned on or off per account like the others.
+  - The saves count in the account's storage, go with full backups, and are removed when the account is deleted.
+  - The AI connector can read your progress (`ironveil_progress`).
+  - `npm run ironveil` rebuilds the game from `../strategy-game` (Rust, with the `wasm32-unknown-unknown` target) and copies it into `apps/ironveil/public/game/`.
+- The shared account menu can open sideways (`<akb-account side>`), for a page that fills the screen.
+
 ## 5.3.1 (2026-11-20)
 
 ### Changed

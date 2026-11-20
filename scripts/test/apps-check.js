@@ -53,7 +53,7 @@ module.exports = async function appsCheck({ api, ok, base, tmp, login, adminToke
   mainDb.close();
   ok(inMain === 0 && fs.existsSync(path.join(tmp, 'box', 'trove.db')), 'Trove keeps its tables in box/trove.db, not in akulavbox.db');
   const cat = await json(await get('/api/apps/catalog'));
-  ok(cat?.name === 'AkulavBox' && cat.apps.map((a) => a.name).join() === 'Trove,e-Management,Koma Shelf,Florin,Tick', 'the sign-in page reads the app names from the server', JSON.stringify(cat?.apps?.map((a) => a.name)));
+  ok(cat?.name === 'AkulavBox' && cat.apps.map((a) => a.name).join() === 'Trove,e-Management,Koma Shelf,Florin,Tick,Ironveil', 'the sign-in page reads the app names from the server', JSON.stringify(cat?.apps?.map((a) => a.name)));
   const vz = await get('/hub/vendor/vue.js', { headers: { 'Accept-Encoding': 'gzip' } });
   ok(vz.status === 200 && vz.headers.get('etag') && (await get('/hub/vendor/vue.js', { headers: { 'If-None-Match': vz.headers.get('etag') } })).status === 304, 'Vue is served with an ETag (a reload costs a 304)');
   ok((await get('/box')).headers.get('location') === '/box/', '/box goes to /box/');
@@ -89,8 +89,8 @@ module.exports = async function appsCheck({ api, ok, base, tmp, login, adminToke
   let sharp = null;
   try { sharp = require('sharp'); } catch (e) { /* optional */ }
   const apps = await api('/api/apps');
-  const expected = sharp ? ['box', 'documents', 'manga', 'budget', 'tasks'] : ['box', 'documents', 'budget', 'tasks'];
-  ok(apps.status === 200 && apps.data.apps.length === 5 && expected.every((id) => apps.data.apps.some((a) => a.id === id && a.available)), `the launcher lists all five apps, ${expected.length} running`, JSON.stringify(apps.data?.apps?.map((a) => [a.id, a.available, a.problem])));
+  const expected = sharp ? ['box', 'documents', 'manga', 'budget', 'tasks', 'ironveil'] : ['box', 'documents', 'budget', 'tasks', 'ironveil'];
+  ok(apps.status === 200 && apps.data.apps.length === 6 && expected.every((id) => apps.data.apps.some((a) => a.id === id && a.available)), `the launcher lists all six apps, ${expected.length} running`, JSON.stringify(apps.data?.apps?.map((a) => [a.id, a.available, a.problem])));
 
   // --- e-Management ---
   console.log('\ne-Management (/docs)');
@@ -258,6 +258,32 @@ module.exports = async function appsCheck({ api, ok, base, tmp, login, adminToke
     ok((await get(`/manga/w/${workId}`)).status === 200, 'a public work opens without signing in');
   }
 
+  // --- Ironveil ---
+  console.log('\nIronveil (/ironveil)');
+  ok((await get('/ironveil/')).headers.get('location')?.startsWith('/login'), 'signed-out visitors go to the sign-in page');
+  const ivPage = await get('/ironveil/', { cookie: jar });
+  const ivHtml = await ivPage.text();
+  ok(ivPage.status === 200 && /'wasm-unsafe-eval'/.test(ivPage.headers.get('content-security-policy') || '') && /src="\/ironveil\/~[\w-]+\/game\/gl\.js"/.test(ivHtml), 'serves the game’s page (WebAssembly allowed, its scripts versioned)');
+  const wasmRes = await get('/ironveil/game/ironveil.wasm', { cookie: jar, headers: { 'Accept-Encoding': 'gzip' } });
+  const wasmOk = wasmRes.status === 200;
+  ok(wasmOk ? /application\/wasm/.test(wasmRes.headers.get('content-type') || '') && wasmRes.headers.get('etag') : wasmRes.status === 404, wasmOk ? 'the game (WebAssembly) is served gzipped, with an ETag' : 'without a build, the game file is a clear 404 (npm run ironveil)');
+  ok((await get('/ironveil/index.html', { cookie: jar })).status === 404, 'index.html is not served past the sign-in check');
+  const IV = (p, { method = 'GET', body, cookie = jar, csrf = true } = {}) =>
+    get(`/ironveil/api${p}`, { cookie, method, body, headers: { ...(body !== undefined ? { 'Content-Type': 'text/plain' } : {}), ...(csrf ? { 'X-Requested-With': 'ironveil' } : {}) } });
+  ok((await json(await IV('/saves')))?.saves && Object.keys((await json(await IV('/saves'))).saves).length === 0, 'a new player has no saves');
+  ok((await IV('/saves/profile', { method: 'PUT', body: '{}', csrf: false })).status === 403, 'saving without the CSRF header is refused');
+  ok((await IV('/saves/..%2Fx', { method: 'PUT', body: '{}' })).status === 400 && (await IV('/saves/profile', { method: 'PUT', body: 'not json' })).status === 400, 'bad save names and non-JSON saves are refused');
+  const prof = JSON.stringify({ unlocked: ['first_blood'], shards: 12, legacy: [1], best_wave: 7, total_kills: 300, runs: 2, total_time: 5400 });
+  ok((await IV('/saves/profile', { method: 'PUT', body: prof })).status === 200 && (await IV('/saves/run', { method: 'PUT', body: '{"seed":1}' })).status === 200, 'save the profile and a run');
+  const ivSaves = await json(await IV('/saves'));
+  ok(ivSaves?.saves?.profile === prof && ivSaves.saves.run === '{"seed":1}' && fs.existsSync(path.join(tmp, 'ironveil')), 'they come back as they were, from ironveil/ in the data folder');
+  const ivProf = await json(await IV('/profile'));
+  ok(ivProf?.best_wave === 7 && ivProf.runs === 2 && ivProf.play_time_hours === 1.5 && ivProf.run_in_progress === true, 'the progress, in plain words (for the AI connector)', JSON.stringify(ivProf));
+  ok((await IV('/saves/run', { method: 'DELETE' })).status === 200 && !(await json(await IV('/saves'))).saves.run, 'a finished run’s save is removed');
+  const ivUsed = (await api('/api/apps')).data.space?.apps?.find((a) => a.id === 'ironveil')?.bytes;
+  ok(ivUsed === Buffer.byteLength(prof), 'the saves count in the account’s storage', String(ivUsed));
+  ok(/Best wave 7/.test((await api('/api/apps')).data.apps.find((a) => a.id === 'ironveil')?.summary || ''), 'the launcher shows the best wave');
+
   // --- Admin console ---
   console.log('\nAdmin console');
   const iconCheck = await api('/api/admin/site-icon');
@@ -268,12 +294,12 @@ module.exports = async function appsCheck({ api, ok, base, tmp, login, adminToke
   const ujar = cookieFrom(ul);
   const utoken = (await json(ul))?.token;
   const uapps = await json(await fetch(`${B}/api/apps`, { headers: { Authorization: `Bearer ${utoken}` } }));
-  ok(uapps?.apps?.length === 4 && !uapps.apps.some((a) => a.id === 'manga'), 'the launcher only shows the apps the account may use');
+  ok(uapps?.apps?.length === 5 && !uapps.apps.some((a) => a.id === 'manga'), 'the launcher only shows the apps the account may use');
   ok((await get('/docs/api/me', { cookie: ujar })).status === 200 && (!sharp || (await get('/manga/me', { cookie: ujar })).status === 403), 'a turned-off app refuses the account');
   ok((await fetch(`${B}/api/admin/console`, { headers: { Authorization: `Bearer ${utoken}` } })).status === 403, 'the console API is for admins only');
   const con = await api('/api/admin/console');
   const row = con.data?.users?.find((u) => u.username === 'appuser');
-  ok(con.status === 200 && row && row.apps.manga.enabled === false && row.apps.documents.enabled === true && con.data.apps.length === 5, 'the console lists every account with its apps', JSON.stringify(row?.apps));
+  ok(con.status === 200 && row && row.apps.manga.enabled === false && row.apps.documents.enabled === true && con.data.apps.length === 6, 'the console lists every account with its apps', JSON.stringify(row?.apps));
   ok((await api(`/api/admin/users/${row.id}/apps/documents`, { method: 'PATCH', body: { quota_bytes: 0 } })).status === 400, 'a zero quota is refused');
   ok((await api(`/api/admin/users/${row.id}/apps/documents`, { method: 'PATCH', body: { quota_bytes: 1000 } })).data?.quota_bytes === 1000, 'set an account’s e-Management quota');
   const big = new FormData();
@@ -322,6 +348,9 @@ module.exports = async function appsCheck({ api, ok, base, tmp, login, adminToke
   await api('/api/admin/apps/defaults', { method: 'PUT', body: { budget: { enabled: true } } });
   await api(`/api/admin/users/${mk2.data.id}`, { method: 'DELETE' });
 
+  ok((await fetch(`${B}/ironveil/api/saves/profile`, { method: 'PUT', body: '{"runs":1}', headers: { Cookie: ujar, 'Content-Type': 'text/plain', 'X-Requested-With': 'ironveil' } })).status === 200, 'another account saves a game');
+  const uSaves = path.join(tmp, 'ironveil', row.id);
+  ok((await json(await IV('/saves')))?.saves?.profile !== '{"runs":1}', 'one account doesn’t see another’s saves');
   ok((await api(`/api/admin/users/${row.id}/signout`, { method: 'POST' })).status === 200 && (await get('/docs/api/me', { cookie: ujar })).status === 401, '“Sign out everywhere” ends the cookie too');
   const del = await api(`/api/admin/users/${row.id}`, { method: 'DELETE' });
   const { DatabaseSync } = require('node:sqlite');
@@ -331,6 +360,6 @@ module.exports = async function appsCheck({ api, ok, base, tmp, login, adminToke
   const tdb = new DatabaseSync(path.join(tmp, 'tasks', 'tasks.db'), { readOnly: true });
   const tleft = tdb.prepare('SELECT COUNT(*) AS n FROM tasks WHERE user_id = ?').get(row.id).n;
   tdb.close();
-  ok(del.status === 200 && !fs.existsSync(uDocs) && left === 0 && tleft === 0, 'deleting an account removes its data in every app');
+  ok(del.status === 200 && !fs.existsSync(uDocs) && left === 0 && tleft === 0 && !fs.existsSync(uSaves), 'deleting an account removes its data in every app (Ironveil’s saves too)');
   return { jar, docId: madeData?.id, workId, taskTitle: other?.title };
 };

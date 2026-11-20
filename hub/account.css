@@ -69,6 +69,8 @@ button, a { font: inherit; color: inherit; }
 }
 :host([up]) .menu { top: auto; bottom: calc(100% + 8px); transform-origin: bottom left; }
 :host([expanded]) .menu { left: 0; right: 0; }
+/* side: for a menu on the left edge of a full-screen page (Ironveil), it opens to the right, on screen */
+:host([side]) .menu { position: fixed; left: 58px; right: auto; top: auto; bottom: 10px; max-height: calc(100vh - 20px); overflow-y: auto; transform-origin: bottom left; }
 .head { display: flex; align-items: center; gap: 10px; padding: 8px 10px 10px; margin-bottom: 4px; border-bottom: 1px solid rgb(var(--line)); }
 .head b { display: block; font-weight: 600; }
 .item, ::slotted(a), ::slotted(button) {
