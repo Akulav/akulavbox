@@ -160,7 +160,7 @@ function updateMediaSession() {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: songTitle(s),
       artist: (s.participants || []).join(', '),
-      album: s.series || player.source || 'AkulavBox',
+      album: s.series || player.source || 'Trove',
       artwork: s.cover_file_id ? [{ src: location.origin + thumbUrl(s.cover_file_id, 480), sizes: '480x480' }] : [],
     });
   } catch (e) { /* ignore */ }

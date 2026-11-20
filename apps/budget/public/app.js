@@ -3,8 +3,8 @@
 import { createApp } from 'vue';
 import { store, loadUser, loadConfig, loadCategories, loadCurrencies, dismissToast, closeTransaction } from './js/store.js';
 import { route, navigate, RouterLink } from './js/router.js';
-import { UI } from './js/ui.js';
-import { LogoMark } from './js/icons.js';
+import { UI } from '/hub/vue/ui.js';
+import { LogoMark } from './js/icons.js'; // also registers Florin's icons
 import { Layout } from './js/layout.js';
 import { TransactionModal } from './js/tx-modal.js';
 import Dashboard from './js/pages/dashboard.js';

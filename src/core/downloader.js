@@ -479,8 +479,8 @@ async function download(job, work) {
     return;
   }
 
-  const u = db.prepare('SELECT quota_bytes, used_bytes FROM users WHERE id = ?').get(ownerId);
-  const left = u.quota_bytes - u.used_bytes;
+  // what is left of the account's storage, which its other apps share
+  const left = require('./apps').room(ownerId, 'box');
   const approx = info.filesize || info.filesize_approx || 0;
   if (approx && approx > left) throw new Error('Not enough storage left for this download');
 

@@ -16,7 +16,7 @@ const rel = (p) => path.relative(root, p).split(path.sep).join('/');
 const problems = [];
 
 // the apps' browser code is checked separately, as modules or classic scripts
-const NOT_BACKEND = /[\\/]apps[\\/](budget|documents|manga)[\\/]public([\\/]|$)/;
+const NOT_BACKEND = /[\\/]apps[\\/](budget|documents|manga|tasks)[\\/]public([\\/]|$)/;
 function walk(dir, out = [], skip = null) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
@@ -39,7 +39,7 @@ const check = (file, asModule) => {
 const backend = [...walk(path.join(root, 'src')), ...walk(path.join(root, 'scripts')), ...walk(path.join(root, 'test')), ...walk(path.join(root, 'apps'), [], NOT_BACKEND)];
 const frontend = walk(path.join(root, 'frontend'));
 // browser modules of the launcher, the Admin console, e-Management and Florin; Koma Shelf's scripts are classic ones
-const pages = [...walk(path.join(root, 'hub')), ...walk(path.join(root, 'apps', 'documents', 'public')), ...walk(path.join(root, 'apps', 'budget', 'public'))];
+const pages = [...walk(path.join(root, 'hub')), ...walk(path.join(root, 'apps', 'documents', 'public')), ...walk(path.join(root, 'apps', 'budget', 'public')), ...walk(path.join(root, 'apps', 'tasks', 'public'))];
 const classic = walk(path.join(root, 'apps', 'manga', 'public'));
 for (const f of backend) check(f, false);
 for (const f of [...frontend, ...pages]) check(f, true);
@@ -69,11 +69,18 @@ function checkPreloads(dir, base, modules) {
     const r = path.relative(dir, f).split(path.sep).join('/');
     if (!preloaded.has(r)) problems.push(`${rel(f)} has no <link rel="modulepreload" href="${base}${r}"> in ${name}.`);
   }
-  for (const r of preloaded) if (!r.startsWith('vendor/') && !fs.existsSync(path.join(dir, r))) problems.push(`${name} preloads ${base}${r}, which doesn't exist.`);
+  // vendor/ and /hub/vendor/ are served from node_modules (src/modules/hub.js); /hub/… lives in hub/
+  for (const r of preloaded) {
+    if (r.startsWith('vendor/') || r.startsWith('hub/vendor/')) continue;
+    const file = base === '/' && r.startsWith('hub/') ? path.join(root, r) : path.join(dir, r);
+    if (!fs.existsSync(file)) problems.push(`${name} preloads ${base}${r}, which doesn't exist.`);
+  }
 }
 checkPreloads(path.join(root, 'frontend'), '/', frontend);
 const florin = path.join(root, 'apps', 'budget', 'public');
-checkPreloads(florin, '/budget/', walk(florin).filter((f) => path.basename(f) !== 'theme.js'));
+checkPreloads(florin, '/budget/', walk(florin));
+const tasks = path.join(root, 'apps', 'tasks', 'public');
+checkPreloads(tasks, '/tasks/', walk(tasks));
 
 // 3. one version everywhere
 const pkg = require(path.join(root, 'package.json'));

@@ -1,6 +1,21 @@
-import { api, session, toLogin, icon, mark, esc, appTile, formatBytes, accountMenu, madeBy } from './common.js';
+import { api, session, toLogin, icon, lockup, esc, appTile, formatBytes, accountMenu, madeBy } from './common.js';
 
 const $ = (id) => document.getElementById(id);
+
+/** The account's one storage space: a bar split by app, and how much each one takes */
+function spaceHtml(s) {
+  if (!s) return '';
+  const pct = (b) => (s.quota_bytes ? Math.min(100, (b / s.quota_bytes) * 100) : 0);
+  const total = Math.round(pct(s.used_bytes));
+  return `<div class="space-head">
+      <div><p class="section-title" style="margin:0 0 4px">Storage</p>
+        <p><b class="num" style="font-size:20px">${formatBytes(s.used_bytes)}</b> <span class="muted">of ${formatBytes(s.quota_bytes)} used</span></p></div>
+      <span class="chip ${total >= 90 ? 'chip-danger' : ''}">${formatBytes(s.free_bytes)} free</span>
+    </div>
+    <div class="space-bar" role="img" aria-label="${total}% of your storage is used">${s.apps.filter((a) => a.bytes > 0).map((a) => `<span style="width:${pct(a.bytes)}%;--c:${esc(a.color)}" title="${esc(a.name)}: ${formatBytes(a.bytes)}"></span>`).join('')}</div>
+    <ul class="space-legend">${s.apps.map((a) => `<li><span class="dot" style="--c:${esc(a.color)}"></span>${esc(a.name)} <span class="muted num">${formatBytes(a.bytes)}</span></li>`).join('')}</ul>
+    <p class="faint" style="font-size:12px;margin-top:10px">One space for every app on your account. Florin and Tick keep no files.</p>`;
+}
 
 async function main() {
   const s = session();
@@ -17,13 +32,13 @@ async function main() {
   }
   const user = data.user;
 
-  $('lockup').innerHTML = `${mark(30)}<b class="brand-text">AkulavBox</b>`;
+  $('lockup').innerHTML = lockup(30);
   accountMenu($('account'), user);
 
   const h = new Date().getHours();
   $('greet').textContent = `${h < 5 ? 'Good night' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'}, ${user.username}`;
   $('when').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
-  // flagged at sign-in (the default admin/admin, say); cleared when the password is changed in AkulavBox
+  // flagged at sign-in (the default admin/admin, say); cleared when the password is changed in the profile
   let weak = false;
   try { weak = localStorage.getItem('akulavWeak') === '1'; } catch (e) { /* private mode */ }
   if (weak) {
@@ -31,11 +46,12 @@ async function main() {
     $('weak').innerHTML = `${icon('key')}<span style="flex:1">Your password is easy to guess, and it opens every app. Change it to keep your data safe.</span><a class="btn btn-sm" href="/box/#/profile">Change password</a>`;
   }
 
+  $('space').innerHTML = spaceHtml(data.space);
+  $('space').hidden = !data.space;
+
   $('apps').innerHTML = data.apps.map((a) => {
-    const pct = a.quota_bytes && a.used_bytes != null ? Math.min(100, Math.round((a.used_bytes / a.quota_bytes) * 100)) : null;
-    const usage = pct != null
-      ? `<div class="row"><span class="muted">${formatBytes(a.used_bytes)} of ${formatBytes(a.quota_bytes)}</span><span class="num muted">${pct}%</span></div>
-         <div class="meter ${pct >= 90 ? 'warn' : ''}" style="--c:${esc(a.color)}"><span style="width:${pct}%"></span></div>`
+    const usage = a.stores_files && a.used_bytes != null
+      ? `<div class="row"><span class="muted">${formatBytes(a.used_bytes)} stored${a.limit_bytes ? ` · limit ${formatBytes(a.limit_bytes)}` : ''}</span></div>`
       : '';
     const off = !a.available;
     return `<a class="panel app-card ${off ? 'off' : ''}" href="${off ? '#' : esc(a.path)}" style="--c:${esc(a.color)}" ${off ? 'aria-disabled="true"' : ''} data-app="${esc(a.id)}">
@@ -46,11 +62,11 @@ async function main() {
   }).join('');
   for (const el of document.querySelectorAll('[aria-disabled="true"]')) el.addEventListener('click', (e) => e.preventDefault());
 
-  if (user.role === 'admin') {
-    $('admin').hidden = false;
-    $('admin-icon').innerHTML = icon('shield');
-    $('admin-go').innerHTML = icon('arrow');
-  }
+  $('profile-icon').innerHTML = icon('user');
+  $('connect-icon').innerHTML = icon('plug');
+  $('admin-icon').innerHTML = icon('shield');
+  for (const el of document.querySelectorAll('[data-go]')) el.innerHTML = icon('arrow');
+  $('admin').hidden = user.role !== 'admin';
   $('footer').innerHTML = `${madeBy(data.version)}<span>${data.apps.length} app${data.apps.length === 1 ? '' : 's'} on this account</span>`;
   $('boot').hidden = true;
   $('page').hidden = false;

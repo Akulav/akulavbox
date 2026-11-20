@@ -31,8 +31,14 @@ export default {
             <span>{{ formatBytes(account.used_bytes) }} used</span>
             <span class="text-muted">{{ formatBytes(Math.max(0, account.quota_bytes - account.used_bytes)) }} free of {{ formatBytes(account.quota_bytes) }}</span>
           </div>
-          <div class="meter !h-2" :class="{ warn: pct >= 90 }"><span :style="{ width: pct + '%' }"></span></div>
-          <p v-if="account.trash_bytes" class="text-xs text-muted mt-2">{{ formatBytes(account.trash_bytes) }} of that is in the <a href="#/trash" class="text-accent hover:underline">trash</a>.</p>
+          <!-- one storage space for every app of the account, split by app -->
+          <div class="flex h-2 rounded-full overflow-hidden bg-elevated gap-[2px]" role="img" :aria-label="Math.round(pct) + '% of your storage is used'">
+            <span v-for="a in spaceApps" :key="a.id" class="block h-full min-w-[3px] transition-[width] duration-500" :style="{ width: (a.bytes / account.quota_bytes * 100) + '%', background: a.color }" :title="a.name + ': ' + formatBytes(a.bytes)"></span>
+          </div>
+          <ul v-if="account.space" class="flex flex-wrap gap-x-4 gap-y-1 mt-2.5 text-xs text-muted">
+            <li v-for="a in account.space.apps" :key="a.id" class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-sm" :style="{ background: a.color }"></span>{{ a.name }} <span class="tabular-nums">{{ formatBytes(a.bytes) }}</span></li>
+          </ul>
+          <p v-if="account.trash_bytes" class="text-xs text-muted mt-2">{{ formatBytes(account.trash_bytes) }} of Trove’s part is in the <a href="#/trash" class="text-accent hover:underline">trash</a>.</p>
           <div class="flex gap-2 mt-5">
             <label for="avatarUpload" class="btn btn-sm cursor-pointer"><Icon name="image" :size="15" />Change photo</label>
             <button v-if="account.profile_image" class="btn btn-ghost btn-sm" @click="removeAvatar">Remove photo</button>
@@ -153,8 +159,9 @@ export default {
       <section class="panel p-5 md:p-6 flex items-center gap-4">
         <BrandMark :size="52" :animated="true" />
         <div class="flex-1 min-w-0">
-          <p class="title text-lg brand-text">AkulavBox</p>
-          <p class="text-muted text-[13px]">Version {{ app.version || '…' }} · your private, encrypted personal cloud.</p>
+          <p class="title text-lg brand-text">Trove</p>
+          <p class="text-muted text-[13px]">Version {{ app.version || '…' }} · your files, photos, music, videos and books, part of AkulavBox.</p>
+          <p class="text-[13px] mt-1"><a href="/connect" class="text-accent hover:underline">AI connectors</a> · <a href="/" class="text-accent hover:underline">All apps</a></p>
           <MadeBy class="mt-1.5" />
         </div>
       </section>
@@ -186,6 +193,8 @@ export default {
     let cropper = null;
 
     const pct = computed(() => account.quota_bytes ? Math.min(100, (account.used_bytes / account.quota_bytes) * 100) : 0);
+    // the parts of the shared storage space that hold something (servers before 5.0 send no breakdown)
+    const spaceApps = computed(() => (account.space?.apps || [{ id: 'box', name: 'Trove', color: '#E8A33D', bytes: account.used_bytes }]).filter(a => a.bytes > 0 && account.quota_bytes));
 
     const themes = [{ id: 'system', label: 'System', icon: 'settings' }, { id: 'light', label: 'Light', icon: 'sun' }, { id: 'dark', label: 'Dark', icon: 'moon' }];
     const theme = ref(storage.read('akulavTheme') || 'system');
@@ -301,7 +310,7 @@ export default {
       loadLogins();
       loadCookies().then(() => { if (location.hash.includes('cookies')) document.getElementById('link-downloads')?.scrollIntoView({ behavior: 'smooth' }); });
     });
-    return { account, session, app, pct, pw, strength, themes, theme, setTheme, motion, setMotion, fileInputRef, cropImageSrc, cropperImageRef,
+    return { account, session, app, pct, spaceApps, pw, strength, themes, theme, setTheme, motion, setMotion, fileInputRef, cropImageSrc, cropperImageRef,
       onFileSelected, cancelCrop, confirmCrop, removeAvatar, changePassword, setXxx, formatBytes, since, ck, cookieFile, saveCookies, onCookieFile, removeCookies,
       logins, shownLogins, deviceOf, when, signingOut, signOutOthers };
   },

@@ -82,9 +82,14 @@ fastify.register(require('@fastify/static'), {
   index: false,
   cacheControl: true,
   maxAge: 0,
+  // @fastify/static 9+ (Fastify 5) passes the Fastify reply here, older ones the Node response. Calling
+  // res.setHeader on a reply threw, so every .png and .ico answered 500 and password managers (Bitwarden)
+  // found no icon for the site.
   setHeaders: (res, filePath) => {
     // fonts and icons never change between versions
-    if (/\.(png|ico|woff2?)$/.test(filePath)) res.setHeader('Cache-Control', 'public, max-age=86400');
+    if (!/\.(png|ico|woff2?)$/.test(filePath)) return;
+    if (typeof res.header === 'function') res.header('Cache-Control', 'public, max-age=86400');
+    else res.setHeader('Cache-Control', 'public, max-age=86400');
   },
 });
 
@@ -100,6 +105,7 @@ fastify.register(require('./modules/admin'));
 fastify.register(require('./modules/backups'));
 fastify.register(require('./modules/updates'));
 fastify.register(require('./modules/console'));
+fastify.register(require('./modules/connector'));
 fastify.register(require('./modules/files'));
 fastify.register(require('./modules/media'));
 fastify.register(require('./modules/zip'));

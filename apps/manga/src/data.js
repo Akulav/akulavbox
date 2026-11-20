@@ -48,6 +48,10 @@ function openData() {
     },
   };
 
+  // what an AI app may do here through the AI connector (src/core/connector); reads the database
+  // only, so it works even when the site can't start
+  hooks.connector = require('./connector').connector({ db });
+
   data = { db, dataDir, worksDir, tmpDir, usedBy, hooks, close: () => db.close() };
   return data;
 }

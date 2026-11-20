@@ -1,13 +1,14 @@
 {
   "name": "AkulavBox",
   "short_name": "AkulavBox",
-  "description": "Your private, encrypted personal cloud, with documents, webtoons and budgets. Made by Akulav.",
+  "description": "One account for your own apps: Trove, e-Management, Koma Shelf, Florin and Tick, on your server. Made by Akulav.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0D1518",
   "theme_color": "#0D1518",
   "icons": [
     { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
     { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
   ]

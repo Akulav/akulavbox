@@ -19,9 +19,9 @@
     <script src="/hub/account.js" defer></script>
 
     <script type="importmap">
-      { "imports": { "vue": "/budget/vendor/vue.js" } }
+      { "imports": { "vue": "/hub/vendor/vue.js" } }
     </script>
-    <link rel="modulepreload" href="/budget/vendor/vue.js" />
+    <link rel="modulepreload" href="/hub/vendor/vue.js" />
     <link rel="modulepreload" href="/budget/app.js" />
     <link rel="modulepreload" href="/budget/js/api.js" />
     <link rel="modulepreload" href="/budget/js/format.js" />
@@ -29,7 +29,9 @@
     <link rel="modulepreload" href="/budget/js/router.js" />
     <link rel="modulepreload" href="/budget/js/icon-paths.js" />
     <link rel="modulepreload" href="/budget/js/icons.js" />
-    <link rel="modulepreload" href="/budget/js/ui.js" />
+    <link rel="modulepreload" href="/hub/vue/ui.js" />
+    <link rel="modulepreload" href="/hub/vue/icon.js" />
+    <link rel="modulepreload" href="/hub/vue/router.js" />
     <link rel="modulepreload" href="/budget/js/charts.js" />
     <link rel="modulepreload" href="/budget/js/layout.js" />
     <link rel="modulepreload" href="/budget/js/tx-modal.js" />
@@ -41,7 +43,7 @@
     <link rel="modulepreload" href="/budget/js/pages/admin.js" />
 
     <!-- Tailwind compiles the classes in the browser (served by this server, no build step) -->
-    <script src="/budget/vendor/tailwind.js"></script>
+    <script src="/hub/vendor/tailwind.js"></script>
     <style type="text/tailwindcss">
       @custom-variant dark (&:where(.dark, .dark *));
       @theme inline {
@@ -62,6 +64,7 @@
         --font-display: 'Bricolage Grotesque', Geist, ui-sans-serif, system-ui, sans-serif;
       }
     </style>
+    <link rel="stylesheet" href="/hub/vue/base.css" />
     <link rel="stylesheet" href="/budget/style.css" />
   </head>
   <body>

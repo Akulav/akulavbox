@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>AI connectors · AkulavBox</title>
+  <meta name="description" content="Let Claude or another AI app read, and when you allow it change, your AkulavBox apps.">
+  <meta name="referrer" content="same-origin">
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="/favicon.ico" sizes="48x48">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/favicon-32x32.png" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180">
+  <meta name="theme-color" content="#0D1518">
+  <script src="/hub/theme.js"></script>
+  <script src="/hub/account.js" defer></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,650;12..96,750&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/hub/hub.css">
+  <link rel="modulepreload" href="/hub/common.js">
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <a class="brand" href="/" id="lockup" aria-label="AkulavBox, all apps"></a>
+      <span class="spacer"></span>
+      <div id="account" style="display:flex;align-items:center;gap:4px"></div>
+    </div>
+  </header>
+  <main class="wrap">
+    <div id="boot" class="boot">Loading…</div>
+    <div id="page" hidden>
+      <div class="page-head">
+        <div style="flex:1;min-width:220px">
+          <h1>AI connectors</h1>
+          <p class="muted">Let Claude, or another AI app, use your apps: read your files, documents, budget and to-dos, and when you allow it, change them.</p>
+        </div>
+      </div>
+
+      <section class="connect-ways stagger">
+        <div class="panel way">
+          <div class="way-head"><span class="tile" style="--c:#d97757" id="ic-claude"></span><div><h2>Claude on the web, desktop and phone</h2><p class="muted">No token to copy: Claude signs in here and you choose what it may do.</p></div></div>
+          <ol class="steps">
+            <li>In Claude, open <b>Settings → Connectors</b> and choose <b>Add custom connector</b>.</li>
+            <li>Paste this address as the connector URL:
+              <div class="copy-line"><code id="mcp-url"></code><button class="btn btn-sm" data-copy="mcp-url"></button></div></li>
+            <li>Choose <b>Connect</b>. This server asks you to approve it and pick, app by app, what it may read or change.</li>
+          </ol>
+          <p class="alert info" id="reach" style="margin-top:12px"></p>
+        </div>
+        <div class="panel way">
+          <div class="way-head"><span class="tile" style="--c:#8b5cf6" id="ic-term"></span><div><h2>Claude Code and other AI tools</h2><p class="muted">Make a token below, then add the server with it. Any MCP client works, and scripts can use the same tools over plain HTTP.</p></div></div>
+          <div class="code-block"><code id="cc-example"></code></div>
+          <p class="faint" style="font-size:12px;margin-top:8px">The token goes in the <span class="mono">Authorization: Bearer</span> header. Tools: <span class="mono">GET /api/connector/tools</span>, <span class="mono">POST /api/connector/tools/&lt;name&gt;</span>.</p>
+        </div>
+      </section>
+
+      <section class="panel" style="margin-top:16px">
+        <div class="card-head"><h2 id="new-title"></h2></div>
+        <form id="create" class="create-connector" autocomplete="off">
+          <div class="cc-top">
+            <div style="flex:1;min-width:200px"><label class="label" for="cname">Name</label><input id="cname" class="input" maxlength="80" placeholder="Claude Code on my laptop" required></div>
+            <div><label class="label" for="cdays">Lasts</label>
+              <select id="cdays" class="input"><option value="30">30 days</option><option value="90" selected>90 days</option><option value="365">1 year</option><option value="">Until revoked</option></select></div>
+          </div>
+          <p class="label" style="margin-top:14px">What it may do</p>
+          <div class="perms" id="perms"></div>
+          <div class="cc-foot"><span class="faint" style="font-size:12px">You can change this later. Tools that delete are marked as such, so AI apps ask you before using them.</span><button class="btn btn-primary" id="create-btn"></button></div>
+        </form>
+      </section>
+
+      <section class="panel token-once" id="once" hidden>
+        <div class="card-head"><h2 id="once-title"></h2><button class="icon-btn" id="once-close" aria-label="Close"></button></div>
+        <div style="padding:0 18px 18px">
+          <p class="muted" style="font-size:13.5px">Copy it now: it isn’t shown again. Anyone with it can do what you allowed, so keep it like a password.</p>
+          <div class="copy-line big"><code id="once-token"></code><button class="btn btn-sm btn-primary" data-copy="once-token"></button></div>
+          <p class="label" style="margin-top:16px">Claude Code</p>
+          <div class="copy-line"><code id="once-cc"></code><button class="btn btn-sm" data-copy="once-cc"></button></div>
+          <p class="label" style="margin-top:14px">Any MCP client (JSON)</p>
+          <div class="copy-line"><code id="once-json" style="white-space:pre"></code><button class="btn btn-sm" data-copy="once-json"></button></div>
+          <p class="label" style="margin-top:14px">Plain HTTP</p>
+          <div class="copy-line"><code id="once-curl"></code><button class="btn btn-sm" data-copy="once-curl"></button></div>
+        </div>
+      </section>
+
+      <section class="panel" style="margin-top:16px">
+        <div class="card-head"><h2>Your connectors</h2><span class="muted" id="count" style="font-size:13px"></span></div>
+        <div id="list" class="connectors"></div>
+      </section>
+
+      <details class="panel tools-list" style="margin-top:16px">
+        <summary><span id="tools-title"></span></summary>
+        <div id="tools"></div>
+      </details>
+    </div>
+    <footer class="footer" id="footer"></footer>
+  </main>
+  <script type="module" src="/hub/connect.js"></script>
+</body>
+</html>

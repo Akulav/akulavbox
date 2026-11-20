@@ -3,6 +3,7 @@ const bcrypt = require('../core/hash');
 const { verifyUser, signToken, setPassword, revokeSessions, PASSWORD_MIN } = require('../core/auth');
 const activity = require('../core/activity');
 const session = require('../core/session');
+const apps = require('../core/apps');
 
 // The signed-in account: profile, settings, password, other sessions, recent sign-ins.
 
@@ -10,7 +11,9 @@ module.exports = async function (fastify) {
   fastify.get('/api/user/profile', { preHandler: verifyUser }, async (request) => {
     const p = db.prepare('SELECT id, username, role, quota_bytes, used_bytes, profile_image, created_at, show_xxx FROM users WHERE id = ?').get(request.user.id);
     const t = db.prepare('SELECT COALESCE(SUM(size_bytes), 0) AS bytes FROM files WHERE owner_id = ? AND trashed_at IS NOT NULL').get(request.user.id);
-    return { ...p, show_xxx: !!p.show_xxx, trash_bytes: t.bytes };
+    // used_bytes is the whole account's storage (every app); trove_bytes Trove's part of it
+    const space = apps.space(request.user.id);
+    return { ...p, show_xxx: !!p.show_xxx, trash_bytes: t.bytes, trove_bytes: p.used_bytes, used_bytes: space?.used_bytes ?? p.used_bytes, space: apps.describeSpace(space) };
   });
 
   // Account settings that follow the user to every device: { show_xxx }

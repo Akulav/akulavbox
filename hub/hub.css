@@ -132,7 +132,8 @@ svg.i { width: 18px; height: 18px; flex-shrink: 0; fill: none; stroke: currentCo
 .topbar .wrap { height: 60px; display: flex; align-items: center; gap: 10px; }
 .brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; min-width: 0; }
 .brand b { font-family: 'Bricolage Grotesque', Geist, sans-serif; font-size: 19px; font-weight: 750; letter-spacing: -0.01em; }
-.brand-text { background: linear-gradient(100deg, rgb(var(--accent-hi)), rgb(var(--accent)) 60%, rgb(var(--teal))); -webkit-background-clip: text; background-clip: text; color: transparent; }
+/* the AkulavBox word: the apps' colours, like its mark */
+.brand-text { background: linear-gradient(100deg, #E8A33D, #F03862 38%, #3B82F6 70%, #1BAF7A); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .spacer { flex: 1; }
 .avatar { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 13px; color: #fff; background: hsl(var(--h, 30) 45% 42%); flex-shrink: 0; overflow: hidden; }
 .avatar img { width: 100%; height: 100%; object-fit: cover; }
@@ -207,6 +208,19 @@ svg.i { width: 18px; height: 18px; flex-shrink: 0; fill: none; stroke: currentCo
 .app-card .foot { margin-top: auto; display: grid; gap: 8px; }
 .app-card .row { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; }
 .app-card.off { opacity: .6; }
+.links-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); margin-bottom: 8px; }
+.link-card { min-height: 0; flex-direction: row; align-items: center; gap: 14px; padding: 16px 18px; }
+.link-card h2 { font-size: 16px; }
+.link-card[hidden] { display: none; }
+
+/* the account's one storage space, split by app */
+.space-card { padding: 18px 20px; margin: 16px 0 24px; }
+.space-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.space-bar { display: flex; height: 10px; border-radius: 99px; background: rgb(var(--elevated)); overflow: hidden; gap: 2px; }
+.space-bar > span { display: block; height: 100%; background: var(--c); min-width: 3px; transition: width .4s ease; }
+.space-legend { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; }
+.space-legend li { display: inline-flex; align-items: center; gap: 7px; }
+.space-legend .dot { width: 9px; height: 9px; border-radius: 3px; background: var(--c); }
 .section-title { font-size: 13px; font-weight: 600; color: rgb(var(--muted)); text-transform: uppercase; letter-spacing: .06em; margin: 8px 0 12px; }
 .footer { padding: 24px 0 32px; display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: space-between; color: rgb(var(--faint)); font-size: 12px; }
 .heart { color: rgb(var(--danger)); }
@@ -260,3 +274,60 @@ svg.i { width: 18px; height: 18px; flex-shrink: 0; fill: none; stroke: currentCo
 .defaults .input { width: 110px; height: 34px; }
 .empty { padding: 32px 18px; text-align: center; color: rgb(var(--muted)); }
 .boot { min-height: 60vh; display: grid; place-items: center; color: rgb(var(--muted)); }
+
+/* ---------- AI connectors (/connect, /oauth/authorize) ---------- */
+.connect-ways { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.way { padding: 18px 20px; min-width: 0; }
+.way-head { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 12px; }
+.way-head h2 { font-size: 16.5px; }
+.way-head p { font-size: 13px; margin-top: 3px; }
+.steps { margin: 0; padding-left: 20px; display: grid; gap: 10px; font-size: 13.5px; }
+.copy-line { display: flex; gap: 8px; align-items: center; margin-top: 8px; padding: 6px 6px 6px 12px; border: 1px solid rgb(var(--line)); border-radius: 10px; background: rgb(var(--bg) / .5); min-width: 0; }
+.copy-line code { flex: 1; min-width: 0; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12.5px; overflow-x: auto; white-space: nowrap; scrollbar-width: thin; }
+.copy-line.big code { font-size: 14px; color: rgb(var(--accent)); }
+.copy-line .btn { flex-shrink: 0; gap: 6px; }
+.code-block { padding: 12px 14px; border: 1px solid rgb(var(--line)); border-radius: 10px; background: rgb(var(--bg) / .5); overflow-x: auto; }
+.code-block code { font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12.5px; white-space: pre; }
+.create-connector { padding: 16px 18px 18px; }
+.cc-top { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+.cc-foot { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-top: 14px; }
+.token-once { margin-top: 16px; border-color: rgb(var(--accent) / .55); }
+.perms { display: grid; gap: 8px; }
+.perm { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border: 1px solid rgb(var(--line)); border-radius: 12px; background: rgb(var(--bg) / .35); flex-wrap: wrap; }
+.perm.off { opacity: .55; }
+.perm .tile { width: 34px; height: 34px; border-radius: 10px; }
+.perm .tile svg.i { width: 17px; height: 17px; }
+.perm-name { flex: 1; min-width: 140px; }
+.perm-name b { display: block; font-size: 13.5px; }
+.perm-name small { display: block; font-size: 12px; color: rgb(var(--muted)); }
+.perms.compact .perm { padding: 6px 8px; }
+.seg { display: inline-flex; padding: 3px; border-radius: 10px; background: rgb(var(--elevated)); gap: 2px; }
+.seg button { border: 0; background: transparent; color: rgb(var(--muted)); font: inherit; font-size: 12.5px; font-weight: 550; padding: 6px 10px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
+.seg button:hover:not(:disabled) { color: rgb(var(--fg)); }
+.seg button.on { background: rgb(var(--surface)); color: rgb(var(--fg)); box-shadow: 0 1px 3px rgb(0 0 0 / .15); }
+.seg button[data-level="write"].on { color: rgb(var(--accent)); }
+.seg button:disabled { cursor: default; }
+.connectors { display: grid; }
+.connector { display: flex; gap: 14px; align-items: flex-start; padding: 14px 18px; border-bottom: 1px solid rgb(var(--line)); }
+.connector:last-child { border-bottom: 0; }
+.c-main { flex: 1; min-width: 0; display: grid; gap: 6px; }
+.c-main .name { font-weight: 600; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.c-main small { font-size: 12px; }
+.c-edit { margin-top: 6px; }
+.scopes { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip.scope { background: color-mix(in srgb, var(--c) 14%, transparent); color: rgb(var(--fg)); gap: 6px; }
+.chip.scope .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
+.tools-list { padding: 0; }
+.tools-list summary { padding: 14px 18px; cursor: pointer; font-weight: 600; font-size: 15px; }
+.tools-list > div { padding: 0 18px 18px; display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.tools-list > div > p { grid-column: 1 / -1; }
+.tool-app p { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.tool-app .dot { width: 9px; height: 9px; border-radius: 3px; }
+.tool-app ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 5px; font-size: 12.5px; color: rgb(var(--muted)); }
+.tool-app .mono { color: rgb(var(--fg)); font-size: 12px; }
+.authorize { width: 100%; max-width: 520px; padding: 26px; }
+.auth-head { display: flex; gap: 14px; align-items: center; margin-bottom: 12px; }
+.auth-head h1 { font-size: 24px; }
+.auth-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+.auth-actions .btn { min-width: 110px; justify-content: center; }
+@media (max-width: 520px) { .seg button { padding: 6px 8px; font-size: 12px; } .connector { padding: 12px 14px; } }

@@ -305,8 +305,9 @@ function createIngest({ db, config, log = console }) {
         const published = work.visibility === 'public' && !work.published ? now : work.published;
         db.run("UPDATE works SET status = 'ready', progress = 1, error = NULL, pages = ?, chapters = ?, bg = ?, title = ?, cover_rev = cover_rev + 1, updated = ?, published = ? WHERE id = ?", pageCount, chapters.length, bg || '#0e0d12', title, now, published, id);
       });
-      // what the work takes on disk counts towards its creator's Koma Shelf quota
+      // what the work takes on disk counts towards its creator's storage (the account's one space)
       db.run('UPDATE works SET bytes = ? WHERE id = ?', await folderBytes(outDir), id);
+      require('../../../src/core/apps').changed(null, 'manga');
       log.info?.(`[ingest] ${id}: ${chapters.length} chapter(s), ${pageCount} slices`);
     } finally {
       src.close();

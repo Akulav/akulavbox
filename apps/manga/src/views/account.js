@@ -51,8 +51,8 @@ function accountPage(req, { error, ok, tokens, siteUrl, newToken, usage = { used
     </form>
     <section class="card-form">
       <h2>Sign-in and storage</h2>
-      <p class="muted">You use the same account for every app on this server. Change your password or sign out other devices in your account profile.</p>
-      ${usage.quota ? html`<p>${size(usage.used)} of ${size(usage.quota)} used by your webtoons.</p><div class="progress" role="progressbar" aria-valuenow="${Math.round((usage.used / usage.quota) * 100)}" aria-valuemin="0" aria-valuemax="100"><span style="width:${Math.min(100, Math.round((usage.used / usage.quota) * 100))}%"></span></div>` : ''}
+      <p class="muted">Your AkulavBox account opens every app on this server. Change your password or sign out other devices in your account profile.</p>
+      ${usage.quota ? html`<p>${size(usage.total)} of ${size(usage.quota)} used, shared by all your apps. Your webtoons take ${size(usage.used)}.</p><div class="progress" role="progressbar" aria-valuenow="${Math.round((usage.total / usage.quota) * 100)}" aria-valuemin="0" aria-valuemax="100"><span style="width:${Math.min(100, Math.round((usage.total / usage.quota) * 100))}%"></span></div>` : ''}
       <div class="form-actions"><a class="btn btn-ghost" href="~/box/#/profile">Open my profile</a></div>
     </section>
     ${komaSection(req, { tokens, siteUrl, newToken })}

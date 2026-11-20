@@ -65,10 +65,10 @@ function listData(db) {
 // A restore replaces the folder of every app the backup has (manifest.apps), so a
 // backup from before 4.0 leaves those apps' data as it is.
 // ---------------------------------------------------------------------------
-const APP_IDS = ['documents', 'manga', 'budget'];
+const { APP_IDS } = require('./app-list');
 const IS_DB = /\.(db|sqlite)$/;
 const SKIP = /(^|\/)(tmp|import-[^/]*)(\/|$)|\.(db|sqlite)-(wal|shm|journal)$|\.part$/;
-const APP_ENTRY = /^apps\/(documents|manga|budget)\/((?:[\w.-]+\/)*[\w.-]+)$/;
+const APP_ENTRY = new RegExp(`^apps\\/(${APP_IDS.join('|')})\\/((?:[\\w.-]+\\/)*[\\w.-]+)$`);
 
 function listApps() {
   const files = [], dbs = [];

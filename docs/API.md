@@ -1,8 +1,8 @@
 # API reference
 
-All endpoints are JSON unless noted. AkulavBox's API (`/api/…`) authenticates with `Authorization: Bearer <token>`, or `?token=<token>` for media URLs; it never reads the sign-in cookie. Errors look like `{ "error": "message" }` with a 4xx or 5xx status. `401` means sign in again, and `403` means admins only. Responses may include `X-Refresh-Token`. Store it to keep the session alive.
+All endpoints are JSON unless noted. AkulavBox's own API (`/api/…`: the account, the launcher, the Admin console, and Trove, the files app) authenticates with `Authorization: Bearer <token>`, or `?token=<token>` for media URLs; it never reads the sign-in cookie. Errors look like `{ "error": "message" }` with a 4xx or 5xx status. `401` means sign in again, and `403` means admins only. Responses may include `X-Refresh-Token`. Store it to keep the session alive.
 
-The other apps (`/docs`, `/manga`, `/budget`) use the same sign-in through the HttpOnly cookie `akb_session` (the same JWT), set by `/api/login` and `/api/session`. Their routes are listed at the end.
+The other apps (`/docs`, `/manga`, `/budget`, `/tasks`) use the same sign-in through the HttpOnly cookie `akb_session` (the same JWT), set by `/api/login` and `/api/session`. Their routes are listed at the end, followed by the AI connector (`/mcp`), which takes connector tokens instead.
 
 ## Public
 | Method | Path | |
@@ -12,8 +12,9 @@ The other apps (`/docs`, `/manga`, `/budget`) use the same sign-in through the H
 | POST | `/api/logout` | Clears the `akb_session` cookie (the page forgets its stored token) |
 | POST | `/api/session/resume` | Cookie only, same origin: → `{ token, id, username, role }` for a page that lost its stored token. Other origins get 403 |
 | GET | `/api/session/me` | Cookie only, for the shared account menu (`hub/account.js`): `{ id, username, role, avatar }`; `avatar` is `/api/session/avatar?v=<version>` or `null`. 401 when signed out |
-| GET | `/api/session/avatar` | Cookie only: the AkulavBox profile picture as an image (PNG, JPEG, WebP or GIF), cached until its `?v=` changes. 404 without one |
-| GET | `/`, `/login`, `/admin`, `/box/` | The launcher, the sign-in page (`?next=/path` to come back to, `?out=1` after signing out), the Admin console, AkulavBox's page |
+| GET | `/api/apps/catalog` | The apps of the server for the signed-out sign-in page: `{ name, version, apps: [{ id, name, path, tagline, short, color }] }` |
+| GET | `/api/session/avatar` | Cookie only: the account's profile picture as an image (PNG, JPEG, WebP or GIF), cached until its `?v=` changes. 404 without one |
+| GET | `/`, `/login`, `/admin`, `/connect`, `/box/` | The launcher, the sign-in page (`?next=/path` to come back to, `?out=1` after signing out), the Admin console, AI connectors, Trove's page |
 | GET | `/shared/:hash` | A publicly shared file (supports Range) |
 
 ## Files and folders
@@ -91,7 +92,7 @@ The other apps (`/docs`, `/manga`, `/budget`) use the same sign-in through the H
 | Method | Path | |
 | --- | --- | --- |
 | GET | `/api/admin/users` | Accounts with usage, file count, trash, last sign-in |
-| POST | `/api/admin/users` | `{ username, password, quota, role }` |
+| POST | `/api/admin/users` | `{ username, password, quota, role }`; `quota` is the size of the account's storage, shared by every app |
 | DELETE | `/api/admin/users/:id` | Deletes the account and all of its data |
 | PATCH | `/api/admin/users/:id/password` · `/quota` · `/role` | `{ newPassword }` · `{ quota }` · `{ role }` |
 | POST | `/api/admin/users/:id/signout` | Revokes every session |
@@ -119,12 +120,12 @@ Cookie sign-in. Changes (anything but GET) must come from the same origin. `:sto
 | Method | Path | |
 | --- | --- | --- |
 | GET | `/docs/` | The page (signed out: redirect to `/login?next=/docs/`) |
-| GET | `/docs/api/me` | `{ id, username, role, quota_bytes, used_bytes, stores: [{ key, label }] }` |
+| GET | `/docs/api/me` | `{ id, username, role, quota_bytes, used_bytes, app_bytes, limit_bytes, stores: [{ key, label }] }`: the account's storage (every app), e-Management's part, and its own limit if the admin set one |
 | GET / POST | `/docs/api/s/:store/categories` | Categories with their tags / `{ name, color, sort }` |
 | PUT / DELETE | `/docs/api/s/:store/categories/:id` | |
 | POST · PUT / DELETE | `/docs/api/s/:store/tags` · `/tags/:id` | `{ category_id, name }` · `{ name }` |
 | GET | `/docs/api/s/:store/documents` | Every document with `tagIds` and `files` |
-| POST · PUT | `/docs/api/s/:store/documents` · `/documents/:id` | multipart: `data` (JSON `{ title, doc_date, number, description, tagIds, removeFileIds }`) and up to 10 `files` of 50 MB. 413 over the account's quota |
+| POST · PUT | `/docs/api/s/:store/documents` · `/documents/:id` | multipart: `data` (JSON `{ title, doc_date, number, description, tagIds, removeFileIds }`) and up to 10 `files` of 50 MB. 413 when the account's storage is full |
 | DELETE | `/docs/api/s/:store/documents/:id` | Deletes the document and its files |
 | GET | `/docs/api/s/:store/files/:id` | A file (PDF/PNG/JPEG inline, the rest as a download; `?download=1`) |
 | GET · POST | `/docs/api/s/:store/export` · `/import` | A `.anscbackup` of the space · the archive as the request body (`application/octet-stream`), replacing the space |
@@ -139,7 +140,7 @@ For Koma and scripts, with `Authorization: Bearer ks_…` (create a token under 
 | Method | Path | |
 | --- | --- | --- |
 | GET | `/manga/api/v1/me` | Who the token belongs to |
-| POST | `/manga/api/v1/works` | multipart: `files` (zip/cbz or images), optional `title`, `description`, `visibility`, `cover`. 413 over the account's quota |
+| POST | `/manga/api/v1/works` | multipart: `files` (zip/cbz or images), optional `title`, `description`, `visibility`, `cover`. 413 when the account's storage is full |
 | GET | `/manga/api/v1/works/:id` | `{ status: processing \| ready \| failed, progress, url, … }` |
 
 ## Florin (`/budget`)
@@ -158,3 +159,51 @@ Cookie sign-in. Changes need the header `X-Requested-With: florin`.
 | GET | `/budget/api/stats/overview` · `/trend` · `/analytics` | Dashboard and chart data. The overview's `totals.budget` is the overall monthly budget when set, else `totals.categoryBudgets` |
 | GET · PATCH | `/budget/api/admin/stats` · `/budget/api/admin/settings` | Admins: totals · `{ defaultCurrency }` |
 | PUT · POST | `/budget/api/admin/rates/:code` · `/rates/refresh` | Admins: `{ rate }` · fetch the latest rates |
+
+## Tick (`/tasks`)
+
+Cookie sign-in. Changes need the header `X-Requested-With: tasks`. Every path is under `/tasks/api`; ids are integers, dates `YYYY-MM-DD`, times `HH:MM`.
+
+| Method | Path | |
+| --- | --- | --- |
+| GET | `/tasks/` and its page paths (`/tasks/today`, `/tasks/list/3`, …) | The page (signed out: redirect to `/login`) |
+| GET | `/bootstrap` | `{ user, prefs, lists, tasks }`: everything the page needs at once |
+| GET / POST | `/tasks` | Every open task (to do and doing) / `{ title, notes, listId, dueDate, dueTime, priority 0–3, flagged, tags, checklist: [{ text, done }], repeat: { every, unit: day\|week\|month\|year, weekdays? }, status }` → 201 `{ task }` |
+| GET | `/tasks/done?offset=&limit=&listId=&from=&to=` | `{ total, items }`, newest first |
+| GET / PATCH / DELETE | `/tasks/:id` | `{ task }` / any of the fields above, plus `today` → `{ task, next }` (`next`: a repeating task's new copy when it is ticked off; `undoNext` takes it back) |
+| POST | `/tasks/reorder` · `/tasks/clear-done` | `{ ids }` · `{ listId? }` |
+| GET / POST | `/lists` | With open and done counts / `{ name, color, icon }` |
+| PATCH / DELETE | `/lists/:id` | `?tasks=delete` deletes its tasks too (they go to the Inbox otherwise) |
+| POST | `/lists/reorder` | `{ ids }` |
+| GET · PATCH / DELETE | `/tags` · `/tags/:tag` | Tags in use · `{ name }` renames it on every task / removes it |
+| GET / PATCH | `/prefs` | `{ weekStart, startView, showDoneInLists, sort }` |
+
+## AI connector
+
+Lets an AI app read, and when allowed change, every app of an account. Calls carry `Authorization: Bearer akb_…`: a token made at `/connect`, or one an AI app got through OAuth. A token's scopes say per app (`box`, `documents`, `manga`, `budget`, `tasks`) `read` or `write`; it sees only the tools of the apps it may use (and that are on for the account), and the tools that change something only with `write`. 240 calls a minute per token. These endpoints answer any origin (CORS), since they take bearer tokens only.
+
+| Method | Path | |
+| --- | --- | --- |
+| POST | `/mcp` | The [Model Context Protocol](https://modelcontextprotocol.io) over Streamable HTTP, stateless, with JSON answers: `initialize`, `ping`, `tools/list`, `tools/call` (single messages or a batch). Notifications → 202. Without a valid token: 401 with `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource"` |
+| GET | `/api/connector/tools` | The same tools for plain HTTP: `{ account, connector, tools: [{ name, title, description, inputSchema, annotations }] }` |
+| POST | `/api/connector/tools/:name` | The tool's arguments as the body → `{ result }`, or 400 `{ error }` |
+
+The tools (`akulavbox_account` always; the others by app): `trove_list_folder`, `trove_search`, `trove_library`, `trove_read_file` (text and images), `trove_create_folder`, `trove_write_text_file`, `trove_update_text_file`, `trove_rename`, `trove_move`, `trove_trash`; `docs_categories`, `docs_list`, `docs_get`, `docs_read_file`, `docs_create`, `docs_update`, `docs_delete`; `koma_webtoons`, `koma_webtoon`, `koma_update_webtoon`; `florin_categories`, `florin_transactions`, `florin_month`, `florin_trend`, `florin_add_transaction`, `florin_update_transaction`, `florin_delete_transaction`; `tick_lists`, `tick_list_tasks`, `tick_add_task`, `tick_update_task`, `tick_complete_task`, `tick_delete_task`, `tick_create_list`. Each calls the app's own route in the process, as the account.
+
+The account's connectors (signed in, `Authorization` with the session token as for the rest of `/api`):
+
+| Method | Path | |
+| --- | --- | --- |
+| GET | `/api/connector/tokens` | `{ tokens: [{ id, name, kind: token\|oauth, prefix, scopes, created_at, last_used_at, expires_at }], apps, mcp_url, base_url }` |
+| POST | `/api/connector/tokens` | `{ name, scopes: { app: read\|write }, days }` (`days` null: until revoked) → `{ token, connector }`. The token is shown this once |
+| PATCH / DELETE | `/api/connector/tokens/:id` | `{ name?, scopes? }` / revoke |
+
+OAuth 2.1 for AI apps (authorization code with PKCE S256, public clients, refresh tokens):
+
+| Method | Path | |
+| --- | --- | --- |
+| GET | `/.well-known/oauth-protected-resource` · `/.well-known/oauth-authorization-server` | Discovery (RFC 9728, RFC 8414) |
+| POST | `/oauth/register` | Dynamic client registration (RFC 7591): `{ client_name, redirect_uris }` → 201 `{ client_id, … }`. Redirects must be https, http on localhost, or an app's own scheme |
+| GET | `/oauth/authorize` | The approval page: `response_type=code&client_id&redirect_uri&code_challenge&code_challenge_method=S256&state&scope` (`scope`: `tasks:write box:read …`; the person picks the final ones) |
+| POST | `/oauth/token` | `grant_type=authorization_code` (`code, redirect_uri, client_id, code_verifier`) or `refresh_token` (`refresh_token, client_id`) → `{ access_token, token_type, expires_in, refresh_token, scope }`. Access tokens last a day, refresh tokens 90 days and change on every use |
+| POST | `/oauth/revoke` | `token=` (access or refresh): ends the grant |

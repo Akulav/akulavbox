@@ -38,7 +38,7 @@ export function clearSession() {
 }
 
 // Server/app info (version, author) from the public health endpoint
-export const app = reactive({ version: '', author: 'Akulav', name: 'AkulavBox', loadedVersion: '', updateAvailable: false });
+export const app = reactive({ version: '', author: 'Akulav', name: 'Trove', loadedVersion: '', updateAvailable: false });
 export async function checkVersion() {
   try {
     const res = await fetch('/api/health', { cache: 'no-store' });
@@ -93,7 +93,7 @@ export function downloadUrl(url) {
 }
 
 /** Download files and folders as one zip (a form POST, so the browser streams it to disk) */
-export function downloadZip({ files = [], folders = [], name = 'AkulavBox download' }) {
+export function downloadZip({ files = [], folders = [], name = 'Trove download' }) {
   const form = document.createElement('form');
   form.method = 'POST'; form.action = '/api/zip'; form.style.display = 'none';
   for (const [k, v] of Object.entries({ token: session.token || '', files: files.join(','), folders: folders.join(','), name })) {
@@ -169,7 +169,8 @@ export function randomId() {
 }
 
 // Signed-in account summary (storage meter, avatar) shared by the shell and pages
-export const account = reactive({ username: '', role: '', used_bytes: 0, quota_bytes: 0, trash_bytes: 0, profile_image: null, show_xxx: false, loaded: false });
+// used_bytes is the whole account's storage (every app shares one space); trove_bytes Trove's part
+export const account = reactive({ username: '', role: '', used_bytes: 0, quota_bytes: 0, trove_bytes: 0, trash_bytes: 0, space: null, profile_image: null, show_xxx: false, loaded: false });
 
 export function formatRelative(s) {
   const d = parseDbDate(s);

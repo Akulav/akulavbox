@@ -59,9 +59,11 @@ const config = {
   diskReserveBytes: Math.max(0, Number(process.env.DISK_RESERVE_MB ?? 512)) * 1024 * 1024,
   tokenTtl: process.env.TOKEN_TTL || '7d',
   trustProxy: process.env.TRUST_PROXY === '1',
-  // starting quotas for the other apps (the Admin console changes them per user)
-  documentsQuotaBytes: Math.max(1, Number(process.env.DOCUMENTS_QUOTA_MB) || 2048) * 1024 * 1024,
-  mangaQuotaBytes: Math.max(1, Number(process.env.MANGA_QUOTA_MB) || 10240) * 1024 * 1024,
+  // Storage is one space per account (users.quota_bytes) shared by every app. These optionally give
+  // e-Management and Koma Shelf a default limit of their own inside it (null: none; the Admin console
+  // changes them, per account too).
+  documentsQuotaBytes: Number(process.env.DOCUMENTS_QUOTA_MB) > 0 ? Math.floor(Number(process.env.DOCUMENTS_QUOTA_MB) * 1024 * 1024) : null,
+  mangaQuotaBytes: Number(process.env.MANGA_QUOTA_MB) > 0 ? Math.floor(Number(process.env.MANGA_QUOTA_MB) * 1024 * 1024) : null,
   mangaMaxUploadMb: Math.max(1, Number(process.env.MANGA_MAX_UPLOAD_MB) || 1024),
   // public address of the server, e.g. https://cloud.example.com (share links, social previews)
   publicUrl: String(process.env.PUBLIC_URL || '').replace(/\/+$/, ''),

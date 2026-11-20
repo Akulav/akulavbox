@@ -101,6 +101,7 @@ const PATHS = {
   documents: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
   manga: '<path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/>',
   budget: '<path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/>',
+  tasks: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/>',
   user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
   key: '<path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4"/><path d="m21 2-9.6 9.6"/><circle cx="7.5" cy="15.5" r="5.5"/>',
   eye: '<path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0"/><circle cx="12" cy="12" r="3"/>',
@@ -122,16 +123,29 @@ const PATHS = {
   search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
   rotate: '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>',
   x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  plug: '<path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/>',
+  copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+  plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  terminal: '<path d="m4 17 6-6-6-6"/><path d="M12 19h8"/>',
+  globe: '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
+  lock: '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
 };
 export const icon = (name, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24" aria-hidden="true">${PATHS[name] || ''}</svg>`;
 
-/** AkulavBox's mark (a brass tile with an open box) */
+/** AkulavBox's mark (the account and the server): an ink tile with an open box in the apps' colours */
 let markSeq = 0;
 export function mark(size = 32) {
   const id = `m${++markSeq}`;
-  return `<svg width="${size}" height="${size}" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="${id}a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F7C766"/><stop offset=".55" stop-color="#E8A33D"/><stop offset="1" stop-color="#C9711F"/></linearGradient><linearGradient id="${id}b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".45"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs><rect width="64" height="64" rx="17" fill="url(#${id}a)"/><rect x="2" y="2" width="60" height="30" rx="15" fill="url(#${id}b)" opacity=".55"/><g fill="none" stroke="#21170A" stroke-width="3.4" stroke-linejoin="round" stroke-linecap="round"><path d="M32 13.5 48.5 22.8 32 32 15.5 22.8Z" fill="#FFF3D6" fill-opacity=".55"/><path d="M15.5 22.8V41.4L32 50.6 48.5 41.4V22.8"/><path d="M32 32V50.6"/></g></svg>`;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="${id}a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1E2D33"/><stop offset="1" stop-color="#0B1215"/></linearGradient><linearGradient id="${id}b" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F7C766"/><stop offset=".35" stop-color="#F03862"/><stop offset=".68" stop-color="#3B82F6"/><stop offset="1" stop-color="#1BAF7A"/></linearGradient></defs><rect width="64" height="64" rx="17" fill="url(#${id}a)"/><rect x=".75" y=".75" width="62.5" height="62.5" rx="16.25" fill="none" stroke="#fff" stroke-opacity=".08" stroke-width="1.5"/><g fill="none" stroke="url(#${id}b)" stroke-width="3.8" stroke-linejoin="round" stroke-linecap="round"><path d="M32 13.5 48.5 22.8 32 32 15.5 22.8Z" fill="#fff" fill-opacity=".08"/><path d="M15.5 22.8V41.4L32 50.6 48.5 41.4V22.8"/><path d="M32 32V50.6"/></g></svg>`;
 }
-export const appTile = (app, lg = false) => `<span class="tile ${lg ? 'lg' : ''}" style="--c:${esc(app.color)}">${app.id === 'box' ? mark(lg ? 30 : 24) : icon(app.id)}</span>`;
+/** Trove's mark (the files app): a brass tile with stacked layers */
+export function troveMark(size = 32) {
+  const id = `t${++markSeq}`;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="${id}a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F7C766"/><stop offset=".55" stop-color="#E8A33D"/><stop offset="1" stop-color="#C9711F"/></linearGradient></defs><rect width="64" height="64" rx="17" fill="url(#${id}a)"/><g fill="none" stroke="#21170A" stroke-width="3.4" stroke-linejoin="round" stroke-linecap="round"><path d="M32 14 50 22.5 32 31 14 22.5Z" fill="#FFF3D6" fill-opacity=".6"/><path d="M14 31.5 32 40 50 31.5"/><path d="M14 40.5 32 49 50 40.5"/></g></svg>`;
+}
+export const appTile = (app, lg = false) => `<span class="tile ${lg ? 'lg' : ''}" style="--c:${esc(app.color)}">${app.id === 'box' ? troveMark(lg ? 30 : 24) : icon(app.id)}</span>`;
+/** The AkulavBox lockup of the top bars: the mark and the word */
+export const lockup = (size = 30) => `${mark(size)}<b class="brand-text">AkulavBox</b>`;
 
 // ---------- toasts and dialogs ----------
 let toastHost = null;
@@ -178,6 +192,35 @@ export function dialog({ title, message = '', fields = [], confirm = 'OK', dange
     document.body.append(o);
     (o.querySelector('input') || o.querySelector('.btn-primary, .solid')).focus();
   });
+}
+
+// ---------- AI connector permissions (the /connect page and the OAuth approval page) ----------
+const LEVEL_NAMES = [['', 'No access'], ['read', 'Read'], ['write', 'Read & change']];
+/** One row per app with a three-way switch; apps that are off for the account can't be picked */
+export function permsHtml(apps, scopes = {}) {
+  return apps.map((a) => {
+    const cur = a.enabled ? scopes[a.id] || '' : '';
+    return `<div class="perm ${a.enabled ? '' : 'off'}" data-app="${esc(a.id)}">
+      ${appTile(a)}<div class="perm-name"><b>${esc(a.name)}</b><small>${a.enabled ? esc(a.tagline || '') : 'Not on for your account'}</small></div>
+      <div class="seg" role="radiogroup" aria-label="${esc(a.name)}">${LEVEL_NAMES.map(([v, label]) => `<button type="button" role="radio" data-level="${v}" aria-checked="${cur === v}" class="${cur === v ? 'on' : ''}" ${a.enabled ? '' : 'disabled'}>${label}</button>`).join('')}</div>
+    </div>`;
+  }).join('');
+}
+/** Wires the switches of permsHtml; returns a function that reads the choice as scopes */
+export function wirePerms(root) {
+  root.addEventListener('click', (e) => {
+    const b = e.target.closest('.seg button');
+    if (!b || b.disabled) return;
+    for (const x of b.parentElement.children) { x.classList.toggle('on', x === b); x.setAttribute('aria-checked', String(x === b)); }
+  });
+  return () => Object.fromEntries([...root.querySelectorAll('.perm')].map((p) => [p.dataset.app, p.querySelector('.seg .on')?.dataset.level || '']).filter(([, v]) => v));
+}
+/** Small chips for a set of scopes */
+export const scopeChips = (scopes, apps) => apps.filter((a) => scopes[a.id]).map((a) => `<span class="chip scope" style="--c:${esc(a.color)}" title="${esc(a.name)}: ${scopes[a.id] === 'write' ? 'read and change' : 'read only'}"><span class="dot"></span>${esc(a.name)}${scopes[a.id] === 'write' ? ' · change' : ''}</span>`).join('');
+
+/** Copy text, with a toast */
+export async function copyText(text, what = 'Copied') {
+  try { await navigator.clipboard.writeText(text); toast(what); } catch (e) { toast('Couldn’t copy: select it and copy by hand.', 'error'); }
 }
 
 /** The account menu in the top bar: the one every app shares (hub/account.js) */

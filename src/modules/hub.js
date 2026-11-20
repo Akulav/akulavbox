@@ -1,4 +1,6 @@
+const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 const crypto = require('crypto');
 const config = require('../core/config');
 const db = require('../core/db');
@@ -6,14 +8,35 @@ const session = require('../core/session');
 const apps = require('../core/apps');
 const { verifyUser, readToken } = require('../core/auth');
 
-// The pages around the apps: sign-in (/login), the app launcher (/), the Admin
-// console (/admin) and AkulavBox itself at /box/. They are static files; each
-// page asks the API who is signed in and goes to /login when nobody is.
+// The pages of AkulavBox around the apps: sign-in (/login), the app launcher (/), the Admin
+// console (/admin), AI connectors (/connect), and Trove's page at /box/. They are static files;
+// each page asks the API who is signed in and goes to /login when nobody is.
 const HUB = path.join(__dirname, '../../hub');
 const FRONTEND = path.join(__dirname, '../../frontend');
 
 module.exports = async function (fastify) {
   fastify.register(require('@fastify/static'), { root: HUB, prefix: '/hub/', decorateReply: false, index: false, maxAge: 0 });
+
+  // Vue and Tailwind's browser build for every app's page (Trove too), from node_modules: no CDN, works
+  // offline. Read and gzipped once at start (≈430 KB → ≈130 KB on the wire), with an ETag, so a reload
+  // costs a 304 and no CPU. The file names carry no version, so they are revalidated daily.
+  const VENDOR = {
+    'vue.js': require.resolve('vue/dist/vue.esm-browser.prod.js'),
+    'tailwind.js': require.resolve('@tailwindcss/browser'),
+  };
+  const vendor = new Map(Object.entries(VENDOR).map(([name, file]) => {
+    const body = fs.readFileSync(file);
+    return [name, { body, gz: zlib.gzipSync(body, { level: 9 }), etag: `"${crypto.createHash('sha1').update(body).digest('base64url').slice(0, 20)}"` }];
+  }));
+  fastify.get('/hub/vendor/:file', async (request, reply) => {
+    const v = vendor.get(request.params.file);
+    if (!v) return reply.code(404).send({ error: 'Not found' });
+    reply.header('Cache-Control', 'public, max-age=86400').header('ETag', v.etag).header('Vary', 'Accept-Encoding');
+    if (request.headers['if-none-match'] === v.etag) return reply.code(304).send();
+    reply.type('text/javascript; charset=utf-8');
+    if (/\bgzip\b/.test(String(request.headers['accept-encoding'] || ''))) return reply.header('Content-Encoding', 'gzip').send(v.gz);
+    return reply.send(v.body);
+  });
 
   const page = (file, dir = HUB) => async (request, reply) => {
     reply.header('Cache-Control', 'no-cache');
@@ -22,8 +45,23 @@ module.exports = async function (fastify) {
   fastify.get('/', page('index.html'));
   fastify.get('/login', page('login.html'));
   fastify.get('/admin', page('admin.html'));
+  fastify.get('/connect', page('connect.html'));
   fastify.get('/box', async (request, reply) => reply.redirect('/box/'));
   fastify.get('/box/', page('index.html', FRONTEND));
+  // Trove's own install manifest (its files stay at the root paths, so it is mapped here)
+  fastify.get('/box/manifest.webmanifest', async (request, reply) => {
+    reply.header('Cache-Control', 'no-cache').type('application/manifest+json');
+    return reply.sendFile('trove.webmanifest', FRONTEND);
+  });
+  // the name iOS and some icon fetchers try first
+  fastify.get('/apple-touch-icon-precomposed.png', async (request, reply) => {
+    reply.header('Cache-Control', 'public, max-age=86400');
+    return reply.sendFile('apple-touch-icon.png', FRONTEND);
+  });
+
+  // The apps of this server, for the signed-out sign-in page: names, colours and taglines only.
+  const catalog = JSON.stringify({ name: config.name, version: config.version, apps: apps.APPS.map((a) => ({ id: a.id, name: a.name, path: a.path, tagline: a.tagline, short: a.short, color: a.color })) });
+  fastify.get('/api/apps/catalog', async (request, reply) => reply.type('application/json; charset=utf-8').header('Cache-Control', 'public, max-age=300').send(catalog));
 
   // Bearer token (the page's) → the same token in the cookie the other apps read.
   // The launcher calls it on every load, so sessions from before 4.0 carry over.
@@ -75,5 +113,6 @@ module.exports = async function (fastify) {
     name: config.name,
     version: config.version,
     apps: apps.forUser(request.user),
+    space: apps.describeSpace(apps.space(request.user.id)),
   }));
 };

@@ -1,6 +1,6 @@
 // e-Management: aplicația (rutele, bara de sus). Importat direct (fără import map), ca politica CSP
 // să poată interzice orice script inline. Modulele sunt în js/.
-import { createApp } from '/docs/vendor/vue.js';
+import { createApp } from '/hub/vendor/vue.js';
 import { store, spaceLabel, switchSpace, loadSession } from '/docs/js/state.js';
 import { DialogHost, Brand, NoAccess } from '/docs/js/ui.js';
 import { DocsView } from '/docs/js/documents.js';

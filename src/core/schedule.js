@@ -152,7 +152,7 @@ function save(input) {
       if (!path.isAbsolute(raw)) throw new Error('Use a full folder path, like D:\\Backups or /mnt/backup/akulavbox.');
       const dir = path.resolve(raw);
       const inside = (p) => dir === p || dir.startsWith(p + path.sep);
-      if ([config.usersDir, config.importDir, config.tempDir, config.thumbsDir, config.boxDir, ...['documents', 'manga', 'budget'].map(config.appDataDir)].some(inside)) throw new Error('Pick a folder outside AkulavBox’s own data folders.');
+      if ([config.usersDir, config.importDir, config.tempDir, config.thumbsDir, config.boxDir, ...require('./app-list').APP_IDS.map(config.appDataDir)].some(inside)) throw new Error('Pick a folder outside AkulavBox’s own data folders.');
       try {
         fs.mkdirSync(dir, { recursive: true });
         const probe = path.join(dir, `.akulavbox-write-test-${process.pid}`);

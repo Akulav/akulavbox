@@ -363,6 +363,49 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    name: 'AI connectors: access tokens and OAuth sign-ins for AI apps',
+    up(db) {
+      // connector_tokens: what an AI app (Claude, …) may do in each app of an account. Only SHA-256
+      // hashes of the tokens are kept. scopes is JSON { box: 'read' | 'write', documents: …, … };
+      // kind 'token' is made by hand in /connect, 'oauth' by an app that signed in through /oauth.
+      // oauth_clients: apps that registered themselves (RFC 7591); oauth_codes: one-time codes (PKCE).
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS connector_tokens (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          kind TEXT NOT NULL DEFAULT 'token',
+          client_id TEXT,
+          token_hash TEXT NOT NULL UNIQUE,
+          prefix TEXT NOT NULL,
+          refresh_hash TEXT UNIQUE,
+          scopes TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          last_used_at TEXT,
+          expires_at TEXT,
+          refresh_expires_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_connector_tokens_user ON connector_tokens(user_id);
+        CREATE TABLE IF NOT EXISTS oauth_clients (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          redirect_uris TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          last_used_at TEXT
+        );
+        CREATE TABLE IF NOT EXISTS oauth_codes (
+          code_hash TEXT PRIMARY KEY,
+          client_id TEXT NOT NULL,
+          user_id TEXT NOT NULL,
+          redirect_uri TEXT NOT NULL,
+          challenge TEXT NOT NULL,
+          scopes TEXT NOT NULL,
+          expires_at INTEGER NOT NULL
+        );
+      `);
+    },
+  },
 ];
 
 const LATEST = MIGRATIONS.length;

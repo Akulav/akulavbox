@@ -1,7 +1,7 @@
 {
   "name": "akulavbox",
-  "version": "4.1.0",
-  "description": "A self-hosted personal cloud: encrypted files, photos, music, videos and books, plus documents, webtoons and budgets, with one sign-in.",
+  "version": "5.0.0",
+  "description": "A self-hosted personal cloud: one account and one storage space for Trove (encrypted files and media), e-Management, Koma Shelf, Florin and Tick, with an AI connector (MCP).",
   "author": "Akulav",
   "license": "SEE LICENSE IN LICENSE",
   "private": true,

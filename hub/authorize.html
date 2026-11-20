@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Connect an AI app · AkulavBox</title>
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="/favicon.ico" sizes="48x48">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/favicon-32x32.png" type="image/png" sizes="32x32">
+  <meta name="theme-color" content="#0D1518">
+  <script src="/hub/theme.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,650;12..96,750&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/hub/hub.css">
+  <link rel="modulepreload" href="/hub/common.js">
+</head>
+<body class="login-page">
+  <main>
+    <div class="panel authorize rise">
+      <div class="auth-head">
+        <span id="mark"></span>
+        <div>
+          <p class="muted" style="font-size:13px" id="who"></p>
+          <h1 id="title">Connect an AI app</h1>
+        </div>
+      </div>
+      <div id="boot" class="muted" style="padding:12px 0">Checking the request…</div>
+      <div id="bad" class="alert" role="alert" hidden></div>
+      <form id="form" hidden>
+        <p class="muted" style="font-size:14px" id="lead"></p>
+        <p class="label" style="margin-top:16px">What it may do</p>
+        <div class="perms compact" id="perms"></div>
+        <p class="faint" style="font-size:12px;margin-top:12px" id="back"></p>
+        <div class="auth-actions">
+          <button type="button" class="btn" id="deny">Decline</button>
+          <button class="btn btn-primary" id="allow">Allow</button>
+        </div>
+        <p class="faint" style="font-size:12px;margin-top:14px">You can change or revoke this at any time in <a href="/connect">AI connectors</a>.</p>
+      </form>
+    </div>
+  </main>
+  <script type="module" src="/hub/authorize.js"></script>
+</body>
+</html>

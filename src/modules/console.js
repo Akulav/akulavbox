@@ -5,9 +5,10 @@ const apps = require('../core/apps');
 const activity = require('../core/activity');
 const { verifyAdmin } = require('../core/auth');
 
-// The Admin console (/admin): every account with its access and storage in each
-// app. Creating, deleting, passwords, roles and the AkulavBox quota use the
-// existing /api/admin/users routes (admin.js); this adds the per-app parts.
+// The Admin console (/admin): every account with its storage (one space shared by
+// every app) and its access to each app. Creating, deleting, passwords, roles and
+// the storage size use the /api/admin/users routes (admin.js); this adds the
+// per-app parts (on or off, and an optional limit inside the account's space).
 
 const gb = (b) => `${(b / 1024 ** 3).toFixed(2).replace(/\.?0+$/, '')} GB`;
 
@@ -22,6 +23,8 @@ module.exports = async function (fastify) {
     `).all();
     const others = apps.APPS.filter((a) => !a.core);
     for (const u of users) {
+      // the account's one storage space; u.used_bytes stays Trove's part
+      u.space = apps.space(u.id);
       u.apps = {};
       for (const a of others) {
         const acc = apps.access(u.id, a.id);
@@ -55,7 +58,7 @@ module.exports = async function (fastify) {
     try { r = apps.setAccess(id, app, { enabled: b.enabled, quota_bytes: b.quota_bytes }); } catch (e) { return reply.code(400).send({ error: e.message }); }
     const what = [];
     if (b.enabled !== undefined) what.push(b.enabled ? 'turned on' : 'turned off');
-    if (b.quota_bytes !== undefined) what.push(b.quota_bytes === null ? 'default quota' : `quota ${gb(r.quota_bytes)}`);
+    if (b.quota_bytes !== undefined) what.push(b.quota_bytes === null ? 'default limit' : `limit ${gb(r.quota_bytes)}`);
     activity.log(request, 'admin.user_app', { target: name, detail: `${a.name}: ${what.join(', ')}` });
     return { success: true, ...r };
   });
@@ -64,7 +67,7 @@ module.exports = async function (fastify) {
   fastify.put('/api/admin/apps/defaults', { preHandler: verifyAdmin }, async (request, reply) => {
     let d;
     try { d = apps.setDefaults(request.body || {}); } catch (e) { return reply.code(400).send({ error: e.message }); }
-    activity.log(request, 'admin.app_defaults', { detail: Object.entries(d).map(([k, v]) => `${apps.byId.get(k).name}: ${v.enabled ? 'on' : 'off'}${v.quota_bytes ? `, ${gb(v.quota_bytes)}` : ''}`).join(' · ') });
+    activity.log(request, 'admin.app_defaults', { detail: Object.entries(d).map(([k, v]) => `${apps.byId.get(k).name}: ${v.enabled ? 'on' : 'off'}${v.quota_bytes ? `, limit ${gb(v.quota_bytes)}` : ''}`).join(' · ') });
     return d;
   });
 };

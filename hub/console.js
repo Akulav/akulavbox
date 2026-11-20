@@ -1,7 +1,7 @@
-import { api, session, toLogin, icon, mark, esc, appTile, formatBytes, relative, avatar, accountMenu, madeBy, toast, dialog } from './common.js';
+import { api, session, toLogin, icon, lockup, esc, appTile, formatBytes, relative, avatar, accountMenu, madeBy, toast, dialog } from './common.js';
 
-// The Admin console: every account, which apps it can use and how much it may store in each.
-// Accounts, passwords and roles use AkulavBox's /api/admin/users routes; per-app access and
+// The Admin console: every account, its storage (one space for every app) and which apps it can use.
+// Accounts, passwords, roles and storage use the /api/admin/users routes; per-app access and
 // defaults use /api/admin/users/:id/apps/:app and /api/admin/apps/defaults (src/modules/console.js).
 
 const $ = (id) => document.getElementById(id);
@@ -30,25 +30,32 @@ function statsHtml(d) {
   return tiles.map(([ic, k, v, s]) => `<div class="panel stat"><p class="k">${ic}${esc(k)}</p><p class="v num">${esc(v)}</p><p class="s">${esc(s)}</p></div>`).join('');
 }
 
+/** The account's one storage space: a bar split by app, and the button that sets its size */
+function spaceCell(u, apps) {
+  const s = u.space || { quota_bytes: u.quota_bytes, used_bytes: u.used_bytes, by_app: { box: u.used_bytes } };
+  const p = pct(s.used_bytes, s.quota_bytes);
+  return `<div class="ua ua-space">
+    <div class="ua-head"><span class="n">Storage</span><span class="chip ${p >= 90 ? 'chip-danger' : ''}">${p}%</span></div>
+    <div class="space-bar">${apps.filter((a) => a.quota && s.by_app[a.id] > 0).map((a) => `<span style="width:${pct(s.by_app[a.id], s.quota_bytes)}%;--c:${a.color}" title="${esc(a.name)}: ${formatBytes(s.by_app[a.id])}"></span>`).join('')}</div>
+    <div class="ua-line"><span class="num">${formatBytes(s.used_bytes)} of ${formatBytes(s.quota_bytes)}</span><button data-act="box-quota" data-id="${esc(u.id)}">Change</button></div>
+  </div>`;
+}
+
 function appCell(u, a) {
   if (a.core) {
-    const p = pct(u.used_bytes, u.quota_bytes);
     return `<div class="ua" style="--c:${a.color}">
-      <div class="ua-head"><span class="dot"></span><span class="n">${esc(a.name)}</span><span class="chip">${(u.file_count || 0).toLocaleString()} files</span></div>
-      <div class="meter ${p >= 90 ? 'warn' : ''}" style="--c:${a.color}"><span style="width:${p}%"></span></div>
-      <div class="ua-line"><span class="num">${formatBytes(u.used_bytes)} of ${formatBytes(u.quota_bytes)}</span><button data-act="box-quota" data-id="${esc(u.id)}">Change</button></div>
+      <div class="ua-head"><span class="dot"></span><span class="n">${esc(a.name)}</span><span class="chip">Always on</span></div>
+      <div class="ua-line"><span>${(u.file_count || 0).toLocaleString()} files · ${formatBytes(u.used_bytes)}</span></div>
     </div>`;
   }
   const x = u.apps[a.id];
-  const p = pct(x.used_bytes, x.quota_bytes);
   return `<div class="ua ${x.enabled ? '' : 'off'}" style="--c:${a.color}">
     <div class="ua-head"><span class="dot"></span><span class="n">${esc(a.name)}</span>
       <label class="switch" title="${x.enabled ? 'Turn off' : 'Turn on'} ${esc(a.name)} for ${esc(u.username)}"><input type="checkbox" data-act="toggle" data-id="${esc(u.id)}" data-app="${a.id}" ${x.enabled ? 'checked' : ''} ${a.status === 'running' ? '' : 'disabled'} aria-label="${esc(a.name)} for ${esc(u.username)}"><span></span></label></div>
     ${a.quota
-      ? `<div class="meter ${p >= 90 ? 'warn' : ''}" style="--c:${a.color}"><span style="width:${p}%"></span></div>
-         <div class="ua-line"><span class="num">${formatBytes(x.used_bytes || 0)} of ${formatBytes(x.quota_bytes)}${x.custom_quota ? '' : ' <span class="faint">(default)</span>'}</span><button data-act="app-quota" data-id="${esc(u.id)}" data-app="${a.id}">Change</button></div>`
-      : `<div class="ua-line"><span>${esc(x.summary || 'No files, no quota')}</span></div>`}
-    ${a.quota && x.summary ? `<div class="ua-line"><span>${esc(x.summary)}</span></div>` : ''}
+      ? `<div class="ua-line"><span class="num">${formatBytes(x.used_bytes || 0)}${x.quota_bytes ? ` · limit ${formatBytes(x.quota_bytes)}${x.custom_quota ? '' : ' <span class="faint">(default)</span>'}` : ''}</span><button data-act="app-quota" data-id="${esc(u.id)}" data-app="${a.id}">${x.quota_bytes ? 'Limit' : 'Add limit'}</button></div>`
+      : ''}
+    <div class="ua-line"><span>${esc(x.summary || (a.quota ? 'Nothing stored yet' : 'Keeps no files'))}</span></div>
   </div>`;
 }
 
@@ -63,7 +70,7 @@ function usersHtml(d) {
         <p class="name">${esc(u.username)}${u.role === 'admin' ? '<span class="chip chip-accent">Admin</span>' : ''}${self ? '<span class="chip">You</span>' : ''}</p>
         <small>${seen ? `Signed in ${esc(seen)}` : 'Never signed in'}${u.created_at ? ` · since ${esc(new Date(u.created_at.replace(' ', 'T') + 'Z').toLocaleDateString(undefined, { year: 'numeric', month: 'short' }))}` : ''}</small>
       </div></div>
-      <div class="user-apps">${d.apps.map((a) => appCell(u, a)).join('')}</div>
+      <div class="user-apps">${spaceCell(u, d.apps)}${d.apps.map((a) => appCell(u, a)).join('')}</div>
       <div class="row-actions">
         <button class="icon-btn" data-act="password" data-id="${esc(u.id)}" title="Set a new password" aria-label="Set a new password for ${esc(u.username)}">${icon('key')}</button>
         <button class="icon-btn" data-act="role" data-id="${esc(u.id)}" ${self ? 'disabled' : ''} title="${u.role === 'admin' ? 'Remove admin rights' : 'Make admin'}" aria-label="${u.role === 'admin' ? 'Remove admin rights from' : 'Make admin:'} ${esc(u.username)}" style="${u.role === 'admin' ? 'color:rgb(var(--accent))' : ''}">${icon('shield')}</button>
@@ -90,10 +97,10 @@ function appsHtml(d) {
         <dt>Accounts</dt><dd>${using} of ${d.users.length} can use it</dd>
       </dl>
       ${a.core
-        ? '<p class="faint" style="font-size:12px">Every account has AkulavBox. Its storage limit is set per account (Accounts tab).</p>'
+        ? `<p class="faint" style="font-size:12px">Every account has ${esc(a.name)}. Storage is one space per account, shared by every app: set its size in the Accounts tab.</p>`
         : `<form class="defaults" data-defaults="${a.id}">
             <label style="display:flex;align-items:center;gap:8px;font-size:13px"><span class="switch"><input type="checkbox" name="enabled" ${def.enabled ? 'checked' : ''}><span></span></span>On for new accounts</label>
-            ${a.quota ? `<label style="display:flex;align-items:center;gap:8px;font-size:13px">Default quota <input class="input" name="quota" type="number" min="0.1" step="0.1" value="${gb(def.quota_bytes)}" aria-label="Default quota in GB"> GB</label>` : ''}
+            ${a.quota ? `<label style="display:flex;align-items:center;gap:8px;font-size:13px" title="A limit of its own inside each account's storage. Leave it empty for none.">Limit <input class="input" name="quota" type="number" min="0.1" step="0.1" value="${def.quota_bytes ? gb(def.quota_bytes) : ''}" placeholder="none" aria-label="Default limit in GB, empty for none"> GB</label>` : ''}
             <button class="btn btn-sm">Save</button>
           </form>`}
     </div>`;
@@ -132,18 +139,20 @@ async function onAction(e) {
     return act(() => api(`/api/admin/users/${encodeURIComponent(u.id)}/apps/${a.id}`, { method: 'PATCH', body: { enabled: el.checked } }), `${a.name} ${el.checked ? 'turned on' : 'turned off'} for ${u.username}`);
   }
   if (kind === 'box-quota') {
-    const v = await dialog({ title: `AkulavBox storage for ${u.username}`, message: `Using ${formatBytes(u.used_bytes)} now.`, fields: [{ name: 'gb', label: 'Limit (GB)', type: 'number', min: 0.1, step: 0.1, value: gb(u.quota_bytes) }], confirm: 'Save',
+    const used = u.space?.used_bytes ?? u.used_bytes;
+    const v = await dialog({ title: `Storage for ${u.username}`, message: `One space for every app on the account. Using ${formatBytes(used)} now.`, fields: [{ name: 'gb', label: 'Size (GB)', type: 'number', min: 0.1, step: 0.1, value: gb(u.quota_bytes) }], confirm: 'Save',
       check: (x) => (Number(x.gb) > 0 ? null : 'Enter a size larger than 0.') });
-    if (v) act(() => api(`/api/admin/users/${encodeURIComponent(u.id)}/quota`, { method: 'PATCH', body: { quota: Math.round(Number(v.gb) * GB) } }), 'Storage limit saved');
+    if (v) act(() => api(`/api/admin/users/${encodeURIComponent(u.id)}/quota`, { method: 'PATCH', body: { quota: Math.round(Number(v.gb) * GB) } }), 'Storage saved');
     return;
   }
   if (kind === 'app-quota') {
     const a = appOf(el.dataset.app);
     const x = u.apps[a.id];
-    const v = await dialog({ title: `${a.name} storage for ${u.username}`, message: `Using ${formatBytes(x.used_bytes || 0)} now. Leave the field empty to use the default (${formatBytes(state.defaults[a.id].quota_bytes)}).`,
-      fields: [{ name: 'gb', label: 'Limit (GB)', type: 'number', min: 0.1, step: 0.1, value: x.custom_quota ? gb(x.quota_bytes) : '', placeholder: String(gb(state.defaults[a.id].quota_bytes)) }], confirm: 'Save',
+    const def = state.defaults[a.id].quota_bytes;
+    const v = await dialog({ title: `${a.name} limit for ${u.username}`, message: `${a.name} uses ${formatBytes(x.used_bytes || 0)} of the account’s storage. A limit keeps it from taking more than that, even with space left. Leave it empty for ${def ? `the default (${formatBytes(def)})` : 'no limit'}.`,
+      fields: [{ name: 'gb', label: 'Limit (GB)', type: 'number', min: 0.1, step: 0.1, value: x.custom_quota ? gb(x.quota_bytes) : '', placeholder: def ? String(gb(def)) : 'none' }], confirm: 'Save',
       check: (x2) => (x2.gb === '' || Number(x2.gb) > 0 ? null : 'Enter a size larger than 0, or leave it empty.') });
-    if (v) act(() => api(`/api/admin/users/${encodeURIComponent(u.id)}/apps/${a.id}`, { method: 'PATCH', body: { quota_bytes: v.gb === '' ? null : Math.round(Number(v.gb) * GB) } }), 'Storage limit saved');
+    if (v) act(() => api(`/api/admin/users/${encodeURIComponent(u.id)}/apps/${a.id}`, { method: 'PATCH', body: { quota_bytes: v.gb === '' ? null : Math.round(Number(v.gb) * GB) } }), 'Limit saved');
     return;
   }
   if (kind === 'password') {
@@ -164,7 +173,7 @@ async function onAction(e) {
     return;
   }
   if (kind === 'delete') {
-    const parts = [`${(u.file_count || 0).toLocaleString()} AkulavBox files`, ...state.apps.filter((a) => !a.core && u.apps[a.id]?.summary).map((a) => `${u.apps[a.id].summary} in ${a.name}`)];
+    const parts = [`${(u.file_count || 0).toLocaleString()} files in ${appOf('box').name}`, ...state.apps.filter((a) => !a.core && u.apps[a.id]?.summary).map((a) => `${u.apps[a.id].summary} in ${a.name}`)];
     const v = await dialog({ title: `Delete ${u.username}?`, danger: true, confirm: 'Delete for good',
       message: `This removes the account and everything it stored in every app: ${esc(parts.join(', '))}. It can’t be undone.`,
       fields: [{ name: 'name', label: `Type ${u.username} to confirm` }],
@@ -183,7 +192,7 @@ async function main() {
     $('boot').textContent = e.message;
     return;
   }
-  $('lockup').innerHTML = `${mark(30)}<b class="brand-text">AkulavBox</b>`;
+  $('lockup').innerHTML = lockup(30);
   $('console-chip').innerHTML = `${icon('shield')}Admin`;
   accountMenu($('account'), s);
   $('create-title').innerHTML = `<span style="display:inline-flex;gap:8px;align-items:center">${icon('user-plus')}Create an account</span>`;
@@ -224,9 +233,13 @@ async function main() {
     const id = f.dataset.defaults;
     const body = { [id]: { enabled: f.elements.enabled.checked } };
     if (f.elements.quota) {
-      const q = Number(f.elements.quota.value);
-      if (!(q > 0)) return toast('Enter a quota larger than 0.', 'error');
-      body[id].quota_bytes = Math.round(q * GB);
+      const raw = f.elements.quota.value.trim();
+      if (raw === '') body[id].quota_bytes = null;
+      else {
+        const q = Number(raw);
+        if (!(q > 0)) return toast('Enter a limit larger than 0, or leave it empty for none.', 'error');
+        body[id].quota_bytes = Math.round(q * GB);
+      }
     }
     act(() => api('/api/admin/apps/defaults', { method: 'PUT', body }), `Defaults saved for ${appOf(id).name}`);
   });

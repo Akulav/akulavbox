@@ -1,6 +1,6 @@
-// <akb-account>: the account menu every app shares (e-Management, Koma Shelf, Florin), with the
-// AkulavBox profile picture, the app's own links (children of the element), then All apps,
-// Profile & password, Admin console and Sign out. It also switches the theme every app shares.
+// <akb-account>: the AkulavBox account menu every app shares (e-Management, Koma Shelf, Florin, Tick),
+// with the profile picture, the app's own links (children of the element), then All apps,
+// Profile & password, AI connectors, Admin console and Sign out. It also switches the shared theme.
 //
 //   <script src="/hub/theme.js"></script>             (in <head>, before paint)
 //   <script src="/hub/account.js" defer></script>
@@ -19,12 +19,13 @@
     user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
     shield: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
     logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
+    plug: '<path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/>',
   };
   // the menu speaks the page's language (e-Management is in Romanian)
   var RO = /^ro\b/i.test(document.documentElement.lang || '');
   var T = RO
-    ? { apps: 'Toate aplicațiile', profile: 'Profil și parolă', admin: 'Consola de administrare', out: 'Ieșire', menu: 'Meniul contului', light: 'Treceți la tema luminoasă', dark: 'Treceți la tema întunecată', roles: { admin: 'administrator', user: 'utilizator' } }
-    : { apps: 'All apps', profile: 'Profile &amp; password', admin: 'Admin console', out: 'Sign out', menu: 'Account menu', light: 'Switch to the light theme', dark: 'Switch to the dark theme', roles: {} };
+    ? { apps: 'Toate aplicațiile', profile: 'Profil și parolă', connect: 'Conectori AI', admin: 'Consola de administrare', out: 'Ieșire', menu: 'Meniul contului', light: 'Treceți la tema luminoasă', dark: 'Treceți la tema întunecată', account: 'Cont AkulavBox', roles: { admin: 'administrator', user: 'utilizator' } }
+    : { apps: 'All apps', profile: 'Profile &amp; password', connect: 'AI connectors', admin: 'Admin console', out: 'Sign out', menu: 'Account menu', light: 'Switch to the light theme', dark: 'Switch to the dark theme', account: 'AkulavBox account', roles: {} };
   var roleName = function (r) { return T.roles[r] || r || ''; };
   var svg = function (name) { return '<svg viewBox="0 0 24 24" aria-hidden="true">' + ICONS[name] + '</svg>'; };
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
@@ -130,10 +131,11 @@
       this.btn.setAttribute('aria-label', T.menu + (u.username ? ' (' + u.username + ')' : ''));
       this.btn.innerHTML = this.avatar(false) + '<span class="who"><b>' + esc(u.username) + '</b><span>' + esc(roleName(u.role)) + '</span></span>';
       this.menu.innerHTML =
-        '<div class="head">' + this.avatar(true) + '<div><b>' + esc(u.username) + '</b><span class="role">' + esc(roleName(u.role)) + '</span></div></div>' +
+        '<div class="head">' + this.avatar(true) + '<div><b>' + esc(u.username) + '</b><span class="role">' + esc(roleName(u.role) ? T.account + ' · ' + roleName(u.role) : T.account) + '</span></div></div>' +
         '<slot></slot><div class="sep slot-sep"></div>' +
         '<a class="item" role="menuitem" href="/">' + svg('grid') + T.apps + '</a>' +
         '<a class="item" role="menuitem" href="/box/#/profile">' + svg('user') + T.profile + '</a>' +
+        '<a class="item" role="menuitem" href="/connect">' + svg('plug') + T.connect + '</a>' +
         (u.role === 'admin' ? '<a class="item" role="menuitem" href="/admin">' + svg('shield') + T.admin + '</a>' : '') +
         '<button class="item danger" role="menuitem" type="button" data-out>' + svg('logout') + T.out + '</button>';
       var mark = () => this.menu.classList.toggle('has-slot', this.children.length > 0);

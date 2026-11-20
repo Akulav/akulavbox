@@ -124,8 +124,8 @@ function purgeFile(file) {
  */
 async function storeFile({ ownerId, folderId, srcPath, filename, mime }) {
   const size = fs.statSync(srcPath).size;
-  const u = db.prepare('SELECT quota_bytes, used_bytes FROM users WHERE id = ?').get(ownerId);
-  if (!u || u.used_bytes + size > u.quota_bytes) throw Object.assign(new Error('Storage quota exceeded'), { code: 'QUOTA' });
+  // the account's one storage space, shared with its other apps
+  if (!require('./apps').hasRoom(ownerId, 'box', size)) throw Object.assign(new Error('Storage quota exceeded'), { code: 'QUOTA' });
   if (!hasRoomFor(size)) throw Object.assign(new Error('The server’s disk is full'), { code: 'DISK' });
   const id = crypto.randomUUID();
   const iv = crypto.randomBytes(16).toString('hex');
@@ -149,8 +149,7 @@ async function storeFile({ ownerId, folderId, srcPath, filename, mime }) {
 async function replaceFile(file, srcPath, { filename, mime } = {}) {
   const size = fs.statSync(srcPath).size;
   const delta = size - file.size_bytes;
-  const u = db.prepare('SELECT quota_bytes, used_bytes FROM users WHERE id = ?').get(file.owner_id);
-  if (delta > 0 && u.used_bytes + delta > u.quota_bytes) throw Object.assign(new Error('Storage quota exceeded'), { code: 'QUOTA' });
+  if (delta > 0 && !require('./apps').hasRoom(file.owner_id, 'box', delta)) throw Object.assign(new Error('Storage quota exceeded'), { code: 'QUOTA' });
   if (!hasRoomFor(size)) throw Object.assign(new Error('The server’s disk is full'), { code: 'DISK' });
   const dest = diskPathOf(file);
   const tmp = `${dest}.${crypto.randomBytes(6).toString('hex')}.tmp`;

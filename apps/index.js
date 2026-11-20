@@ -41,6 +41,7 @@ function load(fastify) {
     fastify.register(unavailable('manga', noSharp, data.hooks), { prefix: '/manga' });
   } else fastify.register(require('./manga'), { prefix: '/manga', onClose });
   fastify.register(require('./budget'), { prefix: '/budget', onClose });
+  fastify.register(require('./tasks'), { prefix: '/tasks', onClose });
 }
 
 async function close() {

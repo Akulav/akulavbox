@@ -19,10 +19,21 @@ module.exports = async function appsCheck({ api, ok, base, tmp, login, adminToke
   ok(/HttpOnly/i.test(setCookie) && /SameSite=Lax/i.test(setCookie) && /Path=\//.test(setCookie), 'signing in also sets the shared HttpOnly cookie', setCookie);
   const jar = cookieFrom(login);
 
-  for (const [p, what] of [['/', 'the app launcher'], ['/login', 'the sign-in page'], ['/admin', 'the Admin console page'], ['/box/', 'AkulavBox at /box/']]) {
+  for (const [p, what] of [['/', 'the app launcher'], ['/login', 'the sign-in page'], ['/admin', 'the Admin console page'], ['/connect', 'the AI connectors page'], ['/box/', 'Trove at /box/']]) {
     const r = await get(p);
     ok(r.status === 200 && /text\/html/.test(r.headers.get('content-type') || ''), `serves ${what}`, String(r.status));
   }
+  // password managers (Bitwarden) and browsers look for these on the site's root
+  const icons = [['/favicon.ico', /icon/], ['/favicon-32x32.png', /png/], ['/apple-touch-icon.png', /png/], ['/apple-touch-icon-precomposed.png', /png/], ['/icon-192.png', /png/], ['/favicon.svg', /svg/], ['/trove.ico', /icon/], ['/tasks/favicon.ico', /icon/]];
+  const badIcons = [];
+  for (const [p, type] of icons) { const r = await get(p); if (r.status !== 200 || !type.test(r.headers.get('content-type') || '')) badIcons.push(`${p} ${r.status}`); }
+  ok(!badIcons.length, 'the site’s icons are served as images (Bitwarden finds them)', badIcons.join(', '));
+  const rootHtml = await (await get('/')).text();
+  ok(/<link rel="icon" href="\/favicon\.ico"/.test(rootHtml) && /apple-touch-icon/.test(rootHtml), 'the launcher links its PNG and ICO icons');
+  const cat = await json(await get('/api/apps/catalog'));
+  ok(cat?.name === 'AkulavBox' && cat.apps.map((a) => a.name).join() === 'Trove,e-Management,Koma Shelf,Florin,Tick', 'the sign-in page reads the app names from the server', JSON.stringify(cat?.apps?.map((a) => a.name)));
+  const vz = await get('/hub/vendor/vue.js', { headers: { 'Accept-Encoding': 'gzip' } });
+  ok(vz.status === 200 && vz.headers.get('etag') && (await get('/hub/vendor/vue.js', { headers: { 'If-None-Match': vz.headers.get('etag') } })).status === 304, 'Vue is served with an ETag (a reload costs a 304)');
   ok((await get('/box')).headers.get('location') === '/box/', '/box goes to /box/');
   ok((await get('/somewhere-else')).status === 404, 'unknown pages get a 404 page');
   const docsAnon = await get('/docs/');
@@ -56,8 +67,8 @@ module.exports = async function appsCheck({ api, ok, base, tmp, login, adminToke
   let sharp = null;
   try { sharp = require('sharp'); } catch (e) { /* optional */ }
   const apps = await api('/api/apps');
-  const expected = sharp ? ['box', 'documents', 'manga', 'budget'] : ['box', 'documents', 'budget'];
-  ok(apps.status === 200 && apps.data.apps.length === 4 && expected.every((id) => apps.data.apps.some((a) => a.id === id && a.available)), `the launcher lists all four apps, ${expected.length} running`, JSON.stringify(apps.data?.apps?.map((a) => [a.id, a.available, a.problem])));
+  const expected = sharp ? ['box', 'documents', 'manga', 'budget', 'tasks'] : ['box', 'documents', 'budget', 'tasks'];
+  ok(apps.status === 200 && apps.data.apps.length === 5 && expected.every((id) => apps.data.apps.some((a) => a.id === id && a.available)), `the launcher lists all five apps, ${expected.length} running`, JSON.stringify(apps.data?.apps?.map((a) => [a.id, a.available, a.problem])));
 
   // --- e-Management ---
   console.log('\ne-Management (/docs)');
@@ -121,10 +132,56 @@ module.exports = async function appsCheck({ api, ok, base, tmp, login, adminToke
   const missing = [];
   for (const u of linked) if ((await get(u, { cookie: jar })).status !== 200) missing.push(u);
   ok(linked.length > 10 && !missing.length, `the page's ${linked.length} files are served (Vue and Tailwind from this server)`, missing.join(', '));
-  const vueRes = await get('/budget/vendor/vue.js');
+  const vueRes = await get('/hub/vendor/vue.js');
   ok(/javascript/.test(vueRes.headers.get('content-type') || ''), 'Vue is served as JavaScript');
   ok((await get('/budget/index.html')).status !== 200, 'index.html is not served past the sign-in check');
   ok((await get('/budget/api/nope', { cookie: jar })).status === 404, 'unknown API paths are a JSON 404');
+
+  // --- Tasks ---
+  console.log('\nTasks (/tasks)');
+  const T = (p, { method = 'GET', body, cookie = jar, csrf = true } = {}) =>
+    get(`/tasks/api${p}`, { cookie, method, body: body === undefined ? undefined : JSON.stringify(body), headers: { ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(csrf ? { 'X-Requested-With': 'tasks' } : {}) } });
+  const boot = await json(await T('/bootstrap'));
+  ok(boot?.user?.username === 'admin' && Array.isArray(boot.tasks) && boot.prefs?.weekStart === 1, 'signed in through the shared cookie; it starts empty, with default preferences');
+  ok((await T('/tasks', { method: 'POST', body: { title: 'x' }, csrf: false })).status === 403, 'changes without the CSRF header are refused');
+  ok((await T('/tasks', { method: 'POST', body: { title: '   ' } })).status === 400, 'a task needs a title');
+  const tlist = (await json(await T('/lists', { method: 'POST', body: { name: 'Check list', color: '#3b82f6', icon: 'briefcase' } })))?.list;
+  ok(tlist?.id && tlist.name === 'Check list', 'make a list');
+  ok((await T('/lists', { method: 'POST', body: { name: 'Bad', color: 'red' } })).status === 400, 'a list colour must be #rrggbb');
+  const tnew = await T('/tasks', { method: 'POST', body: { title: 'Check task', listId: tlist.id, dueDate: '2026-11-20', dueTime: '09:30', priority: 3, tags: ['#Work', 'work', 'home'], checklist: [{ text: 'one' }, { text: 'two', done: true }], repeat: { every: 1, unit: 'week', weekdays: [1, 2, 3, 4, 5] } } });
+  const ttask = (await json(tnew))?.task;
+  ok(tnew.status === 201 && ttask.tags.join() === 'home,Work' && ttask.checklist.length === 2 && ttask.checklist[1].done && ttask.repeat.weekdays.length === 5, 'add a task with tags (no duplicates), a checklist and a repeat', JSON.stringify(ttask));
+  ok(fs.existsSync(path.join(tmp, 'tasks', 'tasks.db')), 'its database lives in tasks/ of the data folder');
+  ok((await T('/tasks', { method: 'POST', body: { title: 'x', listId: 999999 } })).status === 400, 'a task can’t go into a list that doesn’t exist');
+  ok((await T('/tasks', { method: 'POST', body: { title: 'x', dueDate: '2026-13-40' } })).status === 400, 'a wrong date is refused');
+  // ticking a repeating task makes the next one (Friday → Monday for weekdays), Undo takes it back
+  const tdone = await json(await T(`/tasks/${ttask.id}`, { method: 'PATCH', body: { status: 'done', today: '2026-11-20' } }));
+  ok(tdone?.task?.status === 'done' && tdone.task.completedAt && tdone.next?.dueDate === '2026-11-23' && tdone.next.status === 'todo' && tdone.next.checklist.every((i) => !i.done) && tdone.next.tags.length === 2, 'ticking a repeating task makes the next one, with its checklist unticked', JSON.stringify(tdone?.next));
+  const tundo = await json(await T(`/tasks/${ttask.id}`, { method: 'PATCH', body: { status: 'todo', undoNext: tdone.next.id } }));
+  const openNow = (await json(await T('/tasks'))).tasks;
+  ok(tundo?.task?.status === 'todo' && !tundo.task.completedAt && !openNow.some((t) => t.id === tdone.next.id), 'Undo reopens it and takes the next one back');
+  const second = (await json(await T('/tasks', { method: 'POST', body: { title: 'Second', listId: tlist.id } }))).task;
+  await T('/tasks/reorder', { method: 'POST', body: { ids: [ttask.id, second.id] } });
+  const order = (await json(await T('/tasks'))).tasks.filter((t) => t.listId === tlist.id).sort((a, b) => a.position - b.position).map((t) => t.id);
+  ok(order.join() === `${ttask.id},${second.id}`, 'tasks keep the order they were dragged into');
+  ok((await json(await T(`/tags/${encodeURIComponent('home')}`, { method: 'PATCH', body: { name: 'house' } })))?.changed === 1 && (await json(await T(`/tasks/${ttask.id}`))).task.tags.includes('house'), 'rename a tag on every task');
+  ok((await json(await T('/prefs', { method: 'PATCH', body: { weekStart: 0, sort: 'due' } }))).prefs.sort === 'due' && (await T('/prefs', { method: 'PATCH', body: { sort: 'nope' } })).status === 400, 'save preferences (and refuse unknown ones)');
+  await T(`/lists/${tlist.id}`, { method: 'DELETE' });
+  const afterDel = (await json(await T('/tasks'))).tasks;
+  ok(afterDel.filter((t) => [ttask.id, second.id].includes(t.id)).every((t) => t.listId === null), 'deleting a list keeps its tasks, in the Inbox');
+  const other = (await json(await T('/tasks', { method: 'POST', body: { title: 'Mine only' } }))).task;
+  const tdoneList = await json(await T('/tasks/done'));
+  ok(tdoneList?.total >= 0 && Array.isArray(tdoneList.items), 'done tasks are listed page by page');
+  const tpage = await get('/tasks/', { cookie: jar });
+  const tpageText = await tpage.text();
+  ok(tpage.status === 200 && /src="\/tasks\/app\.js"/.test(tpageText) && (await get('/tasks/list/5', { cookie: jar })).status === 200, 'serves the page, also for its deep links');
+  const tlinked = [...tpageText.matchAll(/(?:src|href)="(\/(?:tasks|hub)\/[^"]+)"/g)].map((m) => m[1]);
+  const tmissing = [];
+  for (const u of tlinked) if ((await get(u, { cookie: jar })).status !== 200) tmissing.push(u);
+  ok(tlinked.length > 20 && !tmissing.length, `the page's ${tlinked.length} files are served`, tmissing.join(', '));
+  ok((await get('/tasks/')).status === 302, 'signed-out visitors go to the sign-in page');
+  const tsummary = (await api('/api/apps')).data.apps.find((a) => a.id === 'tasks');
+  ok(/open task/.test(tsummary?.summary || ''), 'the launcher says how many tasks are open', tsummary?.summary);
 
   // --- Koma Shelf ---
   console.log('\nKoma Shelf (/manga)');
@@ -177,12 +234,12 @@ module.exports = async function appsCheck({ api, ok, base, tmp, login, adminToke
   const ujar = cookieFrom(ul);
   const utoken = (await json(ul))?.token;
   const uapps = await json(await fetch(`${B}/api/apps`, { headers: { Authorization: `Bearer ${utoken}` } }));
-  ok(uapps?.apps?.length === 3 && !uapps.apps.some((a) => a.id === 'manga'), 'the launcher only shows the apps the account may use');
+  ok(uapps?.apps?.length === 4 && !uapps.apps.some((a) => a.id === 'manga'), 'the launcher only shows the apps the account may use');
   ok((await get('/docs/api/me', { cookie: ujar })).status === 200 && (!sharp || (await get('/manga/me', { cookie: ujar })).status === 403), 'a turned-off app refuses the account');
   ok((await fetch(`${B}/api/admin/console`, { headers: { Authorization: `Bearer ${utoken}` } })).status === 403, 'the console API is for admins only');
   const con = await api('/api/admin/console');
   const row = con.data?.users?.find((u) => u.username === 'appuser');
-  ok(con.status === 200 && row && row.apps.manga.enabled === false && row.apps.documents.enabled === true && con.data.apps.length === 4, 'the console lists every account with its apps', JSON.stringify(row?.apps));
+  ok(con.status === 200 && row && row.apps.manga.enabled === false && row.apps.documents.enabled === true && con.data.apps.length === 5, 'the console lists every account with its apps', JSON.stringify(row?.apps));
   ok((await api(`/api/admin/users/${row.id}/apps/documents`, { method: 'PATCH', body: { quota_bytes: 0 } })).status === 400, 'a zero quota is refused');
   ok((await api(`/api/admin/users/${row.id}/apps/documents`, { method: 'PATCH', body: { quota_bytes: 1000 } })).data?.quota_bytes === 1000, 'set an account’s e-Management quota');
   const big = new FormData();
@@ -193,7 +250,36 @@ module.exports = async function appsCheck({ api, ok, base, tmp, login, adminToke
   const uDocs = path.join(tmp, 'documents', row.id);
   ok(fs.existsSync(uDocs) && fs.readdirSync(path.join(uDocs, 'work', 'uploads')).length === 0, '…and nothing of it is kept');
   ok((await api(`/api/admin/users/${row.id}/apps/documents`, { method: 'PATCH', body: { quota_bytes: null } })).data?.custom_quota === false, 'back to the default quota');
+
+  // one storage space for every app: e-Management's files count in the account's space, and when it
+  // is full, Trove refuses too
+  console.log('\nOne storage space for every app');
+  const small = new FormData();
+  small.append('data', JSON.stringify({ title: 'Small', doc_date: '2026-01-15' }));
+  small.append('files', new Blob([crypto.randomBytes(3000)]), 'small.pdf');
+  ok((await fetch(`${B}/docs/api/s/personal/documents`, { method: 'POST', body: small, headers: { Cookie: ujar } })).status === 200, 'store a document with a file');
+  const sp = (await json(await fetch(`${B}/api/apps`, { headers: { Authorization: `Bearer ${utoken}` } })))?.space;
+  ok(sp && sp.apps.find((a) => a.id === 'documents')?.bytes === 3000 && sp.used_bytes === 3000 && sp.apps.some((a) => a.id === 'box' && a.name === 'Trove'), 'the launcher shows one space, split by app', JSON.stringify(sp));
+  ok((await json(await fetch(`${B}/api/user/profile`, { headers: { Authorization: `Bearer ${utoken}` } })))?.used_bytes === 3000, 'Trove’s profile counts every app');
+  ok((await json(await get('/docs/api/me', { cookie: ujar })))?.app_bytes === 3000, 'e-Management shows its own part of the space');
+  await api(`/api/admin/users/${row.id}/quota`, { method: 'PATCH', body: { quota: 3100 } });
+  const tUp = new FormData();
+  for (const [k, v] of Object.entries({ upload_id: 'spacecheck1', chunk_index: '0', total_chunks: '1', total_size: '500', offset: '0' })) tUp.append(k, v);
+  tUp.append('file', new Blob([crypto.randomBytes(500)]), 'x.bin');
+  const tOver = await fetch(`${B}/api/files/upload`, { method: 'POST', body: tUp, headers: { Authorization: `Bearer ${utoken}` } });
+  ok(tOver.status === 400 && /quota/i.test((await json(tOver))?.error || ''), 'Trove refuses a file once the other apps filled the space', String(tOver.status));
+  const docOver = new FormData();
+  docOver.append('data', JSON.stringify({ title: 'More', doc_date: '2026-01-15' }));
+  docOver.append('files', new Blob([crypto.randomBytes(500)]), 'more.pdf');
+  ok((await fetch(`${B}/docs/api/s/personal/documents`, { method: 'POST', body: docOver, headers: { Cookie: ujar } })).status === 413, 'and so does e-Management');
+  const conRow = (await api('/api/admin/console')).data.users.find((u) => u.id === row.id);
+  ok(conRow?.space?.used_bytes === 3000 && conRow.space.quota_bytes === 3100, 'the Admin console shows the account’s whole space', JSON.stringify(conRow?.space));
+  await api(`/api/admin/users/${row.id}/quota`, { method: 'PATCH', body: { quota: 5 * 1024 ** 3 } });
+  const defsNone = await api('/api/admin/apps/defaults', { method: 'PUT', body: { documents: { quota_bytes: null } } });
+  ok(defsNone.status === 200 && defsNone.data.documents.quota_bytes === null, 'an app’s default limit can be “none” (the account’s space only)');
   await fetch(`${B}/budget/api/auth/me`, { headers: { Cookie: ujar } }); // first visit creates the account's Florin row
+  const utask = await T('/tasks', { method: 'POST', body: { title: 'Their task' }, cookie: ujar });
+  ok(utask.status === 201 && !(await json(await T('/tasks'))).tasks.some((t) => t.title === 'Their task'), 'one account doesn’t see another’s tasks');
   const defs = await api('/api/admin/apps/defaults', { method: 'PUT', body: { budget: { enabled: false } } });
   ok(defs.status === 200 && defs.data.budget.enabled === false, 'change what new accounts get');
   const mk2 = await api('/api/admin/users', { method: 'POST', body: { username: 'appuser2', password: 'apppass123' } });
@@ -208,6 +294,9 @@ module.exports = async function appsCheck({ api, ok, base, tmp, login, adminToke
   const fdb = new DatabaseSync(path.join(tmp, 'budget', 'florin.db'), { readOnly: true });
   const left = fdb.prepare('SELECT COUNT(*) AS n FROM users WHERE box_id = ?').get(row.id).n;
   fdb.close();
-  ok(del.status === 200 && !fs.existsSync(uDocs) && left === 0, 'deleting an account removes its data in every app');
-  return { jar, docId: madeData?.id, workId };
+  const tdb = new DatabaseSync(path.join(tmp, 'tasks', 'tasks.db'), { readOnly: true });
+  const tleft = tdb.prepare('SELECT COUNT(*) AS n FROM tasks WHERE user_id = ?').get(row.id).n;
+  tdb.close();
+  ok(del.status === 200 && !fs.existsSync(uDocs) && left === 0 && tleft === 0, 'deleting an account removes its data in every app');
+  return { jar, docId: madeData?.id, workId, taskTitle: other?.title };
 };

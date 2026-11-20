@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Tick</title>
+    <meta name="description" content="Tick: to-dos with lists, due dates, repeats, a board and a calendar. Part of AkulavBox, made by Akulav." />
+    <meta name="theme-color" content="#f3f5f4" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0d1518" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="/tasks/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/tasks/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/tasks/favicon-32x32.png" type="image/png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/tasks/apple-touch-icon.png" sizes="180x180" />
+    <link rel="manifest" href="/tasks/site.webmanifest" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,650;12..96,750&family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <!-- the theme every app shares, before first paint; the shared account menu -->
+    <script src="/hub/theme.js"></script>
+    <script src="/hub/account.js" defer></script>
+
+    <script type="importmap">
+      { "imports": { "vue": "/hub/vendor/vue.js" } }
+    </script>
+    <link rel="modulepreload" href="/hub/vendor/vue.js" />
+    <link rel="modulepreload" href="/hub/vue/ui.js" />
+    <link rel="modulepreload" href="/hub/vue/icon.js" />
+    <link rel="modulepreload" href="/hub/vue/router.js" />
+    <link rel="modulepreload" href="/tasks/app.js" />
+    <link rel="modulepreload" href="/tasks/js/api.js" />
+    <link rel="modulepreload" href="/tasks/js/dates.js" />
+    <link rel="modulepreload" href="/tasks/js/quick.js" />
+    <link rel="modulepreload" href="/tasks/js/store.js" />
+    <link rel="modulepreload" href="/tasks/js/views.js" />
+    <link rel="modulepreload" href="/tasks/js/dnd.js" />
+    <link rel="modulepreload" href="/tasks/js/router.js" />
+    <link rel="modulepreload" href="/tasks/js/icon-paths.js" />
+    <link rel="modulepreload" href="/tasks/js/icons.js" />
+    <link rel="modulepreload" href="/tasks/js/components/checkbox.js" />
+    <link rel="modulepreload" href="/tasks/js/components/task-row.js" />
+    <link rel="modulepreload" href="/tasks/js/components/quick-add.js" />
+    <link rel="modulepreload" href="/tasks/js/components/task-detail.js" />
+    <link rel="modulepreload" href="/tasks/js/components/pickers.js" />
+    <link rel="modulepreload" href="/tasks/js/components/list-editor.js" />
+    <link rel="modulepreload" href="/tasks/js/components/sidebar.js" />
+    <link rel="modulepreload" href="/tasks/js/components/settings.js" />
+    <link rel="modulepreload" href="/tasks/js/views/list-view.js" />
+    <link rel="modulepreload" href="/tasks/js/views/board-view.js" />
+    <link rel="modulepreload" href="/tasks/js/views/calendar-view.js" />
+    <link rel="modulepreload" href="/tasks/js/views/done-view.js" />
+    <link rel="modulepreload" href="/tasks/js/views/page.js" />
+
+    <!-- Tailwind compiles the classes in the browser (served by this server, no build step).
+         The token names are the same in every Vue app of the server (hub/vue/base.css). -->
+    <script src="/hub/vendor/tailwind.js"></script>
+    <style type="text/tailwindcss">
+      @custom-variant dark (&:where(.dark, .dark *));
+      @theme inline {
+        --color-bg: var(--bg);
+        --color-surface: var(--surface);
+        --color-surface-2: var(--surface-2);
+        --color-line: var(--border);
+        --color-ink: var(--text);
+        --color-ink-2: var(--text-2);
+        --color-ink-3: var(--text-3);
+        --color-brand: var(--brand);
+        --color-brand-strong: var(--brand-strong);
+        --color-brand-soft: var(--brand-soft);
+        --color-gold: var(--gold);
+        --color-danger: var(--danger);
+        --color-warning: var(--warning);
+        --font-sans: Geist, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+        --font-display: 'Bricolage Grotesque', Geist, ui-sans-serif, system-ui, sans-serif;
+      }
+    </style>
+    <link rel="stylesheet" href="/hub/vue/base.css" />
+    <link rel="stylesheet" href="/tasks/style.css" />
+  </head>
+  <body>
+    <div id="app" v-cloak></div>
+    <noscript><p style="padding:24px;font-family:sans-serif">Tick needs JavaScript turned on.</p></noscript>
+    <script type="module" src="/tasks/app.js"></script>
+  </body>
+</html>

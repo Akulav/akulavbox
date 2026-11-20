@@ -61,5 +61,5 @@ test('backups: app entries stay inside their folder', () => {
   assert.equal(ok('apps/manga/works/abc/cover.webp'), true);
   assert.equal(ok('apps/documents/u1/personal/ansc.db'), true);
   for (const bad of ['apps/manga/../akulavbox.db', 'apps/manga/./x', 'apps/other/x', 'apps/manga/', 'apps/manga/a\\b', 'users/x/y.enc']) assert.equal(ok(bad), false, bad);
-  assert.deepEqual(fmt.APP_IDS, ['documents', 'manga', 'budget']);
+  assert.deepEqual(fmt.APP_IDS, ['documents', 'manga', 'budget', 'tasks']);
 });

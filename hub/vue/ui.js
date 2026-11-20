@@ -1,5 +1,6 @@
-// Small building blocks shared by the pages (buttons, cards, dialogs, …).
-import { Icon } from './icons.js';
+// Building blocks shared by the Vue apps (Florin, Tasks): buttons, cards, dialogs, … They use the
+// Tailwind token names every such app defines (brand, ink, surface, line; see hub/vue/base.css).
+import { Icon } from './icon.js';
 
 const BTN_BASE = 'inline-flex items-center justify-center gap-2 font-medium transition-all disabled:opacity-50 disabled:pointer-events-none select-none whitespace-nowrap';
 const BTN_SIZES = { sm: 'h-8 px-3 text-[13px] rounded-lg', md: 'h-10 px-4 text-sm rounded-xl', lg: 'h-11 px-5 text-[15px] rounded-xl' };

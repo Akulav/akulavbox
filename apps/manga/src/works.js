@@ -28,10 +28,9 @@ function startUpload(ctx, user, { body = {}, files: parsed = {} }) {
   const archives = files.filter((f) => ARCHIVE_FILE.test(f.originalname));
   if (archives.length > 1 || (archives.length && archives.length !== files.length)) return fail('Upload one archive at a time, or only images.');
   // the optimised strips end up about as large as the upload, so that is what has to fit
-  const quota = ctx.quotaOf(user);
-  const used = ctx.usedBy(user.id);
+  const room = ctx.roomOf(user);
   const incoming = files.reduce((n, f) => n + (f.size || 0), 0) + (cover?.size || 0);
-  if (quota && used + incoming > quota) return fail(`That doesn’t fit in your Koma Shelf storage (${fmtSize(used)} of ${fmtSize(quota)} used). Delete a webtoon or ask the admin for more room.`, 413);
+  if (incoming > room) return fail(`That doesn’t fit in your storage (${fmtSize(room)} left, shared by all your apps). Delete something or ask the admin for more room.`, 413);
   const id = newId();
   const fallbackTitle = path.basename(files[0].originalname, path.extname(files[0].originalname)).replace(/[-_]+/g, ' ').trim().slice(0, 120) || 'Untitled';
   const now = Date.now();

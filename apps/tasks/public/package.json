@@ -1,0 +1,5 @@
+{
+  "//": "The page's files are ES modules; this lets Node load them too (the unit tests of js/quick.js and js/dates.js).",
+  "type": "module",
+  "private": true
+}

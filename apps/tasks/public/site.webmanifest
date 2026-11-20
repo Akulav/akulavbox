@@ -1,0 +1,15 @@
+{
+  "name": "Tick",
+  "short_name": "Tick",
+  "description": "To-dos with lists, due dates, repeats, a board and a calendar.",
+  "start_url": "/tasks/",
+  "scope": "/tasks/",
+  "display": "standalone",
+  "background_color": "#0d1518",
+  "theme_color": "#8b5cf6",
+  "icons": [
+    { "src": "/tasks/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/tasks/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/tasks/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

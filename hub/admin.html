@@ -6,8 +6,11 @@
   <title>Admin console · AkulavBox</title>
   <meta name="referrer" content="same-origin">
   <meta name="robots" content="noindex">
+  <link rel="icon" href="/favicon.ico" sizes="48x48">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="alternate icon" href="/favicon.ico">
+  <link rel="icon" href="/favicon-32x32.png" type="image/png" sizes="32x32">
+  <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180">
   <meta name="theme-color" content="#0D1518">
   <script src="/hub/theme.js"></script>
   <script src="/hub/account.js" defer></script>
@@ -49,11 +52,11 @@
           <form class="create-form" id="create" autocomplete="off">
             <div><label class="label" for="nu">Username</label><input id="nu" class="input" maxlength="32" required></div>
             <div><label class="label" for="np">Password</label><input id="np" class="input" type="password" autocomplete="new-password" minlength="8" required></div>
-            <div><label class="label" for="nq">AkulavBox (GB)</label><input id="nq" class="input" type="number" min="0.1" step="0.1" value="5" required></div>
+            <div><label class="label" for="nq">Storage (GB)</label><input id="nq" class="input" type="number" min="0.1" step="0.1" value="5" required></div>
             <div><label class="label" for="nr">Role</label><select id="nr" class="input"><option value="user">User</option><option value="admin">Admin</option></select></div>
             <button class="btn btn-primary" id="create-btn" style="height:40px"></button>
           </form>
-          <p class="faint" style="font-size:12px;padding:0 18px 16px">The other apps start with the defaults from “Apps &amp; defaults”. Change them per account below.</p>
+          <p class="faint" style="font-size:12px;padding:0 18px 16px">Storage is one space for every app on the account. The apps start with the defaults from “Apps &amp; defaults”; change them per account below.</p>
         </section>
 
         <section class="panel">
@@ -70,7 +73,7 @@
         <section class="panel" style="padding:18px;margin-top:16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
           <span class="tile" style="--c:#E8A33D" id="server-icon"></span>
           <div style="flex:1;min-width:220px"><h3 style="font-size:16px">Backups, updates and the activity log</h3>
-            <p class="muted" style="font-size:13px">Full backups include every app’s data. They live in AkulavBox’s server settings.</p></div>
+            <p class="muted" style="font-size:13px">Full backups include every app’s data. They live in the server settings (Trove’s Admin page).</p></div>
           <a class="btn" href="/box/#/admin">Open server settings</a>
         </section>
       </div>

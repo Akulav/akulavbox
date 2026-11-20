@@ -3,16 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>AkulavBox</title>
-  <meta name="description" content="AkulavBox: your private, encrypted personal cloud for files, photos, music, videos and books. Made by Akulav.">
+  <title>Trove</title>
+  <meta name="description" content="Trove: your files, photos, music, videos and books, encrypted on your own server. Part of AkulavBox, made by Akulav.">
   <meta name="author" content="Akulav">
-  <meta name="application-name" content="AkulavBox">
-  <meta name="apple-mobile-web-app-title" content="AkulavBox">
+  <meta name="application-name" content="Trove">
+  <meta name="apple-mobile-web-app-title" content="Trove">
   <meta name="referrer" content="same-origin">
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="alternate icon" href="/favicon.ico">
-  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/trove.ico" sizes="48x48">
+  <link rel="icon" href="/trove.svg" type="image/svg+xml">
+  <link rel="icon" href="/trove-32.png" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="/trove-touch.png" sizes="180x180">
+  <link rel="manifest" href="/box/manifest.webmanifest">
   <meta name="theme-color" content="#0D1518">
 
   <!-- Apply saved theme and motion preference before paint to avoid a flash -->
@@ -27,21 +28,18 @@
   </script>
 
   <!-- One shared copy of Vue for every module (an import map must come before any module or preload).
-       CDN files carry a sha384 (integrity): a changed copy is refused. Tailwind's CDN sends no CORS header, so it can't be pinned this way. -->
+       Served by this server from node_modules, the same file every app uses: no CDN, works offline. -->
 
   <script type="importmap">
     {
       "imports": {
-        "vue": "https://unpkg.com/vue@3.5.13/dist/vue.esm-browser.prod.js"
-      },
-      "integrity": {
-        "https://unpkg.com/vue@3.5.13/dist/vue.esm-browser.prod.js": "sha384-UD4WWwnzOnT68QK9Dgf/jMrAGH2xuXyfIF9zzlFbWOL8MSrADyQ5BTgs9Kct5Izy"
+        "vue": "/hub/vendor/vue.js"
       }
     }
   </script>
 
   <!-- Fetch every app module in parallel instead of discovering them one import at a time -->
-  <link rel="modulepreload" href="https://unpkg.com/vue@3.5.13/dist/vue.esm-browser.prod.js" crossorigin integrity="sha384-UD4WWwnzOnT68QK9Dgf/jMrAGH2xuXyfIF9zzlFbWOL8MSrADyQ5BTgs9Kct5Izy">
+  <link rel="modulepreload" href="/hub/vendor/vue.js">
   <link rel="modulepreload" href="/app.js">
   <link rel="modulepreload" href="/lib/api.js">
   <link rel="modulepreload" href="/lib/ui.js">
@@ -71,7 +69,6 @@
   <link rel="modulepreload" href="/pages/Profile.js">
   <link rel="modulepreload" href="/pages/AdminPanel.js">
 
-  <link rel="preconnect" href="https://unpkg.com" crossorigin>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,650;12..96,750&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">

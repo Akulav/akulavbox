@@ -2,6 +2,33 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 5.0.0 (2026-11-20)
+
+AkulavBox becomes the account and the server around its apps, the way a Google account holds its apps, and each app gets a name of its own: the files app is now **Trove**, and there is a new app, **Tick**.
+
+### Added
+- **Tick** at `/tasks/`: to-dos with lists, tags, checklists, priorities, due dates and times, and repeats (every few days, on chosen weekdays, monthly, yearly). A quick-add line understands “call mum tomorrow at 5pm #family !high every week”. Shown as a list, a board or a calendar, with Today, Upcoming and Done views. It's on for every account by default and is covered by full backups and delete-user.
+- **AI connectors** at `/connect` (also in every app's account menu and on the launcher). Let Claude, or any other AI app, read your apps and, if you allow it app by app, change things in them: browse, search, read and write text files in Trove; find, add and change documents in e-Management; list and edit your webtoons in Koma Shelf; look up, add and change transactions and see your month in Florin; list, add, change and tick off tasks in Tick (35 tools in all).
+  - **Claude on the web, desktop and phone:** add a custom connector with the address `https://<your server>/mcp`. Claude signs in here and you choose what it may do; no token to copy (OAuth 2.1 with PKCE). The server must be reachable over HTTPS (set `PUBLIC_URL`).
+  - **Claude Code and other MCP clients:** make a token at `/connect` and add the server with it (the page shows the command). Scripts can call the same tools over plain HTTP (`/api/connector/tools`).
+  - Every connector is listed with what it may do and when it was last used; change or revoke it at any time. Tokens can expire after 30 days, 90 days or a year. Making, changing, revoking and connecting apps go to the activity log.
+- **One storage space per account.** What Trove, e-Management and Koma Shelf store all counts towards the account's storage, like a Google account's. The launcher shows it split by app, and so do Trove's profile, e-Management's settings and Koma Shelf's account page. Admins set one size per account; an app can still get a limit of its own inside it (“Add limit” in the Admin console).
+
+### Changed
+- **New names and marks.** The files app is **Trove** (a brass tile with stacked layers, at the same address, `/box/`); AkulavBox has a new mark of its own (an ink tile with a box in the apps' colours) on the sign-in page, the launcher, the Admin console and the account menu. The account menu says “AkulavBox account”.
+- The sign-in page reads the list of apps from the server, so it always matches the launcher.
+- The Admin console shows each account's storage as one bar split by app, with its size and the apps' optional limits next to it. The “Apps & defaults” limits can be left empty for none.
+- Trove loads Vue from the server, like the other apps, instead of a CDN: it works offline and shares one cached copy with them. That copy (and Tailwind's) is gzipped once at start and sent with an ETag, so a reload costs a 304 instead of 430 KB.
+- Lighter on the server: what the other apps store is cached for a minute instead of being added up on every Trove upload chunk, and the app defaults are read from the database only when they change.
+
+### Fixed
+- **Password managers (Bitwarden) found no icon for the site.** Since 3.1.3 every `.png` and `.ico` at the site's root answered with an error (the static file server's header hook changed in Fastify 5), so only browsers that use the SVG showed one. The icons are served again, every page now also links PNG and ICO icons (32, 192 px and an Apple touch icon), and `/apple-touch-icon-precomposed.png` exists too.
+- Tick has PNG and ICO icons (it had only an SVG one), and an install manifest with them.
+
+### Upgrading
+- One database step on the first start (the AI connector's tables). Nothing moves on disk and no address changes.
+- **Storage is counted per account now, across apps.** e-Management's and Koma Shelf's separate quotas are gone: what an account already stores there now counts towards its storage size. Check the Admin console; raise the size of any account that is over it (it can't add files until then, and nothing is deleted). Limits you set before, per account or in the defaults, stay as limits inside the space. `DOCUMENTS_QUOTA_MB` and `MANGA_QUOTA_MB` now only set such a limit when they are in `.env`.
+
 ## 4.1.0 (2026-11-20)
 
 ### Added

@@ -34,7 +34,7 @@ async function readUploads(req, { room, quota }) {
         const size = fs.statSync(path.join(dir, stored)).size;
         saved[saved.length - 1].size = size;
         incoming += size;
-        if (incoming > room) throw fail(413, `Spațiul alocat documentelor este plin (${fmtMb(quota)}). Ștergeți fișiere sau cereți administratorului mai mult spațiu.`);
+        if (incoming > room) throw fail(413, `Spațiul de stocare al contului este plin${quota ? ` (${fmtMb(quota)}, comun tuturor aplicațiilor)` : ''}. Ștergeți fișiere sau cereți administratorului mai mult spațiu.`);
       } else if (part.fieldname === 'data') {
         try {
           data = JSON.parse(part.value);

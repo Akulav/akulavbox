@@ -27,15 +27,15 @@ export const SettingsView = {
         <div class="settings-col">
           <div class="card panel">
             <div class="panel-head"><h2>Cont</h2></div>
-            <p>Sunteți autentificat ca <strong>{{ me.username }}</strong>. Același cont deschide toate aplicațiile de pe acest server.</p>
+            <p>Sunteți autentificat ca <strong>{{ me.username }}</strong>. Contul AkulavBox deschide toate aplicațiile de pe acest server.</p>
             <p class="muted small">Parola și deconectarea de pe alte dispozitive se schimbă în profilul contului.</p>
             <div class="panel-foot"><a class="btn" href="/box/#/profile">Deschide profilul</a></div>
           </div>
           <div v-if="me.quota_bytes" class="card panel">
             <div class="panel-head"><h2>Spațiu de stocare</h2></div>
-            <p>{{ fmtSize(me.used_bytes) }} din {{ fmtSize(me.quota_bytes) }} folosiți ({{ pct }}%), în ambele spații.</p>
+            <p>{{ fmtSize(me.used_bytes) }} din {{ fmtSize(me.quota_bytes) }} folosiți ({{ pct }}%). Spațiul este comun tuturor aplicațiilor contului.</p>
             <div class="quota-bar" role="progressbar" :aria-valuenow="pct" aria-valuemin="0" aria-valuemax="100"><span :style="{ width: pct + '%' }"></span></div>
-            <p class="muted small">Pentru mai mult spațiu, adresați-vă administratorului.</p>
+            <p class="muted small">Documentele ocupă {{ fmtSize(me.app_bytes || 0) }}, în ambele spații<template v-if="me.limit_bytes">, din limita de {{ fmtSize(me.limit_bytes) }} stabilită pentru e-Management</template>. Pentru mai mult spațiu, adresați-vă administratorului.</p>
           </div>
         </div>
         <BackupView />

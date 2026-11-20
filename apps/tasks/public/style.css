@@ -1,0 +1,98 @@
+/* Tasks' violet and the few things Tailwind classes don't cover. The neutrals, fonts and shared
+   classes are in /hub/vue/base.css, shared with the other Vue apps. */
+:root {
+  --brand: #7c3aed;
+  --brand-strong: #6d28d9;
+  --brand-soft: #f1ebfe;
+  --ring: rgb(124 58 237 / 0.3);
+  /* priority colours: none, low, medium, high */
+  --p0: #93a3a6;
+  --p1: #3b82f6;
+  --p2: #e7a727;
+  --p3: #e5484d;
+}
+.dark {
+  --brand: #a78bfa;
+  --brand-strong: #c4b5fd;
+  --brand-soft: #251c3d;
+  --ring: rgb(167 139 250 / 0.35);
+  --p0: #6b7f84;
+  --p1: #60a5fa;
+  --p2: #f0b840;
+  --p3: #f87171;
+}
+
+/* the round check of a task, tinted by its priority */
+.check {
+  --c: var(--p0);
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  border: 2px solid var(--c);
+  background: color-mix(in srgb, var(--c) 10%, transparent);
+  color: #fff;
+  cursor: pointer;
+  transition: background-color 0.18s, transform 0.12s, border-color 0.18s;
+}
+.check:hover { background: color-mix(in srgb, var(--c) 22%, transparent); }
+.check:active { transform: scale(0.88); }
+.check svg { opacity: 0; transform: scale(0.4); transition: opacity 0.15s, transform 0.2s cubic-bezier(0.3, 1.6, 0.5, 1); }
+.check:hover svg { opacity: 0.55; transform: scale(0.8); color: var(--c); }
+.check.on { background: var(--c); border-color: var(--c); }
+.check.on svg { opacity: 1; transform: scale(1); color: #fff; }
+.check.on::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 999px;
+  border: 2px solid var(--c);
+  animation: check-ring 0.45s ease-out forwards;
+}
+@keyframes check-ring { from { opacity: 0.6; transform: scale(0.6); } to { opacity: 0; transform: scale(1.25); } }
+
+/* a task that was just ticked: struck through, then it leaves */
+.row-done .title { text-decoration: line-through; text-decoration-color: var(--text-3); color: var(--text-3); }
+.row-leaving { animation: row-out 0.35s ease-in 0.45s forwards; }
+@keyframes row-out { to { opacity: 0; transform: translateX(12px); height: 0; padding-top: 0; padding-bottom: 0; margin: 0; } }
+
+/* drag and drop */
+.dragging { opacity: 0.4; }
+.drop-before { box-shadow: inset 0 2px 0 var(--brand); }
+.drop-after { box-shadow: inset 0 -2px 0 var(--brand); }
+.drop-into { background: var(--brand-soft) !important; outline: 2px dashed var(--brand); outline-offset: -2px; }
+[draggable='true'] { -webkit-user-drag: element; }
+
+/* the calendar grid: a square-ish cell per day */
+.cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.cal-day { min-height: 112px; }
+@media (max-width: 640px) { .cal-day { min-height: 74px; } }
+
+/* the details panel slides in from the right */
+@keyframes panel-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+.panel-in { animation: panel-in 0.2s ease-out both; }
+
+/* the progress ring of Today */
+.ring-track { stroke: var(--surface-2); }
+.ring-bar { stroke: var(--brand); transition: stroke-dashoffset 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
+
+/* a quiet horizontal scroller (the week strip, the board on phones) */
+.scroll-x { overflow-x: auto; scrollbar-width: none; }
+.scroll-x::-webkit-scrollbar { display: none; }
+
+kbd {
+  font: 600 11px/1 Geist, ui-sans-serif, system-ui, sans-serif;
+  padding: 3px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  background: var(--surface);
+  color: var(--text-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row-leaving { animation: none; display: none; }
+}

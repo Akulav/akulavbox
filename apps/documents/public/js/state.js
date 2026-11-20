@@ -1,5 +1,5 @@
 // e-Management: Starea comună, apelurile către server și sesiunea.
-import { reactive } from '/docs/vendor/vue.js';
+import { reactive } from '/hub/vendor/vue.js';
 
 // Autentificarea este comună tuturor aplicațiilor de pe acest server (pagina /login).
 export const toLogin = () => location.assign('/login?next=' + encodeURIComponent('/docs/' + location.hash));

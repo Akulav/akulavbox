@@ -110,6 +110,8 @@ async function main() {
 
       // the launcher, the Admin console and the other apps (scripts/test/apps-check.js)
       const appsState = await require('./test/apps-check')({ api, ok, base: () => base, tmp, login, adminToken: token });
+      // the AI connector: tokens, MCP, the tools of every app, OAuth (scripts/test/connector-check.js)
+      await require('./test/connector-check')({ api, ok, base: () => base, adminToken: token });
 
       console.log('\nFiles');
       const dir = await api('/api/directory');
@@ -649,6 +651,8 @@ async function main() {
         ok(Array.isArray(docs2) && docs2.some(d => d.id === appsState.docId && d.files.length === 1), 'e-Management documents came along', JSON.stringify(docs2)?.slice(0, 200));
         const tx2 = await (await fetch(`${base}/budget/api/transactions`, { headers: { Cookie: jar2 } })).json().catch(() => null);
         ok(JSON.stringify(tx2 || {}).includes('Check'), 'Florin transactions came along');
+        const tasks2 = await (await fetch(`${base}/tasks/api/tasks`, { headers: { Cookie: jar2 } })).json().catch(() => null);
+        ok(tasks2?.tasks?.some(t => t.title === appsState.taskTitle), 'Tasks came along');
         if (appsState.workId) ok((await fetch(`${base}/manga/w/${appsState.workId}`)).status === 200 && fs.existsSync(path.join(tmp2, 'manga', 'works', appsState.workId, 'cover.webp')), 'Koma Shelf webtoons came along');
         ok(fs.readdirSync(path.join(tmp2, 'backups')).some(n => n.startsWith('pre-import-')), 'the replaced data is kept in backups/');
       } finally {

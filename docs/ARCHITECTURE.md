@@ -1,14 +1,16 @@
 # Architecture
 
-AkulavBox is a single Fastify process (CommonJS) that serves AkulavBox's JSON API and single-page app, the pages around it (sign-in, launcher, Admin console), and three more apps as Fastify plugins. Accounts live in one SQLite database; every app keeps its own data in its own folder of the data folder.
+AkulavBox is the account and the server around five apps, the way a Google account holds its apps: **Trove** (files, the core, at `/box/`), **e-Management** (`/docs`), **Koma Shelf** (`/manga`), **Florin** (`/budget`) and **Tick** (`/tasks`). It is a single Fastify process (CommonJS) that serves the account API and Trove's single-page app, the pages around them (sign-in, launcher, Admin console, AI connectors), and the other four apps as Fastify plugins. Accounts live in one SQLite database; every app keeps its own data in its own folder of the data folder. The app ids and paths never change (data folders, backups and links depend on them); their names live in `src/core/app-list.js`.
 
 ```
-                         ┌─ /login /  /admin   hub/ (plain JS)        ─┐
-browser ──HTTP──▶ Fastify ┼─ /box/ + /api/…     frontend/ (Vue 3) + src/ ┼──▶ data/akulavbox.db (accounts, app access, AkulavBox)
+                         ┌─ /login / /admin /connect  hub/ (plain JS) ─┐
+browser ──HTTP──▶ Fastify ┼─ /box/ + /api/…  Trove: frontend/ + src/     ┼──▶ data/akulavbox.db (accounts, app access, connectors, Trove)
                          │                                              │    data/box/users/<owner>/<id>.enc (AES-256-CTR)
                          ├─ /docs/…   apps/documents (Vue 3)            ├──▶ data/documents/<account>/{personal,work}/
                          ├─ /manga/…  apps/manga (server-rendered)      ├──▶ data/manga/ (koma-shelf.sqlite, works/)
-                         └─ /budget/… apps/budget (Vue 3)              ─┘──▶ data/budget/florin.db
+                         ├─ /budget/… apps/budget (Vue 3)              ├──▶ data/budget/florin.db
+                         ├─ /tasks/…  apps/tasks (Vue 3)               ├──▶ data/tasks/tasks.db
+AI app ──MCP/OAuth──▶     └─ /mcp, /oauth/…  src/modules/connector.js  ─┘   (calls the apps above as the account)
 ```
 
 ## One account for every app
@@ -18,30 +20,40 @@ browser ──HTTP──▶ Fastify ┼─ /box/ + /api/…     frontend/ (Vue 3
 - **AkulavBox's API reads only the `Authorization` header** (it has no CSRF tokens). The other apps read only the cookie, each with its own CSRF defence: e-Management checks the origin of every change, Koma Shelf checks the origin and a per-account form token (`session.csrfOf`, an HMAC of the account id and `token_version`), Florin requires an `X-Requested-With: florin` header.
 - The cookie is checked like the header (`auth.authenticate`): signature, the account still exists, `token_version`. "Sign out everywhere", a password change and deleting the account end it in every app. Tokens older than a day are renewed in the cookie too.
 - The launcher and AkulavBox's page call `POST /api/session` with the header token on load, which (re)sets the cookie: sessions from before 4.0 carry over, and a cookie that expired comes back. `POST /api/session/resume` (same origin only) does the opposite for a page that lost its stored token. Signing out (`POST /api/logout`, same origin only) clears the cookie; `/login?out=1` also forgets the stored token, for apps that can't reach it.
-- **Access and quotas** (`src/core/apps.js`, table `user_apps`): AkulavBox is always on, with `users.quota_bytes`. e-Management, Koma Shelf and Florin can be turned off per account; e-Management and Koma Shelf have a quota each (Florin stores no files). No row means the defaults (`settings` key `apps.defaults`, set in the Admin console; the first ones come from `DOCUMENTS_QUOTA_MB` and `MANGA_QUOTA_MB`).
-- **Each app registers hooks** (`apps.register(id, { usage, summary, totals, deleteUser })`) that the launcher, the Admin console and delete-user use. An app that can't start (`apps.failed`) answers with a short page saying why; Koma Shelf without `sharp` still registers its data hooks (`apps/manga/src/data.js`), so usage shows and delete-user still removes its data.
+- **Access** (`src/core/apps.js`, table `user_apps`): Trove is always on; the others can be turned off per account. No row means the defaults (`settings` key `apps.defaults`, set in the Admin console, kept in memory until changed).
+- **One storage space per account** (`apps.space()`, `apps.room()`): `users.quota_bytes` is its size, and what Trove (`users.used_bytes`), e-Management and Koma Shelf (their `usage` hooks) store all counts towards it. Every place that stores files asks `apps.room(user, app)`: Trove's uploads, link downloads and edits (`storage.storeFile`/`replaceFile`, `files.js`), e-Management's uploads, Koma Shelf's. An app may also have a limit of its own inside the space (`user_apps.quota_bytes` or the default; none unless the admin sets one, or `DOCUMENTS_QUOTA_MB` / `MANGA_QUOTA_MB` are in `.env`). The other apps' usage is cached for a minute (Trove asks on every upload chunk); an app calls `apps.changed(user, app)` when it stores or removes files, and the asking app's own usage is always read fresh.
+- **Each app registers hooks** (`apps.register(id, { usage, summary, totals, deleteUser, connector })`) that the launcher, the Admin console and delete-user use. An app that can't start (`apps.failed`) answers with a short page saying why; Koma Shelf without `sharp` still registers its data hooks (`apps/manga/src/data.js`), so usage shows and delete-user still removes its data.
 
 ## One look for every app
 
-- **The same neutrals and fonts.** The ink/paper colours, Geist for text and Bricolage Grotesque for headings come from AkulavBox (`frontend/index.html`, `hub/hub.css`); each app keeps its own accent: AkulavBox brass, e-Management blue (teal in the work space), Koma Shelf pink (and its Dela Gothic headlines), Florin green.
+- **The same neutrals and fonts.** The ink/paper colours, Geist for text and Bricolage Grotesque for headings come from AkulavBox (`frontend/index.html`, `hub/hub.css`); AkulavBox's own pages (sign-in, launcher, console, connectors) use its mark, an ink tile with a box in the apps' colours, and the same colours in its word; each app keeps its own accent and mark: Trove brass, e-Management blue (teal in the work space), Koma Shelf pink (and its Dela Gothic headlines), Florin green, Tick violet.
 - **One theme.** `localStorage` `akulavTheme` (`light`, `dark` or `system`) is read before the page paints by `hub/theme.js` (AkulavBox's `index.html` has the same few lines inline), which sets `<html data-theme>` and the `dark` class Tailwind's `dark:` variant uses. Changing it in any app changes it in all of them (also in other open tabs).
-- **One account menu.** `<akb-account>` (`hub/account.js`, a custom element with its own shadow DOM and `hub/account.css`) is in the launcher, the Admin console, e-Management, Koma Shelf and Florin: the AkulavBox profile picture, the app's own links (its children), then All apps, Profile & password, Admin console and Sign out, plus the theme button. It asks `GET /api/session/me` (the cookie) and shows the picture from `/api/session/avatar`. It speaks Romanian on a `lang="ro"` page. AkulavBox has its own menu in `app.js`, with the same picture.
+- **One account menu.** `<akb-account>` (`hub/account.js`, a custom element with its own shadow DOM and `hub/account.css`) is in the launcher, the Admin console, e-Management, Koma Shelf and Florin: the account's profile picture, the app's own links (its children), then All apps, Profile & password, AI connectors, Admin console and Sign out, plus the theme button. It asks `GET /api/session/me` (the cookie) and shows the picture from `/api/session/avatar`. It speaks Romanian on a `lang="ro"` page. Trove has its own menu in `app.js`, with the same picture and links.
 
 ## The apps (`apps/`)
 
 Each app is a Fastify plugin registered by `apps/index.js` under its prefix, with its own security headers, error and not-found handlers.
 
-- **e-Management** (`apps/documents`, `/docs`, in Romanian): `index.js` (auth, headers, the page) and `src/routes/` (categories, documents, backup and the activity log). Two SQLite databases per account (`src/db.js`, opened on first use and kept open). Files are stored as random names next to them, PDFs and images open inline, everything else downloads. Uploads are checked against the account's quota as they arrive. The page is Vue 3 served from `node_modules` (`/docs/vendor/vue.js`), split into `public/js/`.
+- **e-Management** (`apps/documents`, `/docs`, in Romanian): `index.js` (auth, headers, the page) and `src/routes/` (categories, documents, backup and the activity log). Two SQLite databases per account (`src/db.js`, opened on first use and kept open). Files are stored as random names next to them, PDFs and images open inline, everything else downloads. Uploads are checked against the account's quota as they arrive. The page is Vue 3 served from `node_modules` (`/hub/vendor/vue.js`), split into `public/js/`.
 - **Koma Shelf** (`apps/manga`, `/manga`): server-rendered pages (`src/views/`, an escaping `html```  template), routes in `src/routes/` (shelf, library, account, api, admin), uploads to disk (`src/uploads.js`) and a background queue that re-encodes strips to WebP slices with sharp (`src/ingest.js`). Views use root paths; `withBase` (`src/html.js`) adds `/manga` to every link on the way out, and `"~/…"` links to the server around it. `works.bytes` (measured after processing) counts towards the quota. API tokens (`ks_…`) for Koma are its own; they stop working when the account is deleted or loses access.
-- **Florin** (`apps/budget`, `/budget`): `index.js` and `server/routes/`. The page (`public/`) is Vue 3 with string templates and a small history router (`public/js/router.js`); `index.html` is sent for every page path after the sign-in check, so links and reloads work. Tailwind v4's browser build compiles the classes on the page. Vue and Tailwind are served from `node_modules` at `/budget/vendor/`, with no build step. The charts are SVG components in `public/js/charts.js`.
+- **Tick** (`apps/tasks`, `/tasks`): to-dos with lists, tags, checklists, due dates and repeats (`server/repeat.js`), shown as a list, a board or a calendar. `index.js` and `server/` (one database, `tasks.db`, whose rows carry the account id directly: no account table of its own). The page is Vue 3 like Florin's. Florin and Tick share their server scaffolding (`src/core/vue-app.js`: the CSP with the import map's hash, the `/api` scope with the CSRF header check and JSON errors, the page and its deep links) and their browser building blocks (`hub/vue/`: dialogs and toasts, icons, the router, base styles).
+- **Florin** (`apps/budget`, `/budget`): `index.js` and `server/routes/`. The page (`public/`) is Vue 3 with string templates and a small history router (`public/js/router.js`); `index.html` is sent for every page path after the sign-in check, so links and reloads work. Tailwind v4's browser build compiles the classes on the page. Vue and Tailwind are served from `node_modules` at `/hub/vendor/` (gzipped once at start, with an ETag), with no build step; Trove and e-Management load the same Vue file. The charts are SVG components in `public/js/charts.js`.
 
+## The AI connector (`src/core/connector/`, `src/modules/connector.js`)
+
+- **What it is.** An MCP server at `/mcp` (Streamable HTTP, stateless: every message gets its answer on its own POST, no SSE and no sessions), the same tools over plain HTTP at `/api/connector/tools`, and OAuth 2.1 so an AI app such as Claude connects with only the address. People manage it at `/connect`.
+- **Tokens** (`tokens.js`, table `connector_tokens`): `akb_` + 32 random bytes; only the SHA-256 is stored, with the scopes as JSON (`{ box: 'read' | 'write', documents, manga, budget, tasks }`). Made by hand (`kind 'token'`, an expiry or none) or by OAuth (`kind 'oauth'`: access tokens last a day, refresh tokens `akbr_…` 90 days and are replaced on every use). `last_used_at` is written at most once a minute. They survive a password change (like other API tokens) and go with delete-user; expired ones are swept hourly.
+- **Tools** (`tools.js`): `{ name, app, write, destructive, input, run(ctx, args) }`. Trove's are in `tools.js`; every other app registers its own as `apps.register(id, { …, connector: { tools } })` in `apps/<app>/connector.js` (Koma Shelf's in `src/connector.js`, from its data hooks). A token sees a tool when it has the app's scope (`write` for tools that change things) and the app is on for the account; `tools/list` and every call check it again.
+- **Calls go through the apps' own routes.** `ctx.call(app, method, url, …)` runs `fastify.inject` as the account, with a two-minute JWT (`auth.signShort`) in both the `Authorization` header (Trove's API) and the `akb_session` cookie (the apps), a same-origin `Origin`, and the Vue apps' CSRF header. So ownership, validation, quotas and "is the app on" stay where they are, and the tools can't do anything the account couldn't. Koma Shelf's pages are server-rendered forms, so its tools read and update its database directly with the same rules.
+- **OAuth**: discovery at `/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server`; clients register themselves (`/oauth/register`, `oauth_clients`; unused ones go after 30 days); `/oauth/authorize` is a page (`hub/authorize.html`) where the signed-in person picks the scopes, and `POST /api/oauth/approve` (the session token, so no CSRF) stores a one-time code (`oauth_codes`, hashed, 10 minutes) bound to the client, the redirect address and the PKCE challenge. `/oauth/token` checks all three and issues the token pair.
+- The connector's endpoints answer any origin (CORS `*`): they take bearer tokens only, never the cookie. Each token is limited to 240 calls a minute.
 ## Startup order
 
 1. `src/core/config.js` loads `.env`, resolves the data folder (`STORAGE_DIR` / `DATA_DIR`, else `data/` in the app folder, else an older `storage/` that already holds a database), and has `src/core/layout.js` move AkulavBox's folders of a data folder from before 4.0 (`users/`, `thumbs/`, `private/`) into `box/` (a rename; a folder that can't be moved, or a second server on the same folder, keeps the old place and logs why; command-line tools never move anything), then creates its sub-folders. The other apps' folders are `config.appDataDir(id)`. Paths below say `data/`.
 2. `src/server.js` validates the config and exits with a readable message if `MASTER_KEY` or `JWT_SECRET` is wrong.
 3. `src/core/db.js` opens SQLite and runs **`src/core/migrations.js`**. Pending steps run in order inside transactions, and an existing database is first snapshotted with `VACUUM INTO` to `data/backups/`. Then the pragmas are set (WAL, `synchronous=NORMAL`, busy timeout) and the default admin is created on an empty database.
 4. `src/core/library.js` adopts locked library folders created by older versions (idempotent).
-5. Route modules register under `src/modules/` (AkulavBox: `files`, `media`, `zip`, `user`, `trash`, `albums`, `music`, `library`, `collections`, `downloads`; the server: `auth`, `hub`, `admin`, `console`, `backups`, `updates`), then the apps (`apps/index.js`).
+5. Route modules register under `src/modules/` (AkulavBox: `files`, `media`, `zip`, `user`, `trash`, `albums`, `music`, `library`, `collections`, `downloads`; the server: `auth`, `hub`, `admin`, `console`, `connector`, `backups`, `updates`), then the apps (`apps/index.js`).
 
 ## Schema versioning
 
@@ -62,6 +74,7 @@ The schema version is `PRAGMA user_version`. Each entry in `MIGRATIONS` (`src/co
 | 11 | `downloads(status)` index |
 | 12 | `media_meta.video_codec` |
 | 13 | `user_apps` (per-account access and quota for the other apps) |
+| 14 | `connector_tokens`, `oauth_clients`, `oauth_codes` (the AI connector) |
 
 The apps have their own databases and steps, run the same way: Koma Shelf and Florin list them in their `db.js` and call `runSteps` (Florin's step 3 adds `users.monthly_budget` and drops the unused `sessions` table); e-Management adds missing columns with `addColumn`. All three share `tx`, `addColumn` and `runSteps` from `src/core/sqlite.js`.
 
@@ -151,13 +164,14 @@ Compares `data/box/users/` with `files` (AkulavBox only). Files written in the l
 ## The launcher, sign-in and the Admin console (`hub/`, `src/modules/hub.js`, `src/modules/console.js`)
 
 - Plain HTML and ES modules with no framework and no build step, styled with the same tokens as AkulavBox (`hub/hub.css`); `hub/common.js` holds the session, `api()`, toasts, dialogs and icons.
-- `/` (`index.html`, `home.js`): the apps of the signed-in account (`GET /api/apps`) with what each stores. Links from before 4.0 (`/#/files/…`) are forwarded to `/box/`.
-- `/login` (`login.html`, `login.js`): signs in, then goes to `?next=` (a path on this server only).
+- `/` (`index.html`, `home.js`): the apps of the signed-in account (`GET /api/apps`) with what each stores, and the account's storage split by app. Links from before 4.0 (`/#/files/…`) are forwarded to `/box/`.
+- `/login` (`login.html`, `login.js`): signs in, then goes to `?next=` (a path on this server only). It lists the apps from `GET /api/apps/catalog` (the one list in `app-list.js`).
+- `/connect` (`connect.html`, `connect.js`): the account's AI connectors. `/oauth/authorize` (`authorize.html`, `authorize.js`): an AI app asks to connect.
 - `/admin` (`admin.html`, `console.js`): accounts with their apps (`GET /api/admin/console`), per-app switches and quotas, defaults, and the account actions of `admin.js`. AkulavBox's own Admin page keeps the server tasks (disk, updates, storage check, backups, activity) and links here for accounts.
 
 ## Frontend (`frontend/`)
 
-- No build step: `index.html` defines an import map (Vue from a CDN), the Tailwind CDN config, the design tokens (CSS variables per theme), and `modulepreload` hints for every module.
+- Trove's page. No build step: `index.html` defines an import map (Vue from `/hub/vendor/vue.js`, the server's copy), the Tailwind CDN config, the design tokens (CSS variables per theme), and `modulepreload` hints for every module.
 - Served at `/box/` (its files stay at the root paths, so `index.html` is unchanged). Signing in and out goes through `/login`.
 - `app.js` holds the shell: hash routing (`#/files/<folder>`, `#/albums/<col>/<album>`, …), the top navigation bar (bottom bar on phones), account menu, banners, and shortcuts.
 - Admin is `pages/AdminPanel.js` plus `components/BackupPanel.js` (export, schedule, restore) and `components/ActivityLog.js`.

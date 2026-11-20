@@ -47,12 +47,16 @@ function context(prefix) {
     origin: (req) => site.publicUrl || `${req.protocol}://${req.host}`,
     getWork: (id) => db.get('SELECT * FROM works WHERE id = ?', id),
     isOwner: (req, w) => Boolean(req.user && req.user.id === w.user_id),
-    quotaOf: (u) => apps.access(u.boxId, 'manga').quota_bytes,
+    // storage is the AkulavBox account's one space, shared by every app (plus a limit of Koma Shelf's
+    // own, when the admin set one): what may still be stored, and the space for the account page
+    roomOf: (u) => apps.room(u.boxId, 'manga'),
+    spaceOf: (u) => apps.space(u.boxId, { fresh: 'manga' }),
     usedBy,
     hooks,
     chaptersOf: (id) => db.all('SELECT idx, title, pages FROM chapters WHERE work_id = ? ORDER BY idx', id),
     deleteWork: async (id) => {
       db.run('DELETE FROM works WHERE id = ?', id);
+      apps.changed(null, 'manga'); // the space it took is free again
       await fs.promises.rm(path.join(worksDir, id), { recursive: true, force: true });
     },
     LIST_COLS: 'w.id, w.title, w.visibility, w.status, w.cover_rev, w.likes, w.views, w.chapters, w.created, w.published, u.username',

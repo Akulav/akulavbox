@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const { tx } = require('../db');
 const { fail, lastId, paramId } = require('../validate');
 const { readDocForm, discardUploads, removeStored } = require('../uploads');
+const apps = require('../../../../src/core/apps');
 
 // doar acestea se deschid în browser; restul se descarcă (niciodată SVG sau HTML)
 const INLINE_TYPES = { '.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg' };
@@ -39,8 +40,10 @@ function listDocuments({ db }) {
 
 module.exports = async function documents(app, { auth, audit, stores }) {
   const S = '/api/s/:store';
-  // cât mai încape în cota contului (ambele spații la un loc)
-  const limits = (req) => ({ room: req.quota ? req.quota - stores.usage(req.user.id) : Infinity, quota: req.quota });
+  // cât mai încape în spațiul de stocare al contului AkulavBox (comun tuturor aplicațiilor) și,
+  // dacă administratorul a stabilit una, în limita proprie a e-Management
+  const limits = (req) => ({ room: apps.room(req.user.id, 'documents'), quota: apps.space(req.user.id)?.quota_bytes });
+  const changed = (req) => apps.changed(req.user.id, 'documents');
 
   app.get(S + '/documents', auth, async (req) => listDocuments(req.store));
 
@@ -54,6 +57,7 @@ module.exports = async function documents(app, { auth, audit, stores }) {
         return lastId(r);
       });
       audit(req, 'document adăugat', `#${id} ${doc.title}`);
+      changed(req);
       return { id };
     } catch (e) {
       removeStored(store, saved.map((f) => f.stored));
@@ -89,6 +93,7 @@ module.exports = async function documents(app, { auth, audit, stores }) {
       throw e;
     }
     removeStored(store, removed);
+    changed(req);
     audit(req, 'document modificat', `#${id} ${doc.title}`);
     return { ok: true };
   });
@@ -101,6 +106,7 @@ module.exports = async function documents(app, { auth, audit, stores }) {
     const stored = store.db.prepare('SELECT stored FROM document_files WHERE document_id = ?').all(id).map((f) => f.stored);
     store.db.prepare('DELETE FROM documents WHERE id = ?').run(id);
     removeStored(store, stored);
+    changed(req);
     audit(req, 'document șters', `#${id} ${old.title}`);
     return { ok: true };
   });

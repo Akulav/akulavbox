@@ -13,6 +13,18 @@ function signToken(user) {
   );
 }
 
+/**
+ * A login token that lives `seconds` (two minutes by default). The AI connector signs one for each
+ * call it makes into an app on the account's behalf; it never leaves the server.
+ */
+function signShort(user, seconds = 120) {
+  return jwt.sign(
+    { id: user.id, username: user.username, role: user.role, tv: user.token_version || 0 },
+    process.env.JWT_SECRET,
+    { expiresIn: seconds, algorithm: 'HS256' },
+  );
+}
+
 /** Shortest password accepted when one is set or changed (existing ones keep working) */
 const PASSWORD_MIN = 8;
 
@@ -83,4 +95,4 @@ const revokeSessions = (userId) => bumpVersion.run(userId).changes > 0;
 /** Store a new password hash; every existing session of that user stops working */
 const setPassword = (userId, hash) => db.tx(() => setHash.run(hash, userId).changes > 0 && revokeSessions(userId));
 
-module.exports = { verifyUser, verifyAdmin, readToken, signToken, authenticate, fromForm, revokeSessions, setPassword, PASSWORD_MIN };
+module.exports = { verifyUser, verifyAdmin, readToken, signToken, signShort, authenticate, fromForm, revokeSessions, setPassword, PASSWORD_MIN };

@@ -53,7 +53,7 @@ createApp({
       <header class="sticky top-0 z-40 border-b border-line glass">
         <!-- three equal-weight columns, so the sections sit at the true centre of the page whatever the side widths -->
         <div class="max-w-[1500px] mx-auto h-14 md:h-16 px-3 md:px-8 flex md:grid md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 md:gap-4">
-          <a href="#/files" class="shrink-0 min-w-0 mr-auto md:mr-0 md:justify-self-start" title="AkulavBox"><BrandLockup :size="30" :animated="true" /></a>
+          <a href="#/files" class="shrink-0 min-w-0 mr-auto md:mr-0 md:justify-self-start" title="Trove"><BrandLockup :size="30" :animated="true" /></a>
 
           <nav class="hidden md:flex justify-center" aria-label="Sections">
             <div class="topnav">
@@ -100,11 +100,12 @@ createApp({
                   <a v-if="account.loaded" href="#/profile" class="block px-4 py-3 border-b border-line hover:bg-elevated/60">
                     <div class="flex justify-between text-[12.5px] mb-1.5"><span class="text-muted flex items-center gap-1.5"><Icon name="hard-drive" :size="13" />Storage</span><span class="tabular-nums">{{ usedPct }}%</span></div>
                     <div class="meter" :class="{ warn: usedPct >= 90 }"><span :style="{ width: usedPct + '%' }"></span></div>
-                    <p class="text-faint text-xs mt-1.5 tabular-nums">{{ formatBytes(account.used_bytes) }} of {{ formatBytes(account.quota_bytes) }}</p>
+                    <p class="text-faint text-xs mt-1.5 tabular-nums">{{ formatBytes(account.used_bytes) }} of {{ formatBytes(account.quota_bytes) }}, shared by all your apps</p>
                   </a>
                   <div class="p-1">
                     <a href="#/profile" class="menu-item"><Icon name="user" :size="16" />Profile & settings</a>
                     <a href="/" class="menu-item"><Icon name="grid" :size="16" />All apps</a>
+                    <a href="/connect" class="menu-item"><Icon name="plug" :size="16" />AI connectors</a>
                     <a v-if="session.role === 'admin'" href="/admin" class="menu-item"><Icon name="shield" :size="16" />Admin console</a>
                     <button class="menu-item hidden md:flex" @click="showKeys = true"><Icon name="keyboard" :size="16" />Keyboard shortcuts<span class="kbd ml-auto">?</span></button>
                     <div class="menu-sep"></div>
@@ -259,10 +260,10 @@ createApp({
     watch(() => route.tab, () => { userMenu.value = false; });
     const usedPct = computed(() => account.quota_bytes ? Math.min(100, Math.round((account.used_bytes / account.quota_bytes) * 100)) : 0);
 
-    // The browser tab says where you are ("Videos · AkulavBox")
+    // The browser tab says where you are ("Videos · Trove")
     watch(() => [route.tab, session.token], () => {
       const t = session.token && TABS.find(x => x.id === route.tab);
-      document.title = t ? `${t.label} · AkulavBox` : 'AkulavBox';
+      document.title = t ? `${t.label} · Trove` : 'Trove';
     }, { immediate: true });
 
     // admins hear about new versions on GitHub (the server checks every few hours)

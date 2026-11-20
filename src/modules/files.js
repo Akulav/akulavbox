@@ -12,6 +12,7 @@ const lib = require('../core/library');
 const thumbs = require('../core/thumbs');
 const store = require('../core/storage');
 const trash = require('../core/trash');
+const apps = require('../core/apps');
 
 const { MASTER_KEY, userDirOf, diskPathOf } = store;
 const { cleanName } = require('../core/serve');
@@ -61,7 +62,6 @@ module.exports = async function (fastify) {
   const ownedFolder = db.prepare('SELECT 1 FROM folders WHERE id = ? AND owner_id = ? AND trashed_at IS NULL');
   const parentOf = db.prepare('SELECT parent_id FROM folders WHERE id = ?');
   const crumbOf = db.prepare('SELECT id, name, parent_id, system_key FROM folders WHERE id = ? AND owner_id = ?');
-  const quotaOf = db.prepare('SELECT quota_bytes, used_bytes FROM users WHERE id = ?');
   const ownsFolder = (folderId, userId) => typeof folderId === 'string' && !!ownedFolder.get(folderId, userId);
 
   // Returns true if `candidateId` is `folderId` itself or one of its descendants
@@ -77,10 +77,9 @@ module.exports = async function (fastify) {
     return false;
   };
 
-  const quotaLeft = (userId) => {
-    const u = quotaOf.get(userId);
-    return u ? u.quota_bytes - u.used_bytes : 0;
-  };
+  // what is left of the account's storage space, shared with its other apps (their usage is cached
+  // for a minute, so a chunk costs one query here)
+  const quotaLeft = (userId) => apps.room(userId, 'box');
 
   // --- FOLDERS ---
   function createFolder(userId, name, parentId) {

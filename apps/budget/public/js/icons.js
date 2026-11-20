@@ -1,29 +1,9 @@
-// <Icon name="plus" :size="16" />, <CategoryIcon icon="coffee" color="#2a78d6" />, and Florin's logo.
-import { h } from 'vue';
+// Florin's icons (for <Icon>, hub/vue/icon.js), <CategoryIcon icon="coffee" color="#2a78d6" /> and the logo.
+import { Icon, addIcons } from '/hub/vue/icon.js';
 import { PATHS, CATEGORY_ICON_NAMES } from './icon-paths.js';
 
-export { CATEGORY_ICON_NAMES };
-
-export const Icon = {
-  props: { name: { type: String, required: true }, size: { type: [Number, String], default: 16 }, stroke: { type: [Number, String], default: 2 } },
-  setup(props) {
-    return () =>
-      h('svg', {
-        xmlns: 'http://www.w3.org/2000/svg',
-        width: props.size,
-        height: props.size,
-        viewBox: '0 0 24 24',
-        fill: 'none',
-        stroke: 'currentColor',
-        'stroke-width': props.stroke,
-        'stroke-linecap': 'round',
-        'stroke-linejoin': 'round',
-        'aria-hidden': 'true',
-        class: 'shrink-0',
-        innerHTML: PATHS[props.name] ?? PATHS.tag,
-      });
-  },
-};
+addIcons(PATHS);
+export { Icon, CATEGORY_ICON_NAMES };
 
 const DIMS = { sm: ['h-7 w-7 rounded-lg', 14], md: ['h-9 w-9 rounded-xl', 17], lg: ['h-11 w-11 rounded-xl', 20] };
 

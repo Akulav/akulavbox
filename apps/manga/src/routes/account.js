@@ -26,7 +26,7 @@ module.exports = async function account(app, { ctx }) {
   });
 
   const tokensOf = (uid) => db.all('SELECT id, name, prefix, created, last_used FROM api_tokens WHERE user_id = ? ORDER BY created DESC', uid);
-  const view = (req, extra = {}) => accountPage(req, { tokens: tokensOf(req.user.id), siteUrl: ctx.origin(req) + B, usage: { used: ctx.usedBy(req.user.id), quota: ctx.quotaOf(req.user) }, ...extra });
+  const view = (req, extra = {}) => accountPage(req, { tokens: tokensOf(req.user.id), siteUrl: ctx.origin(req) + B, usage: (() => { const s = ctx.spaceOf(req.user); return { used: ctx.usedBy(req.user.id), total: s?.used_bytes ?? 0, quota: s?.quota_bytes ?? 0 }; })(), ...extra });
 
   app.get('/account', auth, async (req, reply) => {
     reply.header('Cache-Control', 'private, no-store');

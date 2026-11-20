@@ -28,6 +28,8 @@ const hooks = {
     return `${c.documents} ${c.documents === 1 ? 'document' : 'documente'}`;
   },
   deleteUser: (userId) => stores.deleteUser(userId),
+  // ce poate face aici o aplicație AI, prin conectorul AI (src/core/connector)
+  connector: require('./connector'),
   totals: () => {
     let bytes = 0;
     let items = 0;
@@ -110,17 +112,22 @@ module.exports = async function documents(app, opts) {
   app.get('/', indexHtml);
   app.get('/index.html', indexHtml);
 
-  // Vue este servit local (fără CDN), ca aplicația să funcționeze și fără internet.
-  const vueFile = fs.readFileSync(require.resolve('vue/dist/vue.esm-browser.prod.js'));
-  app.get('/vendor/vue.js', (req, reply) => reply.type('text/javascript; charset=utf-8').header('Cache-Control', 'public, max-age=86400').send(vueFile));
+  // Vue vine de la server, la /hub/vendor/vue.js (fără CDN), ca aplicația să funcționeze și fără internet.
 
   const auth = { preHandler: requireUser };
-  app.get('/api/me', auth, async (req) => ({
-    ...req.user,
-    quota_bytes: req.quota,
-    used_bytes: stores.usage(req.user.id),
-    stores: Object.values(req.stores).map((s) => ({ key: s.key, label: s.label })),
-  }));
+  // Spațiul de stocare este al contului AkulavBox, comun tuturor aplicațiilor (quota_bytes, used_bytes);
+  // app_bytes este partea e-Management, limit_bytes o limită proprie (doar dacă a stabilit-o administratorul).
+  app.get('/api/me', auth, async (req) => {
+    const space = apps.space(req.user.id, { fresh: 'documents' });
+    return {
+      ...req.user,
+      quota_bytes: space?.quota_bytes ?? null,
+      used_bytes: space?.used_bytes ?? 0,
+      app_bytes: space?.by_app.documents ?? stores.usage(req.user.id),
+      limit_bytes: req.quota,
+      stores: Object.values(req.stores).map((s) => ({ key: s.key, label: s.label })),
+    };
+  });
 
   const deps = { auth, requireUser, audit, stores };
   app.register(require('./src/routes/categories'), deps);
