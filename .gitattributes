@@ -1,0 +1,4 @@
+# Third-party builds are served byte for byte and checked by their Subresource Integrity hash
+# (apps/trove/public/lib/cdn.js): git must never change their line endings on checkout.
+hub/lib/** -text
+hub/fonts/*.woff2 binary
