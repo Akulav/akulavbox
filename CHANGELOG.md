@@ -2,6 +2,14 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 6.2.0 (2026-11-21)
+
+### Changed
+- **Tick fits the window on a computer.** The page itself no longer scrolls: the title and the add box stay put and only the tasks scroll beneath them. The board's two columns each scroll by themselves, and the calendar fits the whole month in the window, with each day showing as many tasks as it has room for and "+n more" for the rest. Phones scroll the page as before.
+- **Tick shows how far along each list is.** The sidebar shows done / total beside each list (green once everything is done), and a list's page has the same progress ring as Today.
+- **Ticking a to-do is easier to hit.** The check is a little bigger, and a click just around it counts too.
+- **Big lists in Tick stay quick and tidy.** A list draws its first 150 to-dos and the rest as you scroll, a long board column shows 100 cards at a time, and the group headers (days, due dates, priorities, lists) fold away with a click, remembered per view on this device.
+
 ## 6.1.0 (2026-11-21)
 
 ### Changed

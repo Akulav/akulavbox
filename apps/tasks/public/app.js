@@ -71,7 +71,8 @@ const Root = {
       <p class="max-w-sm text-ink-3">{{ store.error || 'Opening the sign-in page…' }}</p>
       <a href="/" class="text-sm font-semibold text-brand hover:underline">All apps</a>
     </div>
-    <div v-else class="flex min-h-screen">
+    <!-- wide screens: the page is exactly the window; each view scrolls inside itself (page.js) -->
+    <div v-else class="flex min-h-screen lg:h-screen lg:overflow-hidden">
       <aside class="sticky top-0 hidden h-screen w-72 shrink-0 border-r border-line bg-surface lg:block">
         <Sidebar @new-list="editing = null" @edit-list="editing = $event" @settings="settings = true" />
       </aside>
@@ -83,16 +84,16 @@ const Root = {
         </div>
       </div>
 
-      <div class="flex min-w-0 flex-1">
-        <main class="min-w-0 flex-1">
+      <div class="flex min-w-0 flex-1 lg:h-screen">
+        <main class="min-w-0 flex-1 lg:flex lg:h-full lg:flex-col">
           <!-- the account top right, like every app; phones also get the brand and the add button (the sidebar has the brand on wide screens) -->
-          <header class="sticky top-0 z-20 flex h-14 items-center gap-1 border-b border-line bg-surface/85 px-4 backdrop-blur md:px-6 lg:h-[60px]">
+          <header class="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-1 border-b border-line bg-surface/85 px-4 backdrop-blur md:px-6 lg:h-[60px]">
             <Logo :size="26" class="lg:hidden" />
             <button type="button" @click="addOnPhone" class="ml-auto rounded-lg p-2 text-brand lg:hidden" aria-label="Add a task"><Icon name="plus" :size="22" /></button>
             <span class="hidden flex-1 lg:block"></span>
             <akb-account accent="#8b5cf6" :username="store.user?.username" :role="store.user?.role"></akb-account>
           </header>
-          <div class="pb-20 lg:pb-0"><PageView @edit-list="editing = $event" /></div>
+          <div class="pb-20 lg:min-h-0 lg:flex-1 lg:pb-0"><PageView @edit-list="editing = $event" /></div>
         </main>
         <TaskDetail />
       </div>

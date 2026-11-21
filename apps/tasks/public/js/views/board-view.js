@@ -11,14 +11,26 @@ const COLUMNS = [
   { status: 'todo', label: 'To do', icon: 'circle', color: 'var(--text-3)' },
   { status: 'done', label: 'Done', icon: 'circle-check', color: '#22a06b' },
 ];
+const STEP = 100;
+const DONE_SHOWN = 50;
 
 export const BoardView = {
   components: { TaskCheck, TaskMeta, QuickAdd },
   props: { view: Object, tasks: Array, sort: String, done: { type: Array, default: () => [] } },
-  setup: () => ({ store, drag, dropClass }),
+  data: () => ({ limit: STEP }),
+  setup: () => ({ store, drag, dropClass, STEP }),
   computed: {
     columns() {
-      return COLUMNS.map((c) => ({ ...c, tasks: c.status === 'done' ? this.done.slice(0, 50) : sortTasks(this.tasks.filter((t) => t.status === c.status), this.sort) }));
+      return COLUMNS.map((c) => {
+        const tasks = c.status === 'done' ? this.done : sortTasks(this.tasks.filter((t) => t.status === c.status), this.sort);
+        // a long column shows its first cards and more on request, so a big list stays quick
+        return { ...c, tasks, shown: tasks.slice(0, c.status === 'done' ? DONE_SHOWN : this.limit) };
+      });
+    },
+  },
+  watch: {
+    'view.key'() {
+      this.limit = STEP;
     },
   },
   methods: {
@@ -54,21 +66,22 @@ export const BoardView = {
     },
   },
   template: /*html*/ `
-    <div class="scroll-x -mx-4 px-4 sm:mx-0 sm:px-0">
-      <div class="grid min-w-[560px] grid-cols-2 gap-4">
+    <!-- wide screens: the columns fill the window and each scrolls by itself -->
+    <div class="scroll-x -mx-4 px-4 sm:mx-0 sm:px-0 lg:h-full">
+      <div class="grid min-w-[560px] grid-cols-2 gap-4 lg:h-full">
         <section v-for="col in columns" :key="col.status" @dragover="overCol($event, col)" @dragleave="leave($event, 'col:' + col.status)" @drop="drop($event, col)"
-          :class="['flex min-h-[320px] flex-col rounded-2xl bg-surface-2/60 p-2.5 transition', dropClass('col:' + col.status)]">
-          <header class="mb-2 flex items-center gap-2 px-1.5 pt-1">
+          :class="['flex min-h-[320px] flex-col rounded-2xl bg-surface-2/60 p-2.5 transition lg:min-h-0', dropClass('col:' + col.status)]">
+          <header class="mb-2 flex shrink-0 items-center gap-2 px-1.5 pt-1">
             <Icon :name="col.icon" :size="15" :style="{ color: col.color }" />
             <h2 class="font-display text-[14px] font-semibold text-ink">{{ col.label }}</h2>
-            <span class="num rounded-md bg-surface px-1.5 text-xs text-ink-3">{{ col.tasks.length }}</span>
+            <span class="num rounded-md bg-surface px-1.5 text-xs text-ink-3">{{ col.status === 'done' && view.kind === 'list' ? view.list.done : col.tasks.length }}</span>
           </header>
-          <div class="flex-1 space-y-2">
-            <article v-for="t in col.tasks" :key="t.id" draggable="true" @dragstart="startDrag($event, t)" @dragend="end"
+          <div class="scrollbar-thin -mx-1 flex-1 space-y-2 px-1 pb-1 lg:min-h-0 lg:overflow-y-auto">
+            <article v-for="t in col.shown" :key="t.id" draggable="true" @dragstart="startDrag($event, t)" @dragend="end"
               @dragover.stop="overCard($event, t, col)" @dragleave="leave($event, 'card:' + t.id)" @drop.stop="drop($event, col, t.id)" @click="open(t)"
               :class="['card cursor-pointer select-none p-3 transition hover:shadow-md', store.selectedId === t.id ? '!border-brand' : '', drag.id === t.id ? 'dragging' : '', dropClass('card:' + t.id), t.status === 'done' ? 'row-done row-complete' : '', store.leaving[t.id] ? 'row-done' : '', store.arrived[t.id] ? 'row-arrive' : '']">
               <div class="flex items-start gap-2.5">
-                <TaskCheck :task="t" :size="18" class="mt-px" />
+                <TaskCheck :task="t" :size="20" class="-mt-px" />
                 <div class="min-w-0 flex-1">
                   <div class="title text-[14px] leading-snug text-ink">{{ t.title }}</div>
                   <TaskMeta :task="t" :show-list="view.kind !== 'list'" compact />
@@ -76,8 +89,9 @@ export const BoardView = {
                 <Icon v-if="t.flagged" name="flag" :size="13" class="mt-0.5 text-danger" />
               </div>
             </article>
+            <button v-if="col.status !== 'done' && col.tasks.length > col.shown.length" type="button" @click="limit += STEP" class="w-full rounded-xl px-3 py-2 text-[13px] font-medium text-ink-3 hover:bg-surface hover:text-brand">Show {{ Math.min(STEP, col.tasks.length - col.shown.length) }} more of {{ col.tasks.length - col.shown.length }}</button>
           </div>
-          <div v-if="col.status !== 'done'" class="mt-2"><QuickAdd compact :defaults="{ ...view.defaults, status: col.status }" placeholder="Add a card" /></div>
+          <div v-if="col.status !== 'done'" class="mt-2 shrink-0"><QuickAdd compact :defaults="{ ...view.defaults, status: col.status }" placeholder="Add a card" /></div>
         </section>
       </div>
     </div>`,

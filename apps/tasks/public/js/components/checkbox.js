@@ -2,7 +2,7 @@
 import { store, toggleDone } from '../store.js';
 
 export const TaskCheck = {
-  props: { task: { type: Object, required: true }, size: { type: Number, default: 20 } },
+  props: { task: { type: Object, required: true }, size: { type: Number, default: 22 } },
   computed: {
     on() {
       return this.task.status === 'done' || Boolean(store.leaving[this.task.id]);

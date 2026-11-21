@@ -136,12 +136,6 @@ export const tagCounts = computed(() => {
   return [...m.values()].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
 });
 
-export const listCounts = computed(() => {
-  const m = {};
-  for (const t of store.tasks) if (t.listId) m[t.listId] = (m[t.listId] || 0) + 1;
-  return m;
-});
-
 /** Tasks done today (for Today's progress ring) */
 export const doneToday = computed(() => store.done.items.filter((t) => t.completedAt && localDay(t.completedAt) === store.today).length);
 const localDay = (utc) => {

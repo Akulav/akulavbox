@@ -1,7 +1,7 @@
 // The sidebar (a drawer on phones): the views with their counts, the lists and the tags. Tasks can
 // be dropped on Inbox, Today, Flagged, a list or a tag; lists can be dragged into another order.
 import { store, taskById, updateTask, reorderLists } from '../store.js';
-import { SMART, counts, listCounts, tagCounts } from '../views.js';
+import { SMART, counts, tagCounts } from '../views.js';
 import { RouterLink, navigate, route } from '../router.js';
 import { drag, overTarget, leave, end, draggedId, dropClass, reordered } from '../dnd.js';
 import { Logo } from '../icons.js';
@@ -10,7 +10,7 @@ export const Sidebar = {
   components: { RouterLink, Logo },
   emits: ['navigate', 'new-list', 'edit-list', 'settings'],
   data: () => ({ store, q: '', listDrag: null, listOver: null, showTags: true }),
-  setup: () => ({ counts, listCounts, tagCounts, dropClass, route }),
+  setup: () => ({ counts, tagCounts, dropClass, route }),
   computed: {
     smart: () => SMART,
   },
@@ -108,7 +108,7 @@ export const Sidebar = {
               <span class="grid h-6 w-6 place-items-center rounded-lg" :style="{ background: l.color + '22', color: l.color }"><Icon :name="l.icon" :size="14" :stroke="2.2" /></span>
               <span class="min-w-0 flex-1 truncate">{{ l.name }}</span>
               <button type="button" @click.prevent.stop="$emit('edit-list', l)" class="hidden rounded-md p-0.5 text-ink-3 hover:text-ink group-hover:block" :aria-label="'Edit ' + l.name"><Icon name="ellipsis" :size="15" /></button>
-              <span v-if="listCounts[l.id]" class="num text-xs text-ink-3 group-hover:hidden">{{ listCounts[l.id] }}</span>
+              <span v-if="l.open + l.done" class="num text-xs text-ink-3 group-hover:hidden" :title="l.done + ' of ' + (l.open + l.done) + ' done'"><span :class="l.done && !l.open ? 'text-[#22a06b]' : 'text-ink-2'">{{ l.done }}</span>/{{ l.open + l.done }}</span>
             </RouterLink>
             <button v-if="!store.lists.length" type="button" @click="$emit('new-list')" class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-ink-3 hover:bg-surface-2 hover:text-ink">
               <span class="grid h-6 w-6 place-items-center rounded-lg border border-dashed border-line"><Icon name="plus" :size="13" /></span>New list

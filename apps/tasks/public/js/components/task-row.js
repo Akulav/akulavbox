@@ -122,7 +122,7 @@ export const TaskRow = {
     <div :class="cls" draggable="true" @dragstart="onStart" @dragend="end" @dragover="onOver" @dragleave="leave($event, key)" @drop="onDrop"
       @click="open" @keydown.enter.self="open" tabindex="0" role="button" :aria-label="'Open ' + task.title" :data-task="task.id">
       <span v-if="sortable" class="absolute -left-3 top-3 hidden text-ink-3 opacity-0 transition group-hover:opacity-100 lg:block" aria-hidden="true"><Icon name="grip-vertical" :size="14" /></span>
-      <TaskCheck :task="task" class="mt-px" />
+      <TaskCheck :task="task" class="-mt-px" />
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2">
           <span class="title truncate text-[14.5px] leading-snug text-ink">{{ task.title }}</span>
