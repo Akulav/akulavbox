@@ -2,6 +2,11 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 5.5.1 (2026-11-21)
+
+### Fixed
+- **Ironveil 0.3.1:** a dragged conveyor line turns wherever you turn the mouse, as many times as you like (it made a single corner of its own choosing). The Matter Depot is in the build bar from the very start and needs no research or power: put one next to a drill and the ore goes straight to the Core.
+
 ## 5.5.0 (2026-11-21)
 
 ### Changed
