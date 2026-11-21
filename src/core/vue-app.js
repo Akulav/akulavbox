@@ -1,6 +1,6 @@
 // What every Vue app of the server (Florin, Tick) needs around its own routes, as Fastify helpers:
 //   - its security headers: a CSP that allows Vue's template compiler ('unsafe-eval'), Tailwind's
-//     <style> tags, the Google fonts, and the page's one inline script (the import map) by hash
+//     <style> tags, the server's own fonts (hub/fonts/), and the page's one inline script (the import map) by hash
 //   - an /api scope with the CSRF header check (X-Requested-With: <app>) and JSON errors
 //   - its page: public/ as static files, and index.html for every page path after the sign-in check
 const path = require('path');
@@ -20,8 +20,8 @@ function pageOf(publicDir) {
   const map = /<script type="importmap">([\s\S]*?)<\/script>/.exec(html);
   const hash = map ? `'sha256-${crypto.createHash('sha256').update(map[1].replace(/\r\n?/g, '\n')).digest('base64')}'` : '';
   const csp = [
-    "default-src 'self'", `script-src 'self' 'unsafe-eval' ${hash}`.trim(), "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src 'self' https://fonts.gstatic.com", "img-src 'self' data:", "connect-src 'self'",
+    "default-src 'self'", `script-src 'self' 'unsafe-eval' ${hash}`.trim(), "style-src 'self' 'unsafe-inline'",
+    "font-src 'self'", "img-src 'self' data:", "connect-src 'self'",
     "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'self'",
   ].join('; ');
   csps.set(p, csp);

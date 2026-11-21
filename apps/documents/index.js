@@ -18,7 +18,7 @@ const { fail } = require('./src/validate');
 const MAX_FILE = 50 * 1024 * 1024;
 const PUBLIC = path.join(__dirname, 'public');
 // Vue compilează șabloanele în browser, de aceea este nevoie de 'unsafe-eval'; restul este blocat.
-const CSP = "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
+const CSP = "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
 
 const stores = createStores(config.appDataDir('documents'));
 

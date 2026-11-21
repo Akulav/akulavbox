@@ -210,7 +210,8 @@ export async function pdfCover(source) {
   try {
     const pdfjsLib = await lib('pdfjsLib');
     const data = source instanceof Blob ? new Uint8Array(await source.arrayBuffer()) : undefined;
-    const doc = await pdfjsLib.getDocument(data ? { data } : { url: source, disableAutoFetch: true, disableStream: false }).promise;
+    // isEvalSupported: false closes CVE-2024-4367 in PDF.js 3.x (a crafted font in a PDF could run script)
+    const doc = await pdfjsLib.getDocument(data ? { data, isEvalSupported: false } : { url: source, disableAutoFetch: true, disableStream: false, isEvalSupported: false }).promise;
     const page = await doc.getPage(1);
     const vp1 = page.getViewport({ scale: 1 });
     const viewport = page.getViewport({ scale: Math.min(2, 640 / vp1.width) });

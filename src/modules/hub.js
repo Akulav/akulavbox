@@ -19,7 +19,7 @@ const APPS_DIR = path.join(__dirname, '../../apps');
 
 // Every page's scripts and styles are versioned (src/core/assets.js): cached for a year, never mixed
 // across an update. Trove's files live at the site's root paths but are versioned under /box/.
-assets.addRoot('/hub/', HUB, { skip: /[\\/]hub[\\/](brand|vendor)([\\/]|$)/ });
+assets.addRoot('/hub/', HUB, { skip: /[\\/]hub[\\/](brand|vendor|lib)([\\/]|$)/ });
 assets.addRoot('/docs/', path.join(APPS_DIR, 'documents', 'public'));
 assets.addRoot('/budget/', path.join(APPS_DIR, 'budget', 'public'));
 assets.addRoot('/tasks/', path.join(APPS_DIR, 'tasks', 'public'));
@@ -32,10 +32,23 @@ const VENDOR = {
   'tailwind.js': require.resolve('@tailwindcss/browser'),
 };
 for (const [name, file] of Object.entries(VENDOR)) assets.addVendor(`/hub/vendor/${name}`, file);
+// Trove's viewer libraries (PDF.js, SheetJS, …), shipped in hub/lib/ instead of loaded from CDNs: served
+// as they are (never rewritten), versioned like Vue
+const LIB = path.join(HUB, 'lib');
+for (const name of fs.readdirSync(LIB)) if (/\.(js|css)$/.test(name)) assets.addVendor(`/hub/lib/${name}`, path.join(LIB, name));
 
 module.exports = async function (fastify) {
   // unversioned /hub/… still works (revalidated on every use)
-  fastify.register(require('@fastify/static'), { root: HUB, prefix: '/hub/', decorateReply: false, index: false, maxAge: 0 });
+  fastify.register(require('@fastify/static'), {
+    root: HUB, prefix: '/hub/', decorateReply: false, index: false, maxAge: 0,
+    // the fonts (hub/fonts/) never change between versions
+    // (@fastify/static 9+ passes the Fastify reply here, see server.js)
+    setHeaders: (res, filePath) => {
+      if (!filePath.endsWith('.woff2')) return;
+      if (typeof res.header === 'function') res.header('Cache-Control', 'public, max-age=2592000');
+      else res.setHeader('Cache-Control', 'public, max-age=2592000');
+    },
+  });
   assets.routes(fastify);
 
   // /hub/vendor/vue.js without a revision (pages from before 5.2, scripts that name it): read and

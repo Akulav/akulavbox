@@ -40,7 +40,8 @@ const backend = [...walk(path.join(root, 'src')), ...walk(path.join(root, 'scrip
 const trovePage = path.join(root, 'apps', 'trove', 'public');
 const frontend = walk(trovePage);
 // browser modules of the launcher, the Admin console, e-Management, Florin and Tick
-const pages = [...walk(path.join(root, 'hub')), ...walk(path.join(root, 'apps', 'documents', 'public')), ...walk(path.join(root, 'apps', 'budget', 'public')), ...walk(path.join(root, 'apps', 'tasks', 'public'))];
+// (hub/lib/ holds third-party builds, served as they are: not ours to check)
+const pages = [...walk(path.join(root, 'hub'), [], /[\\/]hub[\\/]lib([\\/]|$)/),...walk(path.join(root, 'apps', 'documents', 'public')), ...walk(path.join(root, 'apps', 'budget', 'public')), ...walk(path.join(root, 'apps', 'tasks', 'public'))];
 // classic scripts: Ironveil's page with the game's own web build (apps/ironveil/public/game)
 const classic = walk(path.join(root, 'apps', 'ironveil', 'public'));
 for (const f of backend) check(f, false);
