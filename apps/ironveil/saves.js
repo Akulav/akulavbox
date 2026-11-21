@@ -1,5 +1,6 @@
 'use strict';
-// Ironveil's saves: one JSON text per key ("profile", "run") and account, in
+// Ironveil's saves: one JSON text per key ("profile", the auto-save "run", "quick", "slot1".."slot6" and the
+// save list "saves") and account, in
 // DATA_DIR/ironveil/<account id>/<key>.json. Files, so full backups take the folder as it is, and the
 // account's storage counts them like any other file.
 const fs = require('node:fs');

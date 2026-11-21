@@ -71,7 +71,8 @@
     }
 
     // The game draws nothing while it makes its sprites (a few seconds): the loading screen stays until
-    // the menu asks whether there is a run to continue, its first look at the "run" save
+    // the menu asks whether there is a run to continue, its first look at the save index ("saves") or,
+    // in games before the save manager, the "run" save
     var started = false;
     function shown() {
         if (started) return;
@@ -82,7 +83,7 @@
 
     // the game's storage: synchronous, from memory
     window.ironveilStorage = {
-        get: function (k) { if (k === "run") setTimeout(shown, 50); return memory.has(k) ? memory.get(k) : null; },
+        get: function (k) { if (k === "run" || k === "saves") setTimeout(shown, 50); return memory.has(k) ? memory.get(k) : null; },
         set: function (k, v) { memory.set(k, v); store.set(k, v); schedule(k, v); return true; },
         remove: function (k) { memory.delete(k); store.set(k, null); schedule(k, null); },
     };

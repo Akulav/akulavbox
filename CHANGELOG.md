@@ -2,6 +2,14 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 5.6.0 (2026-11-21)
+
+### Added
+- **Ironveil 0.4.0: a save manager and auto-save.** Press L (or Saves, or Load Game on the main menu) to see the auto-save, the quick save and six slots, each with its wave, time played and when it was saved; save into a slot, load one or delete one. The game auto-saves every 2 minutes (1, 2, 5 or off) and as each wave starts. Every slot is saved to your account like before.
+
+### Fixed
+- Ironveil no longer freezes when you click a building placed while paused, or go to the main menu from the pause menu. Its main menu also opens faster.
+
 ## 5.5.1 (2026-11-21)
 
 ### Fixed
