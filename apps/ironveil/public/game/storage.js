@@ -48,8 +48,15 @@
         backend().remove(text(kp, kl));
     }
 
+    // Quit: a tab can't close itself, so the game offers it only when the host page sets
+    // window.ironveilQuit (a function that leaves the game, e.g. back to the host's own pages)
+    function ironveil_can_quit() { return typeof window.ironveilQuit === "function" ? 1 : 0; }
+    function ironveil_quit() { if (typeof window.ironveilQuit === "function") window.ironveilQuit(); }
+
     miniquad_add_plugin({
         register_plugin: function (importObject) {
+            importObject.env.ironveil_can_quit = ironveil_can_quit;
+            importObject.env.ironveil_quit = ironveil_quit;
             importObject.env.ironveil_store_len = ironveil_store_len;
             importObject.env.ironveil_store_read = ironveil_store_read;
             importObject.env.ironveil_store_write = ironveil_store_write;

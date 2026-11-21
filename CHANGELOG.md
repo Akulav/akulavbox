@@ -2,6 +2,11 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 6.0.1 (2026-11-21)
+
+### Fixed
+- **Quit in Ironveil (0.4.1) takes you back to your apps.** It auto-saves, waits until the save reaches your account, then opens the launcher; before, it did nothing in the browser.
+
 ## 6.0.0 (2026-11-21)
 
 ### Removed

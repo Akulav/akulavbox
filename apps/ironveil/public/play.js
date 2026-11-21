@@ -88,6 +88,17 @@
         remove: function (k) { memory.delete(k); store.set(k, null); schedule(k, null); },
     };
 
+    // the game's Quit: send what is waiting (the game has just auto-saved), then back to the apps;
+    // a save that can't go out stays in this browser for the next visit
+    var quitting = false;
+    window.ironveilQuit = async function () {
+        if (quitting) return;
+        quitting = true;
+        clearTimeout(timer);
+        try { while (sending) await new Promise(function (r) { setTimeout(r, 50); }); await flush(); } catch (e) { /* kept for later */ }
+        location.assign("/");
+    };
+
     // leaving the page: what is still waiting is in this browser already, and goes out now if it can
     document.addEventListener("visibilitychange", function () { if (document.visibilityState === "hidden") flush(); });
 
