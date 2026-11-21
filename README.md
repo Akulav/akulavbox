@@ -1,22 +1,33 @@
 <div align="center">
 
-<img src="hub/brand/favicon.svg" width="96" height="96" alt="AkulavBox logo">
+<img src="hub/brand/favicon.svg" width="128" height="128" alt="AkulavBox logo">
 
 # AkulavBox
 
-**Your own cloud, your own apps.** AkulavBox is a self-hosted home for five apps that share **one account and one storage space**: Trove (encrypted files, photos, music, videos and books), e-Management (documents), Florin (budgets), Tick (to-dos) and the game Ironveil. One Node.js server, one data folder, and an **AI connector** so Claude can work with all of them.
+**Your own cloud and your own apps, self-hosted, made by Akulav.**
 
-[![CI](https://github.com/Akulav/akulavbox/actions/workflows/ci.yml/badge.svg)](https://github.com/Akulav/akulavbox/actions/workflows/ci.yml)
-![Node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-5fb3a1)
-![License](https://img.shields.io/badge/license-source--available-8ea1a4)
+A home for five apps that share **one account and one storage space**: Trove (encrypted files, photos, music, videos and books), e-Management (documents), Florin (budgets), Tick (to-dos) and the game Ironveil. One Node.js server, one data folder, everything served from it (no CDNs, no Google Fonts), and an **AI connector** so Claude can work with all of them.
 
-Made with ♥ by **Akulav**
+[![Version](https://img.shields.io/github/package-json/v/Akulav/akulavbox?style=for-the-badge&label=version&color=8b5cf6)](CHANGELOG.md)
+[![Commits](https://img.shields.io/github/last-commit/Akulav/akulavbox/main?style=for-the-badge&label=updated)](https://github.com/Akulav/akulavbox/commits/main)
+[![Build](https://img.shields.io/github/actions/workflow/status/Akulav/akulavbox/ci.yml?branch=main&style=for-the-badge&label=build)](https://github.com/Akulav/akulavbox/actions/workflows/ci.yml)
+
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-5c6270?style=flat-square)
+![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A5%2022.13-5FA04E?style=flat-square&logo=nodedotjs&logoColor=white)
+![Vue](https://img.shields.io/badge/Vue-3-4FC08D?style=flat-square&logo=vuedotjs&logoColor=white)
+![License](https://img.shields.io/badge/license-source--available-5c6270?style=flat-square)
+
+[The apps](#-the-apps) · [Features](#-features) · [Getting started](#-getting-started) · [Configuration](#%EF%B8%8F-configuration) · [Upgrading](#-upgrading) · [Backups](#-data-and-backups) · [Docs](#-documentation)
+
+### [⬇ Download the latest release](https://github.com/Akulav/akulavbox/archive/refs/heads/main.zip)
+
+<sub>AkulavBox releases straight from `main` and updates itself from there (Admin → Updates).</sub>
 
 </div>
 
 ---
 
-## The apps
+## 📦 The apps
 
 AkulavBox is the account and the server, the way a Google account holds Gmail and Drive: each app has its own name. Signing in at `/login` opens the launcher at `/`, which shows the apps your account may use and how much of your storage each one takes:
 
@@ -34,7 +45,7 @@ AkulavBox is the account and the server, the way a Google account holds Gmail an
 - **AI connectors** (`/connect`): let Claude (on the web, desktop or phone, through its custom connectors) or Claude Code and any other MCP client read your apps and, if you allow it per app, change them. Tokens or a one-click OAuth sign-in; every app is covered.
 - **Each app keeps its data in its own folder** of the data folder, and full backups carry all of them.
 
-## Features
+## ✨ Features
 
 | | |
 | --- | --- |
@@ -47,19 +58,19 @@ AkulavBox is the account and the server, the way a Google account holds Gmail an
 | **Videos and books** | Video collections with play-all and shuffle, a Creators view, **save any video as a song**, **trim** (fast lossless or frame-exact), covers generated automatically, participants, tags, series, and ratings. The EPUB reader remembers your page |
 | **Documents** (e-Management) | Two separate spaces per account, *Personal* and *Serviciu* (work), each with its own categories, tags and documents with up to 10 attachments of 50 MB; PDFs and images open in the browser; export and import of a whole space |
 | **Budget** (Florin) | Transactions in 30+ currencies converted at stored rates, monthly budgets per category, a dashboard, analytics charts and CSV export |
-| **To-dos** (Tick) | Lists, tags, checklists, priorities, due dates and times, repeats, a quick-add line that understands "call mum tomorrow at 5pm #family !high every week", a board and a calendar |
+| **To-dos** (Tick) | Lists, tags, checklists, priorities, due dates and times, repeats, a quick-add line that understands "call mum tomorrow at 5pm #family !high every week", what you finished kept in sight under each list, a board and a calendar |
 | **AI connector** | An MCP server at `/mcp` with tools across every app (read, and with permission write), OAuth 2.1 with PKCE so Claude connects with just the address, revocable per-app tokens, and the same tools over plain HTTP |
 | **Accounts** | The Admin console: per-account access to each app, one storage space per account (with optional per-app limits inside it), what each account stores in each app, defaults for new accounts, roles, password resets and "sign out everywhere" |
 | **Backup and upkeep** | **Full backup and restore** of every account, password, file and app in one passphrase-protected file (restores onto a new server, even with a different key), **scheduled backups**, an **activity log**, a **storage check**, and **one-click updates** from GitHub |
 | **Security** | Revocable sessions, sign-in rate limiting, timing-safe login, tokens kept out of logs and `Referer` headers, a sandbox for uploaded HTML and SVG, and CSRF protection in every app |
 | **Polish** | Light, dark, and system themes, keyboard shortcuts (press `?` in Trove), installable as an app, offline and update banners |
 
-## Requirements
+## 🧰 Requirements
 
 - Node.js **22.13 or later** (the built-in `node:sqlite` module needs it)
 - Optional: the native `bcrypt` and `sharp` modules. Without `bcrypt` AkulavBox uses the pure-JS `bcryptjs`; without `sharp` the browser makes thumbnails.
 
-## Getting started
+## 🚀 Getting started
 
 ```bash
 npm install
@@ -81,7 +92,7 @@ npm run check
 
 No page needs a build step: edit the files and reload.
 
-## Configuration
+## ⚙️ Configuration
 
 All settings live in `.env` (see [.env.example](.env.example)).
 
@@ -117,7 +128,7 @@ All settings live in `.env` (see [.env.example](.env.example)).
 
 The server refuses to start if `MASTER_KEY` or `JWT_SECRET` is missing or invalid, and warns you if they are still the example values. Behind a reverse proxy, allow large request bodies (e.g. nginx `client_max_body_size 1g;`).
 
-## Upgrading
+## ⬆️ Upgrading
 
 The easy way: **Trove → Admin → Updates → Update**, then **Restart now**. AkulavBox downloads the new version from GitHub, installs dependencies if they changed, and can roll back. Restarting by itself needs a service manager (systemd, pm2, Docker…); otherwise start it again yourself.
 
@@ -155,7 +166,7 @@ Trove becomes an app like the others (`apps/trove`) and gets its own database, `
 
 See [CHANGELOG.md](CHANGELOG.md) for what changed in each version.
 
-## Data and backups
+## 💾 Data and backups
 
 Everything lives in the data folder (`data/` unless `DATA_DIR` says otherwise), one folder per app:
 
@@ -193,17 +204,25 @@ You can also stop the server and copy the data folder **together with your `MAST
 
 e-Management can also export and import a single space (Setări → Copie de rezervă), and Florin exports transactions as CSV.
 
-## Documentation
+## 🛠️ Tech stack
+
+- **Server:** one [Fastify](https://fastify.dev/) 5 process in CommonJS: AkulavBox, the launcher and the console in `src/`, and each other app as a Fastify plugin in `apps/`. The built-in `node:sqlite`, JWT, bcrypt, archiver and sharp
+- **Pages:** Trove, Florin and Tick are Vue 3 (served locally) with Tailwind compiled by the server into a cached stylesheet, plain ES modules with no build step; e-Management is Vue 3 served locally; Ironveil is the game's WebAssembly build; the launcher, sign-in page and Admin console are plain JavaScript
+
+## 📚 Documentation
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how the server, the apps, storage, encryption and the frontends fit together
 - [docs/API.md](docs/API.md): HTTP API reference, including the AI connector
 - [CLAUDE.md](CLAUDE.md): conventions for working on the code
 - [CHANGELOG.md](CHANGELOG.md): release notes
 
-## Tech stack
+## 🙏 Credits
 
-- **Server:** one [Fastify](https://fastify.dev/) 5 process in CommonJS: AkulavBox, the launcher and the console in `src/`, and each other app as a Fastify plugin in `apps/`. The built-in `node:sqlite`, JWT, bcrypt, archiver and sharp
-- **Pages:** Trove, Florin and Tick are Vue 3 (served locally) with Tailwind compiled by the server into a cached stylesheet, plain ES modules with no build step; e-Management is Vue 3 served locally; Ironveil is the game's WebAssembly build; the launcher, sign-in page and Admin console are plain JavaScript
+- [Fastify](https://fastify.dev/), [Vue](https://vuejs.org/), [Tailwind CSS](https://tailwindcss.com/), [archiver](https://github.com/archiverjs/node-archiver), [jsonwebtoken](https://github.com/auth0/node-jsonwebtoken), [bcrypt](https://github.com/kelektiv/node.bcrypt.js) / [bcryptjs](https://github.com/dcodeIO/bcrypt.js) and [sharp](https://sharp.pixelplumbing.com/), from npm
+- Fonts, served by the server itself: [Geist and Geist Mono](https://github.com/vercel/geist-font) and [Bricolage Grotesque](https://github.com/ateliertriay/bricolage), under the SIL Open Font License 1.1 (`hub/fonts/`)
+- Trove's viewers, shipped in `hub/lib/` with their licenses: [PDF.js](https://mozilla.github.io/pdf.js/), [SheetJS](https://sheetjs.com/), [mammoth](https://github.com/mwilliamson/mammoth.js), [JSZip](https://stuk.github.io/jszip/), [epub.js](https://github.com/futurepress/epub.js), [marked](https://marked.js.org/), [DOMPurify](https://github.com/cure53/DOMPurify), [highlight.js](https://highlightjs.org/) and [Cropper.js](https://github.com/fengyuanchen/cropperjs)
+- Link downloads: [yt-dlp](https://github.com/yt-dlp/yt-dlp) and [FFmpeg](https://ffmpeg.org/) (the [yt-dlp FFmpeg builds](https://github.com/yt-dlp/FFmpeg-Builds)), installed on first use and checked against their published SHA-256 sums
+- Icons from [Lucide](https://lucide.dev/) (ISC)
 
 ---
 

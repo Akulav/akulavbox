@@ -2,6 +2,21 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 6.1.0 (2026-11-21)
+
+### Changed
+- **Tick 1.1: what you finished stays in sight.** Done to-dos are no longer hidden: they sit in a **Completed** part under the open ones of every list view, newest first, quieter, with when they were done. A to-do you tick slides out of the list and lands at the top of Completed with a short green glow. Today shows what you finished today. Fold Completed away if you like (remembered on this device); the "Show done tasks" setting is gone.
+- **Tick has no "In progress" any more.** A to-do is to do or done: the status switch, the In progress badge, the board's middle column and grouping by status are gone. To-dos that were in progress become to do. The details panel has a **Mark done** button instead.
+- **Every font and library comes from your own server.** Geist, Geist Mono and Bricolage Grotesque are served from `hub/fonts/` (OFL), and Trove's viewers (PDF.js, SheetJS, mammoth, JSZip, epub.js, marked, DOMPurify, highlight.js, Cropper.js) from `hub/lib/`, the same files as before, still checked by their hashes. No page talks to Google Fonts or a CDN, so everything works offline, and the pages' Content-Security-Policy no longer allows Google's servers.
+- The README follows the house style of Akulav's projects, with credits for what AkulavBox ships.
+
+### Fixed
+- **Tick's details panel opens where you are.** On a wide screen it stayed at the top of the page, so opening a to-do lower down a long list showed nothing until you scrolled back up; it now stays in view as you scroll.
+- **PDF covers are made with PDF.js's font evaluation off**, closing CVE-2024-4367 (a crafted PDF could run script while Trove drew its cover).
+
+### Removed
+- Code nobody used: `src/core/authMiddleware.js`, the clean-up of the `chat_temp/` folder chat left behind before 3.0, the updater's handling of `frontend/` (Trove's page before 5.1), and the storage bar's fallback for servers before 5.0.
+
 ## 6.0.1 (2026-11-21)
 
 ### Fixed
