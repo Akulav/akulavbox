@@ -46,7 +46,6 @@ function prepare(storageDir, { move = true } = {}) {
     // per-user secrets for link downloads (sign-in cookies), encrypted with MASTER_KEY
     privateDir: place('private'),
   };
-  if (move) removeLeftovers(storageDir);
   return { ...dirs, notes };
 }
 
@@ -57,11 +56,6 @@ function otherServerRunning(storageDir) {
     if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) return false;
     try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; }
   } catch (e) { return false; }
-}
-
-/** Folders of removed features. 3.0 removed chat: its 10-minute attachments have no owner any more. */
-function removeLeftovers(storageDir) {
-  try { fs.rmSync(path.join(storageDir, 'chat_temp'), { recursive: true, force: true }); } catch (e) { /* in use or gone */ }
 }
 
 module.exports = { prepare };

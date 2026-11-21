@@ -194,8 +194,8 @@ export default {
     let cropper = null;
 
     const pct = computed(() => account.quota_bytes ? Math.min(100, (account.used_bytes / account.quota_bytes) * 100) : 0);
-    // the parts of the shared storage space that hold something (servers before 5.0 send no breakdown)
-    const spaceApps = computed(() => (account.space?.apps || [{ id: 'box', name: 'Trove', color: '#E8A33D', bytes: account.used_bytes }]).filter(a => a.bytes > 0 && account.quota_bytes));
+    // the parts of the shared storage space that hold something
+    const spaceApps = computed(() => (account.space?.apps || []).filter(a => a.bytes > 0 && account.quota_bytes));
 
     const themes = [{ id: 'system', label: 'System', icon: 'settings' }, { id: 'light', label: 'Light', icon: 'sun' }, { id: 'dark', label: 'Dark', icon: 'moon' }];
     const theme = ref(storage.read('akulavTheme') || 'system');

@@ -1,4 +1,4 @@
-const { execFile, spawn } = require('child_process');
+const { execFile } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { pipeline } = require('stream/promises');
@@ -35,7 +35,7 @@ const KEEP = new Set(['data', 'storage', 'node_modules', '.git', '.env', 'logs',
 const insideApp = path.relative(APP_DIR, config.storageDir);
 if (insideApp && !insideApp.startsWith('..') && !path.isAbsolute(insideApp)) KEEP.add(insideApp.split(path.sep)[0]);
 // folders that hold only shipped code: files missing from the new version are removed
-const CODE_DIRS = ['src', 'frontend', 'scripts', 'docs', 'apps', 'hub']; // frontend/: Trove's page before 5.1 (now apps/trove/public)
+const CODE_DIRS = ['src', 'scripts', 'docs', 'apps', 'hub'];
 
 function repo() {
   const fromEnv = (process.env.UPDATE_REPO || '').trim();
