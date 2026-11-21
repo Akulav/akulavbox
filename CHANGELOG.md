@@ -2,6 +2,11 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 5.4.2 (2026-11-21)
+
+### Fixed
+- Trove's link downloads line up: a download's status ("Added", "Failed", the progress) sits centred beside its Open, Try again and remove buttons instead of up on the title line, and every status ends in the same place whatever buttons its row has.
+
 ## 5.4.1 (2026-11-21)
 
 ### Fixed

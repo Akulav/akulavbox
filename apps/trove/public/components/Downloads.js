@@ -46,18 +46,19 @@ export default {
             <Icon :name="j.status === 'done' ? 'check' : j.status === 'error' ? 'alert' : j.status === 'cancelled' ? 'x' : j.status === 'expanded' ? 'list-music' : 'loader'" :size="15" />
           </span>
           <div class="flex-1 min-w-0">
-            <div class="flex items-baseline gap-2">
-              <p class="truncate text-[13.5px] font-medium flex-1" :title="j.title || j.url">{{ j.title || hostOf(j.url) }}</p>
-              <span class="text-[11.5px] text-muted shrink-0 tabular-nums">{{ label(j) }}</span>
-            </div>
+            <p class="truncate text-[13.5px] font-medium" :title="j.title || j.url">{{ j.title || hostOf(j.url) }}</p>
             <p v-if="j.status === 'error'" class="text-[12px] text-danger" :class="needsCookies(j) ? 'line-clamp-2' : 'truncate'" :title="j.error">{{ j.error }}
               <a v-if="needsCookies(j)" href="#/profile/cookies" class="ml-1 font-medium text-accent hover:underline whitespace-nowrap">Add cookies</a></p>
             <p v-else class="text-[12px] text-faint truncate">{{ j.creator ? 'by ' + j.creator : hostOf(j.url) }}<template v-if="isConversion(j) && j.creator"> · {{ hostOf(j.url) }}</template><template v-if="j.error && (j.status === 'done' || active(j))"> · <span :class="active(j) ? 'text-accent' : ''">{{ j.error }}</span></template></p>
             <div v-if="active(j)" class="meter mt-1.5" style="height:3px"><span :style="{ width: Math.round((j.progress || 0) * 100) + '%' }"></span></div>
           </div>
-          <button v-if="j.status === 'done' && j.file_id" class="btn btn-ghost btn-sm" @click="$emit('open', j.file_id)">{{ kind === 'audio' ? 'Play' : 'Open' }}</button>
-          <button v-if="j.status === 'error' || j.status === 'cancelled'" class="icon-btn icon-btn-sm" @click="retry(j)" title="Try again"><Icon name="rotate" :size="14" /></button>
-          <button class="icon-btn icon-btn-sm" @click="remove(j)" :title="active(j) ? 'Cancel' : 'Remove from list'"><Icon name="x" :size="14" /></button>
+          <!-- the status beside the buttons, centred in the row; the buttons get a fixed slot so every status lines up -->
+          <span class="text-[11.5px] text-muted shrink-0 tabular-nums">{{ label(j) }}</span>
+          <div class="flex items-center justify-end gap-1 shrink-0 w-[5.75rem]">
+            <button v-if="j.status === 'done' && j.file_id" class="btn btn-ghost btn-sm" @click="$emit('open', j.file_id)">{{ kind === 'audio' ? 'Play' : 'Open' }}</button>
+            <button v-if="j.status === 'error' || j.status === 'cancelled'" class="icon-btn icon-btn-sm" @click="retry(j)" title="Try again"><Icon name="rotate" :size="14" /></button>
+            <button class="icon-btn icon-btn-sm" @click="remove(j)" :title="active(j) ? 'Cancel' : 'Remove from list'"><Icon name="x" :size="14" /></button>
+          </div>
         </li>
       </ul>
       <div v-if="jobs.length" class="flex items-center gap-2 pt-2">
