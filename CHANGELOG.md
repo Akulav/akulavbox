@@ -2,6 +2,22 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 5.5.0 (2026-11-21)
+
+### Changed
+- **Ironveil 0.3.0: an easier start, clearer goals, better conveyors and more spectacle.**
+  - A goal card always says what to do next and why, with a small reward for each. Your first runs are guided: the build bar grows one mechanic at a time, and the first wave waits until your turrets are up ("Show all buildings" skips this).
+  - Ore never runs out. Every deposit is Impure, Normal or Pure, and pure ones mine twice as fast.
+  - Conveyors connect better:
+    - Drag shows the whole line and places it when you let go.
+    - Crossing a belt puts down a Junction so both lines keep flowing.
+    - Machines hand items straight to a building they touch.
+    - Routers feed the machines beside them, so one belt can supply several machines.
+    - A belt that's stuck is marked in red.
+  - Turrets near the Core take ammo from its storage by themselves. Drills need no power. New enemies are announced with what they do.
+  - Bigger explosions, chain blasts for hives and bosses, shell casings, forked lightning, wave banners, kill streaks, fireflies at night and more detail on the ground.
+  - Saves from before keep working: the quick save and your profile load as they are.
+
 ## 5.4.2 (2026-11-21)
 
 ### Fixed
