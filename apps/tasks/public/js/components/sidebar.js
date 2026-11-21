@@ -134,8 +134,6 @@ export const Sidebar = {
         <button type="button" @click="$emit('settings')" class="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-ink-2 hover:bg-surface-2 hover:text-ink">
           <Icon name="settings" :size="16" />Settings<kbd class="ml-auto">?</kbd>
         </button>
-        <!-- the account menu every app shares (hub/account.js), with the AkulavBox profile picture and the theme -->
-        <akb-account expanded up accent="#8b5cf6" :username="store.user?.username" :role="store.user?.role"></akb-account>
       </div>
     </div>`,
 };

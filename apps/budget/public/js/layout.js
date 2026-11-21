@@ -58,11 +58,7 @@ const Sidebar = {
             <Icon :name="t.icon" :size="14" />
           </button>
         </div>
-        <div class="border-t border-line pt-3">
-          <!-- the account menu every app shares (hub/account.js), with the AkulavBox profile picture -->
-          <akb-account expanded up no-theme accent="#1baf7a" :username="store.user?.username" :role="store.user?.role"></akb-account>
-        </div>
-        <div class="px-2 text-[11px] text-ink-3">Florin v{{ store.config.version }}</div>
+        <div class="border-t border-line pt-3 px-2 text-[11px] text-ink-3">Florin v{{ store.config.version }}</div>
       </div>
     </div>`,
 };
@@ -93,11 +89,12 @@ export const Layout = {
         <Sidebar />
       </aside>
 
-      <!-- phones: the brand on the left and the account on the right, like every app; the menu keeps the rest -->
-      <header class="sticky top-0 z-20 flex h-14 items-center gap-1 border-b border-line bg-surface/85 px-3 backdrop-blur lg:hidden">
-        <button type="button" @click="mobileOpen = true" class="rounded-lg p-2 text-ink-2" aria-label="Open menu"><Icon name="menu" :size="20" /></button>
-        <Logo :size="28" />
-        <button type="button" @click="openTransaction" class="ml-auto rounded-lg p-2 text-brand" aria-label="Add transaction"><Icon name="plus" :size="22" /></button>
+      <!-- the account top right, like every app; phones also get the brand and the menu here (the sidebar has them on wide screens) -->
+      <header class="sticky top-0 z-20 flex h-14 items-center gap-1 border-b border-line bg-surface/85 px-3 backdrop-blur lg:px-10">
+        <button type="button" @click="mobileOpen = true" class="rounded-lg p-2 text-ink-2 lg:hidden" aria-label="Open menu"><Icon name="menu" :size="20" /></button>
+        <Logo :size="28" class="lg:hidden" />
+        <button type="button" @click="openTransaction" class="ml-auto rounded-lg p-2 text-brand lg:hidden" aria-label="Add transaction"><Icon name="plus" :size="22" /></button>
+        <span class="hidden flex-1 lg:block"></span>
         <akb-account no-theme accent="#1baf7a" :username="store.user?.username" :role="store.user?.role"></akb-account>
       </header>
 

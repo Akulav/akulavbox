@@ -85,10 +85,11 @@ const Root = {
 
       <div class="flex min-w-0 flex-1">
         <main class="min-w-0 flex-1">
-          <!-- phones: the brand on the left and the account on the right, like every app (the views are in the bottom bar) -->
-          <header class="sticky top-0 z-20 flex h-14 items-center gap-1 border-b border-line bg-surface/85 px-4 backdrop-blur lg:hidden">
-            <Logo :size="26" />
-            <button type="button" @click="addOnPhone" class="ml-auto rounded-lg p-2 text-brand" aria-label="Add a task"><Icon name="plus" :size="22" /></button>
+          <!-- the account top right, like every app; phones also get the brand and the add button (the sidebar has the brand on wide screens) -->
+          <header class="sticky top-0 z-20 flex h-14 items-center gap-1 border-b border-line bg-surface/85 px-4 backdrop-blur">
+            <Logo :size="26" class="lg:hidden" />
+            <button type="button" @click="addOnPhone" class="ml-auto rounded-lg p-2 text-brand lg:hidden" aria-label="Add a task"><Icon name="plus" :size="22" /></button>
+            <span class="hidden flex-1 lg:block"></span>
             <akb-account accent="#8b5cf6" :username="store.user?.username" :role="store.user?.role"></akb-account>
           </header>
           <div class="pb-20 lg:pb-0"><PageView @edit-list="editing = $event" /></div>

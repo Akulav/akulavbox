@@ -2,6 +2,11 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 5.4.1 (2026-11-21)
+
+### Fixed
+- Florin and Tick have the account menu (your profile picture, the app switcher) at the top right on wide screens too, like Trove, e-Management and Koma Shelf, instead of at the bottom of the sidebar. Ironveil keeps it on the left, out of the game's way.
+
 ## 5.4.0 (2026-11-20)
 
 ### Added
