@@ -2,7 +2,7 @@
 // sort and grouping, the quick-add box and the tasks. Layout and grouping are remembered per view
 // on this device; the sort order is saved with the account.
 import { store, savePrefs, renameTag, removeTag } from '../store.js';
-import { viewOf, sortTasks, SORTS, GROUPS, counts, doneToday } from '../views.js';
+import { viewOf, sortTasks, SORTS, GROUPS, counts, doneToday, localDay } from '../views.js';
 import { route, navigate } from '../router.js';
 import { longDate } from '../dates.js';
 import { QuickAdd } from '../components/quick-add.js';
@@ -71,10 +71,12 @@ export const PageView = {
       const leaving = store.done.items.filter((t) => store.leaving[t.id] && this.view.filter(t));
       return sortTasks([...store.tasks.filter(this.view.filter), ...leaving], store.prefs.sort);
     },
-    /** done tasks of this view: under a list (when wanted) and in the board's Done column */
+    /** done tasks of this view, newest first: under the list, and in the board's Done column. Today shows
+     *  what was finished today (not every old task that was once due); a task still leaving the open
+     *  ones isn't shown twice. */
     done() {
-      const show = this.layout === 'board' || (store.prefs.showDoneInLists && ['list', 'tag'].includes(this.view.kind));
-      return show ? store.done.items.filter(this.view.filter) : [];
+      const today = this.view.key === 'today';
+      return store.done.items.filter((t) => !store.leaving[t.id] && (today ? t.completedAt && localDay(t.completedAt) === store.today : this.view.filter(t)));
     },
     subtitle() {
       const n = this.tasks.length;
@@ -165,9 +167,6 @@ export const PageView = {
                   <option v-for="(g, k) in GROUPS" :key="k" :value="k">{{ g }}</option>
                 </select>
               </Field>
-              <label v-if="['list', 'tag'].includes(view.kind)" class="flex items-center gap-2 text-sm text-ink-2">
-                <input type="checkbox" :checked="store.prefs.showDoneInLists" @change="savePrefs({ showDoneInLists: $event.target.checked })" class="accent-[var(--brand)]" />Show done tasks
-              </label>
               <div v-if="view.kind === 'list'" class="border-t border-line pt-3"><Btn size="sm" variant="secondary" icon="pencil" class="w-full" @click="options = false; $emit('edit-list', view.list)">Edit or delete the list</Btn></div>
               <div v-if="view.kind === 'tag'" class="flex gap-2 border-t border-line pt-3">
                 <Btn size="sm" variant="secondary" icon="pencil" class="flex-1" @click="options = false; renameTag()">Rename</Btn>
@@ -186,8 +185,8 @@ export const PageView = {
         <CalendarView v-if="layout === 'calendar'" :view="view" :tasks="tasks" />
         <BoardView v-else-if="layout === 'board'" :view="view" :tasks="tasks" :sort="store.prefs.sort" :done="done" />
         <template v-else>
-          <ListView v-if="tasks.length || view.key === 'upcoming'" :view="view" :tasks="tasks" :group-by="fixedGroups ? 'none' : groupBy" :sort="store.prefs.sort" :done="done" />
-          <EmptyState v-else :icon="empty[0]" :title="empty[1]" :message="empty[2]" />
+          <EmptyState v-if="!tasks.length && view.key !== 'upcoming'" :icon="empty[0]" :title="empty[1]" :message="empty[2]" />
+          <ListView v-if="tasks.length || done.length || view.key === 'upcoming'" :view="view" :tasks="tasks" :group-by="fixedGroups ? 'none' : groupBy" :sort="store.prefs.sort" :done="done" />
         </template>
       </template>
     </div>`,

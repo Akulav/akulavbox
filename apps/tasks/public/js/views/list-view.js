@@ -10,11 +10,15 @@ import { QuickAdd } from '../components/quick-add.js';
 export const ListView = {
   components: { TaskRow, QuickAdd },
   props: { view: Object, tasks: Array, groupBy: String, sort: String, done: { type: Array, default: () => [] } },
-  data: () => ({ adding: null, showDone: false }),
+  data: () => ({ adding: null, showDone: doneOpen(), doneLimit: DONE_STEP }),
   setup: () => ({ store, dropClass }),
   computed: {
     groups() {
-      return groupTasks(this.tasks, this.groupBy, this.view);
+      // a group with nothing in it only shows when it is a day to plan (Upcoming)
+      return groupTasks(this.tasks, this.groupBy, this.view).filter((g) => g.tasks.length || g.day);
+    },
+    doneShown() {
+      return this.done.slice(0, this.doneLimit);
     },
     flat() {
       return this.groups.flatMap((g) => g.tasks.map((t) => t.id));
@@ -56,6 +60,19 @@ export const ListView = {
     over(e, key) {
       overTarget(e, key);
     },
+    toggleDone() {
+      this.showDone = !this.showDone;
+      try {
+        localStorage.setItem('tasks.doneOpen', this.showDone ? '1' : '0');
+      } catch {
+        /* storage unavailable */
+      }
+    },
+  },
+  watch: {
+    'view.key'() {
+      this.doneLimit = DONE_STEP;
+    },
   },
   template: /*html*/ `
     <div class="space-y-6">
@@ -77,11 +94,29 @@ export const ListView = {
         <div v-if="adding === g.key" class="mt-2 px-1"><QuickAdd compact :defaults="{ ...view.defaults, ...g.defaults }" placeholder="Add a task here" /></div>
       </section>
 
-      <section v-if="done.length">
-        <button type="button" @click="showDone = !showDone" class="flex items-center gap-2 px-2.5 text-[13px] font-medium text-ink-3 hover:text-ink">
-          <Icon name="chevron-down" :size="14" :class="['transition', showDone ? '' : '-rotate-90']" />Done <span class="num">{{ done.length }}</span>
+      <!-- what's done stays in sight below the open tasks, quieter, with the newest first -->
+      <section v-if="done.length" class="done-part">
+        <button type="button" @click="toggleDone" :aria-expanded="showDone" class="group mb-1 flex w-full items-center gap-2 border-b border-line px-2.5 pb-2 text-left">
+          <span class="grid h-5 w-5 place-items-center rounded-full bg-[#22a06b]/15 text-[#22a06b]"><Icon name="check" :size="12" :stroke="3" /></span>
+          <h2 class="font-display text-[15px] font-semibold text-ink-2 group-hover:text-ink">Completed</h2>
+          <span class="num text-xs text-ink-3">{{ done.length }}</span>
+          <span class="flex-1"></span>
+          <Icon name="chevron-down" :size="15" :class="['text-ink-3 transition', showDone ? '' : '-rotate-90']" />
         </button>
-        <div v-if="showDone" class="mt-2 space-y-px opacity-80"><TaskRow v-for="t in done" :key="t.id" :task="t" :show-list="showList" /></div>
+        <div v-if="showDone" class="space-y-px">
+          <TaskRow v-for="t in doneShown" :key="t.id" :task="t" :show-list="showList" />
+          <button v-if="done.length > doneLimit" type="button" @click="doneLimit += 50" class="px-2.5 py-2 text-[13px] font-medium text-ink-3 hover:text-brand">Show {{ Math.min(50, done.length - doneLimit) }} more</button>
+        </div>
       </section>
     </div>`,
 };
+
+const DONE_STEP = 10;
+/** Completed is open unless it was folded on this device */
+function doneOpen() {
+  try {
+    return localStorage.getItem('tasks.doneOpen') !== '0';
+  } catch {
+    return true;
+  }
+}

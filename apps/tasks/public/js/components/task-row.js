@@ -2,7 +2,8 @@
 // checklist, tags, the list). Click opens the details; drag (by the handle, or anywhere with a mouse)
 // to reorder it, or drop it on a list, a day or a tag.
 import { store, updateTask, listById } from '../store.js';
-import { dueInfo, repeatLabel } from '../dates.js';
+import { dueInfo, repeatLabel, addDays } from '../dates.js';
+import { localDay } from '../views.js';
 import { drag, start, end, overRow, leave, dropClass } from '../dnd.js';
 import { RouterLink } from '../router.js';
 import { TaskCheck } from './checkbox.js';
@@ -21,7 +22,8 @@ export const TaskMeta = {
   props: { task: { type: Object, required: true }, showList: Boolean, compact: Boolean },
   computed: {
     due() {
-      return dueInfo(this.task.dueDate, this.task.dueTime, store.today);
+      // a done task isn't due any more
+      return this.task.status === 'done' ? null : dueInfo(this.task.dueDate, this.task.dueTime, store.today);
     },
     tone() {
       return this.due ? TONE[this.due.tone] : '';
@@ -67,12 +69,24 @@ export const TaskRow = {
     key() {
       return `row:${this.task.id}`;
     },
+    /** when a done task was done: "14:05" today, "Yesterday", or "12 Nov" */
+    finished() {
+      const at = this.task.completedAt;
+      if (!at) return null;
+      const d = new Date(`${at.replace(' ', 'T')}Z`);
+      const day = localDay(at);
+      const short = day === store.today ? d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+        : day === addDays(store.today, -1) ? 'Yesterday'
+        : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+      return { short, full: d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) };
+    },
     cls() {
       return [
         'group relative flex items-start gap-3 rounded-xl px-2.5 py-2.5 transition-colors cursor-pointer select-none',
         this.selected ? 'bg-brand-soft' : 'hover:bg-surface-2',
         this.leaving ? 'row-done row-leaving' : '',
-        this.task.status === 'done' ? 'row-done' : '',
+        this.task.status === 'done' ? 'row-done row-complete' : '',
+        store.arrived[this.task.id] ? 'row-arrive' : '',
         drag.id === this.task.id ? 'dragging' : '',
         this.sortable ? dropClass(this.key) : '',
       ];
@@ -112,7 +126,7 @@ export const TaskRow = {
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2">
           <span class="title truncate text-[14.5px] leading-snug text-ink">{{ task.title }}</span>
-          <span v-if="task.status === 'doing'" class="shrink-0 rounded-md bg-brand-soft px-1.5 py-px text-[11px] font-semibold text-brand">In progress</span>
+          <span v-if="task.status === 'done' && finished" class="ml-auto shrink-0 text-[11.5px] text-ink-3" :title="'Done ' + finished.full">{{ finished.short }}</span>
         </div>
         <TaskMeta :task="task" :show-list="showList" />
       </div>

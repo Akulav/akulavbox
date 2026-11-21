@@ -9,11 +9,12 @@ export const store = reactive({
   ready: false,
   user: null,
   error: null, // e.g. Tasks is turned off for this account
-  prefs: { weekStart: 1, startView: 'today', showDoneInLists: false, sort: 'manual' },
+  prefs: { weekStart: 1, startView: 'today', sort: 'manual' },
   lists: [],
-  tasks: [], // open tasks (to do and doing)
+  tasks: [], // open tasks
   done: { items: [], total: 0, loaded: false }, // the newest done tasks
   leaving: {}, // id → true while a ticked task plays its way out
+  arrived: {}, // id → true while a ticked task lands in the Completed part below the list
   selectedId: null, // the task open in the details panel
   toasts: [],
   today: todayISO(),
@@ -114,7 +115,13 @@ export async function toggleDone(task) {
   if (task.status === 'done') return reopen(task);
   store.leaving[task.id] = true;
   const r = await updateTask(task, { status: 'done' });
-  setTimeout(() => delete store.leaving[task.id], 900);
+  // it strikes through and slides out of the open tasks, then lands at the top of Completed
+  setTimeout(() => {
+    delete store.leaving[task.id];
+    if (!r) return;
+    store.arrived[task.id] = true;
+    setTimeout(() => delete store.arrived[task.id], 1200);
+  }, 800);
   if (!r) return;
   if (store.selectedId === task.id) store.selectedId = null;
   const next = r.next;

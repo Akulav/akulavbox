@@ -13,7 +13,7 @@ const bad = (msg) => new HttpError(400, msg);
 const DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 const COLOR = /^#[0-9a-f]{6}$/i;
-const STATUSES = ['todo', 'doing', 'done'];
+const STATUSES = ['todo', 'done'];
 
 const text = (v, field, max, { required = false } = {}) => {
   const s = String(v ?? '').replace(/\s+/g, ' ').trim();
@@ -72,7 +72,9 @@ function priority(v) {
   return n;
 }
 function status(v) {
-  if (!STATUSES.includes(v)) throw bad('Status is todo, doing or done.');
+  // 'doing' (in progress, gone since Tick 1.1) still comes from older pages and AI apps: it means to do
+  if (v === 'doing') return 'todo';
+  if (!STATUSES.includes(v)) throw bad('Status is todo or done.');
   return v;
 }
 function rule(v, dueDate) {

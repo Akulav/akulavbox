@@ -170,7 +170,7 @@ Cookie sign-in. Changes need the header `X-Requested-With: tasks`. Every path is
 | --- | --- | --- |
 | GET | `/tasks/` and its page paths (`/tasks/today`, `/tasks/list/3`, …) | The page (signed out: redirect to `/login`) |
 | GET | `/bootstrap` | `{ user, prefs, lists, tasks }`: everything the page needs at once |
-| GET / POST | `/tasks` | Every open task (to do and doing) / `{ title, notes, listId, dueDate, dueTime, priority 0–3, flagged, tags, checklist: [{ text, done }], repeat: { every, unit: day\|week\|month\|year, weekdays? }, status }` → 201 `{ task }` |
+| GET / POST | `/tasks` | Every open task / `{ title, notes, listId, dueDate, dueTime, priority 0–3, flagged, tags, checklist: [{ text, done }], repeat: { every, unit: day\|week\|month\|year, weekdays? }, status: todo\|done }` → 201 `{ task }` |
 | GET | `/tasks/done?offset=&limit=&listId=&from=&to=` | `{ total, items }`, newest first |
 | GET / PATCH / DELETE | `/tasks/:id` | `{ task }` / any of the fields above, plus `today` → `{ task, next }` (`next`: a repeating task's new copy when it is ticked off; `undoNext` takes it back) |
 | POST | `/tasks/reorder` · `/tasks/clear-done` | `{ ids }` · `{ listId? }` |
@@ -178,7 +178,7 @@ Cookie sign-in. Changes need the header `X-Requested-With: tasks`. Every path is
 | PATCH / DELETE | `/lists/:id` | `?tasks=delete` deletes its tasks too (they go to the Inbox otherwise) |
 | POST | `/lists/reorder` | `{ ids }` |
 | GET · PATCH / DELETE | `/tags` · `/tags/:tag` | Tags in use · `{ name }` renames it on every task / removes it |
-| GET / PATCH | `/prefs` | `{ weekStart, startView, showDoneInLists, sort }` |
+| GET / PATCH | `/prefs` | `{ weekStart, startView, sort }` |
 
 ## AI connector
 

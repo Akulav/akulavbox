@@ -67,6 +67,9 @@ const STEPS = [
     value   TEXT NOT NULL
   );
   `,
+  // 2: Tick 1.1 has no "in progress" any more: a task is to do or done ('doing' stays allowed by the
+  // CHECK above, and the API reads it as 'todo')
+  `UPDATE tasks SET status = 'todo' WHERE status = 'doing';`,
 ];
 
 const db = new DatabaseSync(DB_PATH);

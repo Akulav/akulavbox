@@ -1,5 +1,5 @@
-// The board layout: To do, In progress and Done as columns. Drag a card to another column to change
-// its status (into Done ticks it off), or within one to reorder (with manual order).
+// The board layout: To do and Done as columns. Drag a card into Done to tick it off (or back to reopen it),
+// or within To do to reorder (with manual order).
 import { store, taskById, updateTask, toggleDone, reorderTasks } from '../store.js';
 import { sortTasks } from '../views.js';
 import { drag, start, end, draggedId, overRow, overTarget, leave, dropClass, reordered } from '../dnd.js';
@@ -9,7 +9,6 @@ import { QuickAdd } from '../components/quick-add.js';
 
 const COLUMNS = [
   { status: 'todo', label: 'To do', icon: 'circle', color: 'var(--text-3)' },
-  { status: 'doing', label: 'In progress', icon: 'circle-dot', color: 'var(--brand)' },
   { status: 'done', label: 'Done', icon: 'circle-check', color: '#22a06b' },
 ];
 
@@ -56,7 +55,7 @@ export const BoardView = {
   },
   template: /*html*/ `
     <div class="scroll-x -mx-4 px-4 sm:mx-0 sm:px-0">
-      <div class="grid min-w-[720px] grid-cols-3 gap-4">
+      <div class="grid min-w-[560px] grid-cols-2 gap-4">
         <section v-for="col in columns" :key="col.status" @dragover="overCol($event, col)" @dragleave="leave($event, 'col:' + col.status)" @drop="drop($event, col)"
           :class="['flex min-h-[320px] flex-col rounded-2xl bg-surface-2/60 p-2.5 transition', dropClass('col:' + col.status)]">
           <header class="mb-2 flex items-center gap-2 px-1.5 pt-1">
@@ -67,7 +66,7 @@ export const BoardView = {
           <div class="flex-1 space-y-2">
             <article v-for="t in col.tasks" :key="t.id" draggable="true" @dragstart="startDrag($event, t)" @dragend="end"
               @dragover.stop="overCard($event, t, col)" @dragleave="leave($event, 'card:' + t.id)" @drop.stop="drop($event, col, t.id)" @click="open(t)"
-              :class="['card cursor-pointer select-none p-3 transition hover:shadow-md', store.selectedId === t.id ? '!border-brand' : '', drag.id === t.id ? 'dragging' : '', dropClass('card:' + t.id), t.status === 'done' ? 'row-done opacity-70' : '', store.leaving[t.id] ? 'row-done' : '']">
+              :class="['card cursor-pointer select-none p-3 transition hover:shadow-md', store.selectedId === t.id ? '!border-brand' : '', drag.id === t.id ? 'dragging' : '', dropClass('card:' + t.id), t.status === 'done' ? 'row-done row-complete' : '', store.leaving[t.id] ? 'row-done' : '', store.arrived[t.id] ? 'row-arrive' : '']">
               <div class="flex items-start gap-2.5">
                 <TaskCheck :task="t" :size="18" class="mt-px" />
                 <div class="min-w-0 flex-1">

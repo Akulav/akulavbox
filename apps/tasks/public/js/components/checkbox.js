@@ -17,7 +17,7 @@ export const TaskCheck = {
     },
   },
   template: /*html*/ `
-    <button type="button" :class="['check', { on }]" :style="{ '--c': 'var(--p' + task.priority + ')', width: size + 'px', height: size + 'px' }"
+    <button type="button" :class="['check', { on }]" :style="{ '--c': task.status === 'done' ? 'var(--done)' : 'var(--p' + task.priority + ')', width: size + 'px', height: size + 'px' }"
       role="checkbox" :aria-checked="on" :aria-label="label" @click.stop="toggle">
       <Icon name="check" :size="size - 8" :stroke="3.2" />
     </button>`,

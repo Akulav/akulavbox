@@ -53,7 +53,7 @@ function inChunks(rows, size = 500) {
   return out;
 }
 
-/** Every open task (to do and doing): the page sorts, groups and counts them itself */
+/** Every open task: the page sorts, groups and counts them itself */
 const openTasks = (uid) => inChunks(all(`SELECT * FROM tasks WHERE user_id = ? AND status != 'done' ORDER BY position, id LIMIT ${MAX_OPEN}`, uid));
 
 /** Done tasks, newest first; or those due between from and to (the calendar) */
@@ -257,12 +257,13 @@ function renameTag(uid, from, to) {
   return ids.length;
 }
 
-const PREF_DEFAULTS = { weekStart: 1, startView: 'today', showDoneInLists: false, sort: 'manual' };
+const PREF_DEFAULTS = { weekStart: 1, startView: 'today', sort: 'manual' };
 function prefs(uid) {
   const row = get('SELECT value FROM prefs WHERE user_id = ?', uid);
   let saved = {};
   try { saved = row ? JSON.parse(row.value) : {}; } catch { /* reset below */ }
-  return { ...PREF_DEFAULTS, ...saved };
+  // only known settings (showDoneInLists went in Tick 1.1: done tasks always show under the list)
+  return Object.fromEntries(Object.entries(PREF_DEFAULTS).map(([k, d]) => [k, saved[k] ?? d]));
 }
 function setPrefs(uid, body) {
   const p = prefs(uid);
@@ -274,7 +275,6 @@ function setPrefs(uid, body) {
     if (!['inbox', 'today', 'upcoming', 'all'].includes(body.startView)) throw v.bad('Start in Inbox, Today, Upcoming or All.');
     p.startView = body.startView;
   }
-  if (body.showDoneInLists !== undefined) p.showDoneInLists = Boolean(body.showDoneInLists);
   if (body.sort !== undefined) {
     if (!['manual', 'due', 'priority', 'title', 'created'].includes(body.sort)) throw v.bad('Unknown sort order.');
     p.sort = body.sort;

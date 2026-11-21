@@ -4,16 +4,11 @@ import { store, taskById, updateTask, deleteTask, toggleDone } from '../store.js
 import { TaskCheck } from './checkbox.js';
 import { DueEditor, RepeatEditor, PriorityPicker, TagInput } from './pickers.js';
 
-const STATUSES = [
-  { value: 'todo', label: 'To do' },
-  { value: 'doing', label: 'In progress' },
-  { value: 'done', label: 'Done' },
-];
 const when = (utc) => (utc ? new Date(`${utc.replace(' ', 'T')}Z`).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '');
 
 export const TaskDetail = {
   components: { TaskCheck, DueEditor, RepeatEditor, PriorityPicker, TagInput },
-  data: () => ({ title: '', notes: '', newItem: '', STATUSES, confirmDelete: false }),
+  data: () => ({ title: '', notes: '', newItem: '', confirmDelete: false }),
   setup: () => ({ store }),
   computed: {
     task() {
@@ -80,9 +75,8 @@ export const TaskDetail = {
         el.style.height = `${el.scrollHeight}px`;
       }
     },
-    setStatus(s) {
-      if (s === 'done' || this.task.status === 'done') return toggleDone(this.task);
-      this.save({ status: s });
+    toggleDone() {
+      toggleDone(this.task);
     },
     /* the checklist: saved whole each time */
     items() {
@@ -123,12 +117,10 @@ export const TaskDetail = {
     },
   },
   template: /*html*/ `
-    <aside v-if="task" class="panel-in fixed inset-0 z-40 flex flex-col bg-surface sm:inset-y-0 sm:left-auto sm:right-0 sm:w-[440px] sm:border-l sm:border-line sm:shadow-2xl lg:static lg:z-auto lg:h-screen lg:w-[420px] lg:shrink-0 lg:shadow-none" aria-label="Task details">
+    <!-- wide screens: beside the list and sticky, so it opens in view wherever the page is scrolled -->
+    <aside v-if="task" class="panel-in fixed inset-0 z-40 flex flex-col bg-surface sm:inset-y-0 sm:left-auto sm:right-0 sm:w-[440px] sm:border-l sm:border-line sm:shadow-2xl lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:w-[420px] lg:shrink-0 lg:self-start lg:shadow-none" aria-label="Task details">
       <header class="flex items-center gap-2 border-b border-line px-4 py-3">
-        <div class="inline-flex rounded-xl border border-line bg-surface-2 p-0.5" role="radiogroup" aria-label="Status">
-          <button v-for="s in STATUSES" :key="s.value" type="button" role="radio" :aria-checked="task.status === s.value" @click="setStatus(s.value)"
-            :class="['rounded-[10px] px-2.5 py-1 text-[12.5px] font-medium transition', task.status === s.value ? 'bg-surface text-ink shadow-sm' : 'text-ink-3 hover:text-ink']">{{ s.label }}</button>
-        </div>
+        <Btn size="sm" :variant="task.status === 'done' ? 'secondary' : 'primary'" :icon="task.status === 'done' ? 'undo-2' : 'check'" @click="toggleDone">{{ task.status === 'done' ? 'Mark as not done' : 'Mark done' }}</Btn>
         <div class="flex-1"></div>
         <IconButton :icon="'flag'" :label="task.flagged ? 'Remove the flag' : 'Flag'" @click="save({ flagged: !task.flagged })" :class="task.flagged ? '!text-danger' : ''" />
         <IconButton icon="x" label="Close (Esc)" @click="close" />

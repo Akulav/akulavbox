@@ -64,7 +64,7 @@ const tools = [
   },
   {
     name: 'tick_list_tasks', write: false, title: 'List Tick tasks',
-    description: 'Open tasks (to do and doing), optionally only one list, one tag, those due by a date, or matching a text. With done: true, recently completed tasks instead.',
+    description: 'Open tasks, optionally only one list, one tag, those due by a date, or matching a text. With done: true, recently completed tasks instead.',
     input: {
       list_id: { type: ['integer', 'string'], description: 'A list id, or "inbox"' },
       tag: { type: 'string' },
@@ -106,7 +106,7 @@ const tools = [
   {
     name: 'tick_update_task', write: true, title: 'Change a Tick task',
     description: 'Change any of a task’s fields; the ones left out stay as they are. Use tick_complete_task to tick it off.',
-    input: { id: { type: 'integer' }, ...FIELDS, status: { type: 'string', enum: ['todo', 'doing', 'done'] } }, required: ['id'],
+    input: { id: { type: 'integer' }, ...FIELDS, status: { type: 'string', enum: ['todo', 'done'] } }, required: ['id'],
     run: async (ctx, a) => {
       const lists = new Map((await listsOf(ctx)).map((l) => [l.id, l.name]));
       const r = await ctx.call('tasks', 'PATCH', `${API}/tasks/${int(a.id, 0, 0, Number.MAX_SAFE_INTEGER)}`, { json: { ...body(a), today: today() } });

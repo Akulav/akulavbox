@@ -61,7 +61,7 @@ export const SORTS = {
 };
 export const sortTasks = (tasks, sort) => [...tasks].sort((SORTS[sort] || SORTS.manual).fn);
 
-export const GROUPS = { none: 'No groups', due: 'Due date', priority: 'Priority', list: 'List', status: 'Status' };
+export const GROUPS = { none: 'No groups', due: 'Due date', priority: 'Priority', list: 'List' };
 const PRIORITY_NAMES = ['No priority', 'Low', 'Medium', 'High'];
 
 /** Groups for the list layout: [{ key, label, tone, tasks, defaults }] (defaults: what a task added there gets) */
@@ -109,7 +109,6 @@ export function groupTasks(tasks, by, view) {
     for (const l of store.lists) groups.push({ key: `l${l.id}`, label: l.name, color: l.color, tasks: tasks.filter((t) => t.listId === l.id), defaults: { listId: l.id } });
     return groups.filter((g) => g.tasks.length);
   }
-  if (by === 'status') return [['doing', 'In progress'], ['todo', 'To do']].map(([s, label]) => ({ key: s, label, tasks: tasks.filter((t) => t.status === s), defaults: { status: s } })).filter((g) => g.tasks.length);
   return [{ key: 'all', label: '', tasks }];
 }
 

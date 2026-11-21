@@ -38,12 +38,6 @@ export const Settings = {
               <option v-for="(s, k) in SORTS" :key="k" :value="k">{{ s.label }}</option>
             </select>
           </Field>
-          <Field label="Done tasks in lists" hint="Show the done ones under a list's open tasks.">
-            <select class="input" :value="store.prefs.showDoneInLists ? '1' : ''" @change="savePrefs({ showDoneInLists: Boolean($event.target.value) })">
-              <option value="">Hide them</option>
-              <option value="1">Show them</option>
-            </select>
-          </Field>
         </section>
 
         <section>
