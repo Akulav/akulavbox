@@ -4,7 +4,7 @@
 
 # AkulavBox
 
-**Your own cloud, your own apps.** AkulavBox is a self-hosted home for six apps that share **one account and one storage space**: Trove (encrypted files, photos, music, videos and books), e-Management (documents), Koma Shelf (webtoons), Florin (budgets), Tick (to-dos) and the game Ironveil. One Node.js server, one data folder, and an **AI connector** so Claude can work with all of them.
+**Your own cloud, your own apps.** AkulavBox is a self-hosted home for five apps that share **one account and one storage space**: Trove (encrypted files, photos, music, videos and books), e-Management (documents), Florin (budgets), Tick (to-dos) and the game Ironveil. One Node.js server, one data folder, and an **AI connector** so Claude can work with all of them.
 
 [![CI](https://github.com/Akulav/akulavbox/actions/workflows/ci.yml/badge.svg)](https://github.com/Akulav/akulavbox/actions/workflows/ci.yml)
 ![Node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-5fb3a1)
@@ -24,14 +24,13 @@ AkulavBox is the account and the server, the way a Google account holds Gmail an
 | --- | --- | --- |
 | **Trove** | `/box/` | Files, photos, music, videos and books, encrypted at rest (the core; every account has it) |
 | **e-Management** | `/docs/` | Personal and work documents with categories, tags, attachments, an activity log and per-space backups (in Romanian) |
-| **Koma Shelf** | `/manga/` | Webtoons made with [Koma](https://github.com/Akulav/text-to-manga): a private library, unlisted links and a public shelf, with a reader built for long strips |
 | **Florin** | `/budget/` | Expenses and income in any currency, budgets per category, and charts |
 | **Tick** | `/tasks/` | To-dos with lists, tags, checklists, due dates and repeats, as a list, a board or a calendar |
 | **Ironveil** | `/ironveil/` | Akulav's automation and tower-defense game ([strategy-game](https://github.com/Akulav/strategy-game)) in the browser, with your progress saved to your account. Rebuild it with `npm run ironveil` (needs Rust and its `wasm32-unknown-unknown` target) |
 
 - **One account, one sign-in.** Accounts live in AkulavBox's database. Signing in, out, changing a password, or "sign out everywhere" applies to every app at once.
 - **The Admin console** (`/admin`, admins only) manages accounts for all apps: create and delete them, reset passwords, change roles, sign people out, turn each app on or off per account, set the size of each account's storage, optionally limit an app inside it, and choose the defaults for new accounts.
-- **One storage space per account.** What Trove, e-Management and Koma Shelf store all counts towards it, like a Google account's storage.
+- **One storage space per account.** What Trove, e-Management and Ironveil store all counts towards it, like a Google account's storage.
 - **AI connectors** (`/connect`): let Claude (on the web, desktop or phone, through its custom connectors) or Claude Code and any other MCP client read your apps and, if you allow it per app, change them. Tokens or a one-click OAuth sign-in; every app is covered.
 - **Each app keeps its data in its own folder** of the data folder, and full backups carry all of them.
 
@@ -47,10 +46,9 @@ AkulavBox is the account and the server, the way a Google account holds Gmail an
 | **Download from a link** | Paste a YouTube, Vimeo, SoundCloud or other link (playlists and channels too). Title, creator, date, cover and length are filled in, and video is kept as space-efficient AV1. Age-restricted videos work with your saved sign-in cookies. yt-dlp and ffmpeg install themselves |
 | **Videos and books** | Video collections with play-all and shuffle, a Creators view, **save any video as a song**, **trim** (fast lossless or frame-exact), covers generated automatically, participants, tags, series, and ratings. The EPUB reader remembers your page |
 | **Documents** (e-Management) | Two separate spaces per account, *Personal* and *Serviciu* (work), each with its own categories, tags and documents with up to 10 attachments of 50 MB; PDFs and images open in the browser; export and import of a whole space |
-| **Webtoons** (Koma Shelf) | Upload Koma's output (a zip, a `.cbz` or images); strips are re-encoded to WebP and sliced, covers cropped automatically; private, unlisted or public; likes, views, creator profiles; moderation for admins; API tokens so Koma can publish directly |
 | **Budget** (Florin) | Transactions in 30+ currencies converted at stored rates, monthly budgets per category, a dashboard, analytics charts and CSV export |
 | **To-dos** (Tick) | Lists, tags, checklists, priorities, due dates and times, repeats, a quick-add line that understands "call mum tomorrow at 5pm #family !high every week", a board and a calendar |
-| **AI connector** | An MCP server at `/mcp` with 35 tools across every app (read, and with permission write), OAuth 2.1 with PKCE so Claude connects with just the address, revocable per-app tokens, and the same tools over plain HTTP |
+| **AI connector** | An MCP server at `/mcp` with tools across every app (read, and with permission write), OAuth 2.1 with PKCE so Claude connects with just the address, revocable per-app tokens, and the same tools over plain HTTP |
 | **Accounts** | The Admin console: per-account access to each app, one storage space per account (with optional per-app limits inside it), what each account stores in each app, defaults for new accounts, roles, password resets and "sign out everywhere" |
 | **Backup and upkeep** | **Full backup and restore** of every account, password, file and app in one passphrase-protected file (restores onto a new server, even with a different key), **scheduled backups**, an **activity log**, a **storage check**, and **one-click updates** from GitHub |
 | **Security** | Revocable sessions, sign-in rate limiting, timing-safe login, tokens kept out of logs and `Referer` headers, a sandbox for uploaded HTML and SVG, and CSRF protection in every app |
@@ -59,7 +57,7 @@ AkulavBox is the account and the server, the way a Google account holds Gmail an
 ## Requirements
 
 - Node.js **22.13 or later** (the built-in `node:sqlite` module needs it)
-- Optional: the native `bcrypt` and `sharp` modules. Without `bcrypt` AkulavBox uses the pure-JS `bcryptjs`; without `sharp` the browser makes thumbnails, but **Koma Shelf needs `sharp`** (it stays off, with a note on the launcher, when it is missing).
+- Optional: the native `bcrypt` and `sharp` modules. Without `bcrypt` AkulavBox uses the pure-JS `bcryptjs`; without `sharp` the browser makes thumbnails.
 
 ## Getting started
 
@@ -93,12 +91,9 @@ All settings live in `.env` (see [.env.example](.env.example)).
 | `MASTER_KEY` | *required* | File encryption key, **exactly 32 characters**. Losing or changing it makes stored files unreadable |
 | `PORT` / `HOST` | `3000` / `0.0.0.0` | Where the server listens |
 | `DATA_DIR` (or `STORAGE_DIR`) | `./data` | Where every app's database and files live. An older install with `./storage` and no `./data` keeps using it |
-| `PUBLIC_URL` | | The server's public address, e.g. `https://cloud.example.com`, for Koma Shelf's share links and previews |
+| `PUBLIC_URL` | | The server's public address, e.g. `https://cloud.example.com`, for the AI connector |
 | `TRUST_PROXY` | off | Set to `1` behind a reverse proxy, so rate limiting sees real client IPs and cookies are marked `Secure` on HTTPS |
 | `DOCUMENTS_QUOTA_MB` | none | A default limit for e-Management inside each account's storage (change it in the Admin console) |
-| `MANGA_QUOTA_MB` | none | A default limit for Koma Shelf inside each account's storage (change it in the Admin console) |
-| `MANGA_MAX_UPLOAD_MB` | `1024` | Largest single Koma Shelf upload |
-| `MANGA_SITE_NAME` | `Koma Shelf` | Koma Shelf's name in its header and titles |
 | `TRASH_DAYS` | `30` | How long deleted items stay in Trove's trash |
 | `DISK_RESERVE_MB` | `512` | Uploads are refused when they would leave less free disk than this |
 | `TOKEN_TTL` | `7d` | Sign-in lifetime. Active sessions renew themselves daily |
@@ -120,7 +115,7 @@ All settings live in `.env` (see [.env.example](.env.example)).
 | `ACTIVITY_DAYS` | `180` | How long the activity log keeps entries |
 | `CORS_ORIGIN` | | Other websites allowed to call Trove's API from a browser (default: none; the AI connector's endpoints are open to any origin, with a token) |
 
-The server refuses to start if `MASTER_KEY` or `JWT_SECRET` is missing or invalid, and warns you if they are still the example values. Behind a reverse proxy, allow large request bodies (Koma Shelf uploads, e.g. nginx `client_max_body_size 1g;`).
+The server refuses to start if `MASTER_KEY` or `JWT_SECRET` is missing or invalid, and warns you if they are still the example values. Behind a reverse proxy, allow large request bodies (e.g. nginx `client_max_body_size 1g;`).
 
 ## Upgrading
 
@@ -131,6 +126,10 @@ By hand, upgrade in place. Your existing data keeps working:
 1. Stop the server, update the code, and run `npm install`.
 2. Start it. Pending database migrations run automatically, and **the database is snapshotted to `data/backups/` first**.
 3. Encrypted files on disk use the same format as 1.x and are never rewritten.
+
+### Upgrading to 6.0
+
+6.0 removes **Koma Shelf** (`/manga/`). Nothing is deleted: its folder, `data/manga/`, stays on disk untouched, but nothing reads it any more, so it no longer counts in anyone's storage and full backups leave it out. Delete the folder yourself once you've kept what you want from it. Backups made before 6.0 still restore; their Koma Shelf part is skipped. AI connector tokens lose their Koma Shelf access, and `MANGA_QUOTA_MB`, `MANGA_MAX_UPLOAD_MB` and `MANGA_SITE_NAME` in `.env` are ignored.
 
 ### Upgrading to 5.1
 
@@ -171,12 +170,11 @@ data/
   documents/<account>/
     personal/ansc.db, uploads/  e-Management: the Personal space
     work/ansc.db, uploads/      e-Management: the Serviciu (work) space and the account's activity log
-  manga/
-    koma-shelf.sqlite           Koma Shelf: works, chapters, likes, API tokens
-    works/<id>/                 the optimised strips and covers
-    tmp/                        uploads being processed
   budget/
     florin.db                   Florin: categories, transactions, exchange rates
+  tasks/
+    tasks.db                    Tick: lists, tasks, tags
+  ironveil/<account>/           Ironveil: the game's saves
   temp/                         unfinished uploads (cleared after 24 h)
   tools/                        yt-dlp and ffmpeg, installed automatically (safe to delete)
   backups/                      database snapshots taken before upgrades, and data replaced by a restore
@@ -204,8 +202,8 @@ e-Management can also export and import a single space (Setări → Copie de rez
 
 ## Tech stack
 
-- **Server:** one [Fastify](https://fastify.dev/) 5 process in CommonJS: AkulavBox, the launcher and the console in `src/`, and each other app as a Fastify plugin in `apps/`. The built-in `node:sqlite`, JWT, bcrypt, archiver, sharp and yauzl
-- **Pages:** Trove, Florin and Tick are Vue 3 (served locally) with Tailwind compiled by the server into a cached stylesheet, plain ES modules with no build step; e-Management is Vue 3 served locally; Koma Shelf is rendered on the server; the launcher, sign-in page and Admin console are plain JavaScript
+- **Server:** one [Fastify](https://fastify.dev/) 5 process in CommonJS: AkulavBox, the launcher and the console in `src/`, and each other app as a Fastify plugin in `apps/`. The built-in `node:sqlite`, JWT, bcrypt, archiver and sharp
+- **Pages:** Trove, Florin and Tick are Vue 3 (served locally) with Tailwind compiled by the server into a cached stylesheet, plain ES modules with no build step; e-Management is Vue 3 served locally; Ironveil is the game's WebAssembly build; the launcher, sign-in page and Admin console are plain JavaScript
 
 ---
 

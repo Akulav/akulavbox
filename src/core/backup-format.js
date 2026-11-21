@@ -65,10 +65,12 @@ function listData(db) {
 // A restore replaces the folder of every app the backup has (manifest.apps), so a
 // backup from before 4.0 leaves those apps' data as it is.
 // ---------------------------------------------------------------------------
-const { APP_IDS } = require('./app-list');
+const { APP_IDS, RETIRED_APP_IDS } = require('./app-list');
 const IS_DB = /\.(db|sqlite)$/;
 const SKIP = /(^|\/)(tmp|import-[^/]*)(\/|$)|\.(db|sqlite)-(wal|shm|journal)$|\.part$/;
 const APP_ENTRY = new RegExp(`^apps\\/(${APP_IDS.join('|')})\\/((?:[\\w.-]+\\/)*[\\w.-]+)$`);
+// an app that was removed: older backups still have its files, which a restore reads past
+const RETIRED_ENTRY = new RegExp(`^apps\\/(${RETIRED_APP_IDS.join('|')})\\/`);
 
 function listApps() {
   const files = [], dbs = [];
@@ -102,4 +104,4 @@ function estimate(db) {
   return { files: files.length, bytes: files.reduce((a, f) => a + f.size, 0) + Math.round(dbBytes / 3) };
 }
 
-module.exports = { MAGIC, SCRYPT, ENTRY, END, deriveKeys, checkValue, entryHeader, snapshotDb, listData, listApps, estimate, APP_IDS, APP_ENTRY };
+module.exports = { MAGIC, SCRYPT, ENTRY, END, deriveKeys, checkValue, entryHeader, snapshotDb, listData, listApps, estimate, APP_IDS, APP_ENTRY, RETIRED_ENTRY };

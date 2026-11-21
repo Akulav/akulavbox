@@ -1,5 +1,5 @@
 // The apps around AkulavBox in `npm run check`: one sign-in (the shared cookie), the launcher,
-// the Admin console, and e-Management, Koma Shelf and Florin each storing in their own folder.
+// the Admin console, and e-Management and Florin each storing in their own folder.
 // Called from scripts/check.js with its helpers; it runs against the same throwaway server.
 
 const fs = require('fs');
@@ -53,7 +53,7 @@ module.exports = async function appsCheck({ api, ok, base, tmp, login, adminToke
   mainDb.close();
   ok(inMain === 0 && fs.existsSync(path.join(tmp, 'box', 'trove.db')), 'Trove keeps its tables in box/trove.db, not in akulavbox.db');
   const cat = await json(await get('/api/apps/catalog'));
-  ok(cat?.name === 'AkulavBox' && cat.apps.map((a) => a.name).join() === 'Trove,e-Management,Koma Shelf,Florin,Tick,Ironveil', 'the sign-in page reads the app names from the server', JSON.stringify(cat?.apps?.map((a) => a.name)));
+  ok(cat?.name === 'AkulavBox' && cat.apps.map((a) => a.name).join() === 'Trove,e-Management,Florin,Tick,Ironveil', 'the sign-in page reads the app names from the server', JSON.stringify(cat?.apps?.map((a) => a.name)));
   const vz = await get('/hub/vendor/vue.js', { headers: { 'Accept-Encoding': 'gzip' } });
   ok(vz.status === 200 && vz.headers.get('etag') && (await get('/hub/vendor/vue.js', { headers: { 'If-None-Match': vz.headers.get('etag') } })).status === 304, 'Vue is served with an ETag (a reload costs a 304)');
   ok((await get('/box')).headers.get('location') === '/box/', '/box goes to /box/');
@@ -85,12 +85,11 @@ module.exports = async function appsCheck({ api, ok, base, tmp, login, adminToke
   await api('/api/user/profile', { method: 'PATCH', body: { profile_image: null } });
   ok((await json(await get('/api/session/me', { cookie: jar })))?.avatar === null, 'removing the picture removes it everywhere');
   for (const page of ['/hub/account.js', '/hub/account.css', '/hub/theme.js']) ok((await get(page)).status === 200, `serves ${page}`);
-  // Koma Shelf needs sharp, an optional dependency (CI also runs without the optional native modules)
-  let sharp = null;
-  try { sharp = require('sharp'); } catch (e) { /* optional */ }
   const apps = await api('/api/apps');
-  const expected = sharp ? ['box', 'documents', 'manga', 'budget', 'tasks', 'ironveil'] : ['box', 'documents', 'budget', 'tasks', 'ironveil'];
-  ok(apps.status === 200 && apps.data.apps.length === 6 && expected.every((id) => apps.data.apps.some((a) => a.id === id && a.available)), `the launcher lists all six apps, ${expected.length} running`, JSON.stringify(apps.data?.apps?.map((a) => [a.id, a.available, a.problem])));
+  const expected = ['box', 'documents', 'budget', 'tasks', 'ironveil'];
+  ok(apps.status === 200 && apps.data.apps.length === 5 && expected.every((id) => apps.data.apps.some((a) => a.id === id && a.available)), 'the launcher lists all five apps, every one running', JSON.stringify(apps.data?.apps?.map((a) => [a.id, a.available, a.problem])));
+  // Koma Shelf was removed in 6.0: its address is gone
+  ok((await get('/manga/', { cookie: jar })).status === 404, 'Koma Shelf is gone (/manga/ is a 404)');
 
   // --- e-Management ---
   console.log('\ne-Management (/docs)');
@@ -215,49 +214,6 @@ module.exports = async function appsCheck({ api, ok, base, tmp, login, adminToke
   const tsummary = (await api('/api/apps')).data.apps.find((a) => a.id === 'tasks');
   ok(/open task/.test(tsummary?.summary || ''), 'the launcher says how many tasks are open', tsummary?.summary);
 
-  // --- Koma Shelf ---
-  console.log('\nKoma Shelf (/manga)');
-  if (!sharp) {
-    const down = await get('/manga/');
-    ok(down.status === 503 && /sharp/.test(await down.text()), 'without sharp, Koma Shelf says what is missing and the rest runs on');
-    ok(apps.data.apps.find((a) => a.id === 'manga')?.problem?.includes('sharp'), 'the launcher shows why it isn’t running');
-  }
-  let workId = null;
-  if (sharp) {
-    const shelf = await get('/manga/');
-    const shelfHtml = await shelf.text();
-    ok(shelf.status === 200 && /href="\/manga\/static\/app\.css/.test(shelfHtml) && !/href="\/(w|u|me|upload)\//.test(shelfHtml), 'the shelf is public, with every link under /manga');
-    const missing = await get('/manga/no/such/page');
-    ok(missing.status === 404 && /Koma Shelf/.test(await missing.text()), 'unknown pages get Koma Shelf’s own 404');
-    const loginLink = await get('/manga/login');
-    ok(loginLink.status === 302 && loginLink.headers.get('location') === '/login?next=%2Fmanga%2Fme', '“Log in” goes to the shared sign-in page');
-    const account = await get('/manga/account', { cookie: jar });
-    const accountHtml = await account.text();
-    const csrf = /name="_csrf" value="([^"]+)"/.exec(accountHtml)?.[1];
-    ok(account.status === 200 && csrf && /href="\/box\/#\/profile"/.test(accountHtml), 'the account page has a form token and links to the shared profile');
-    const noToken = await get('/manga/account/profile', { cookie: jar, method: 'POST', body: 'bio=hi', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
-    ok(noToken.status === 403, 'forms without the token are refused');
-    const bio = await get('/manga/account/profile', { cookie: jar, method: 'POST', body: `bio=Check+bio&_csrf=${encodeURIComponent(csrf)}`, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
-    ok(bio.status === 302 && bio.headers.get('location') === '/manga/account', 'save the profile (redirects stay under /manga)', `${bio.status} ${bio.headers.get('location')}`);
-    ok(fs.existsSync(path.join(tmp, 'manga', 'koma-shelf.sqlite')), 'its database lives in manga/ of the data folder');
-    const png = await sharp({ create: { width: 800, height: 1600, channels: 3, background: '#335577' } }).png().toBuffer();
-    const up = new FormData();
-    up.append('_csrf', csrf);
-    up.append('title', 'Check webtoon');
-    up.append('visibility', 'public');
-    up.append('files', new Blob([png], { type: 'image/png' }), '001.png');
-    const sent = await fetch(`${B}/manga/upload`, { method: 'POST', body: up, headers: { Cookie: jar }, redirect: 'manual' });
-    workId = /\/manga\/w\/([\w-]+)/.exec(sent.headers.get('location') || '')?.[1];
-    ok(sent.status === 303 && workId, 'upload a webtoon', `${sent.status} ${sent.headers.get('location')}`);
-    let st = null;
-    for (let i = 0; i < 60 && workId; i++) { st = await json(await get(`/manga/api/works/${workId}/status`, { cookie: jar })); if (st?.status !== 'processing') break; await new Promise((r) => setTimeout(r, 250)); }
-    ok(st?.status === 'ready', 'it is processed into WebP slices', JSON.stringify(st));
-    ok(fs.existsSync(path.join(tmp, 'manga', 'works', workId || 'x', 'cover.webp')), 'its images live in manga/works/');
-    const used = (await api('/api/apps')).data.apps.find((a) => a.id === 'manga')?.used_bytes;
-    ok(used > 0, 'what it takes counts towards the Koma Shelf quota', String(used));
-    ok((await get(`/manga/w/${workId}`)).status === 200, 'a public work opens without signing in');
-  }
-
   // --- Ironveil ---
   console.log('\nIronveil (/ironveil)');
   ok((await get('/ironveil/')).headers.get('location')?.startsWith('/login'), 'signed-out visitors go to the sign-in page');
@@ -288,18 +244,18 @@ module.exports = async function appsCheck({ api, ok, base, tmp, login, adminToke
   console.log('\nAdmin console');
   const iconCheck = await api('/api/admin/site-icon');
   ok(iconCheck.status === 200 && Array.isArray(iconCheck.data?.steps) && iconCheck.data.steps.length > 0, 'the site icon check reports its steps (here: an IP address, which Bitwarden refuses)', JSON.stringify(iconCheck.data?.steps?.[0]));
-  const mk = await api('/api/admin/users', { method: 'POST', body: { username: 'appuser', password: 'apppass123', apps: { manga: { enabled: false } } } });
-  ok(mk.status === 200, 'create an account, with Koma Shelf off from the start');
+  const mk = await api('/api/admin/users', { method: 'POST', body: { username: 'appuser', password: 'apppass123', apps: { budget: { enabled: false } } } });
+  ok(mk.status === 200, 'create an account, with Florin off from the start');
   const ul = await fetch(`${B}/api/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'appuser', password: 'apppass123' }) });
   const ujar = cookieFrom(ul);
   const utoken = (await json(ul))?.token;
   const uapps = await json(await fetch(`${B}/api/apps`, { headers: { Authorization: `Bearer ${utoken}` } }));
-  ok(uapps?.apps?.length === 5 && !uapps.apps.some((a) => a.id === 'manga'), 'the launcher only shows the apps the account may use');
-  ok((await get('/docs/api/me', { cookie: ujar })).status === 200 && (!sharp || (await get('/manga/me', { cookie: ujar })).status === 403), 'a turned-off app refuses the account');
+  ok(uapps?.apps?.length === 4 && !uapps.apps.some((a) => a.id === 'budget'), 'the launcher only shows the apps the account may use');
+  ok((await get('/docs/api/me', { cookie: ujar })).status === 200 && (await get('/budget/api/auth/me', { cookie: ujar })).status === 403, 'a turned-off app refuses the account');
   ok((await fetch(`${B}/api/admin/console`, { headers: { Authorization: `Bearer ${utoken}` } })).status === 403, 'the console API is for admins only');
   const con = await api('/api/admin/console');
   const row = con.data?.users?.find((u) => u.username === 'appuser');
-  ok(con.status === 200 && row && row.apps.manga.enabled === false && row.apps.documents.enabled === true && con.data.apps.length === 6, 'the console lists every account with its apps', JSON.stringify(row?.apps));
+  ok(con.status === 200 && row && row.apps.budget.enabled === false && row.apps.documents.enabled === true && con.data.apps.length === 5, 'the console lists every account with its apps', JSON.stringify(row?.apps));
   ok((await api(`/api/admin/users/${row.id}/apps/documents`, { method: 'PATCH', body: { quota_bytes: 0 } })).status === 400, 'a zero quota is refused');
   ok((await api(`/api/admin/users/${row.id}/apps/documents`, { method: 'PATCH', body: { quota_bytes: 1000 } })).data?.quota_bytes === 1000, 'set an account’s e-Management quota');
   const big = new FormData();
@@ -337,7 +293,9 @@ module.exports = async function appsCheck({ api, ok, base, tmp, login, adminToke
   await api(`/api/admin/users/${row.id}/quota`, { method: 'PATCH', body: { quota: 5 * 1024 ** 3 } });
   const defsNone = await api('/api/admin/apps/defaults', { method: 'PUT', body: { documents: { quota_bytes: null } } });
   ok(defsNone.status === 200 && defsNone.data.documents.quota_bytes === null, 'an app’s default limit can be “none” (the account’s space only)');
-  await fetch(`${B}/budget/api/auth/me`, { headers: { Cookie: ujar } }); // first visit creates the account's Florin row
+  // Florin back on, and a first visit creates the account's Florin row (delete-user must remove it)
+  await api(`/api/admin/users/${row.id}/apps/budget`, { method: 'PATCH', body: { enabled: true } });
+  await fetch(`${B}/budget/api/auth/me`, { headers: { Cookie: ujar } });
   const utask = await T('/tasks', { method: 'POST', body: { title: 'Their task' }, cookie: ujar });
   ok(utask.status === 201 && !(await json(await T('/tasks'))).tasks.some((t) => t.title === 'Their task'), 'one account doesn’t see another’s tasks');
   const defs = await api('/api/admin/apps/defaults', { method: 'PUT', body: { budget: { enabled: false } } });
@@ -361,5 +319,5 @@ module.exports = async function appsCheck({ api, ok, base, tmp, login, adminToke
   const tleft = tdb.prepare('SELECT COUNT(*) AS n FROM tasks WHERE user_id = ?').get(row.id).n;
   tdb.close();
   ok(del.status === 200 && !fs.existsSync(uDocs) && left === 0 && tleft === 0 && !fs.existsSync(uSaves), 'deleting an account removes its data in every app (Ironveil’s saves too)');
-  return { jar, docId: madeData?.id, workId, taskTitle: other?.title };
+  return { jar, docId: madeData?.id, taskTitle: other?.title };
 };

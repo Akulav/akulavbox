@@ -54,8 +54,9 @@ createApp({
     <template v-else>
       <!-- Top bar: brand · sections · account (sections move to the bottom bar on phones) -->
       <header class="sticky top-0 z-40 border-b border-line glass">
-        <!-- three equal-weight columns, so the sections sit at the true centre of the page whatever the side widths -->
-        <div class="max-w-[1500px] mx-auto h-14 md:h-16 px-3 md:px-8 flex md:grid md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 md:gap-4">
+        <!-- three equal-weight columns, so the sections sit at the true centre of the page whatever the side widths;
+             full width with the same gutter as every app, so the account sits in the same corner everywhere -->
+        <div class="h-14 md:h-[60px] px-4 md:px-6 flex md:grid md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 md:gap-4">
           <a href="#/files" class="shrink-0 min-w-0 mr-auto md:mr-0 md:justify-self-start" title="Trove"><BrandLockup :size="30" :animated="true" /></a>
 
           <nav class="hidden md:flex justify-center" aria-label="Sections">
@@ -267,7 +268,7 @@ createApp({
     const userMenu = ref(false);
     // the account's apps, for the switcher in the account menu (the shared cookie answers /api/session/me)
     const otherApps = ref([]);
-    const APP_ICONS = { box: 'layers', documents: 'file-text', manga: 'book-open', budget: 'wallet', tasks: 'square-check', ironveil: 'swords' };
+    const APP_ICONS = { box: 'layers', documents: 'file-text', budget: 'wallet', tasks: 'square-check', ironveil: 'swords' };
     const loadApps = () => fetch('/api/session/me', { credentials: 'same-origin' }).then(r => (r.ok ? r.json() : null)).then(m => { if (m?.apps) otherApps.value = m.apps; }).catch(() => {});
     loadApps(); // once, so the menu opens complete
     // close the account menu when the page changes

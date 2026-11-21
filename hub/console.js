@@ -19,7 +19,7 @@ function statsHtml(d) {
   const tiles = [
     [icon('users'), 'Accounts', d.users.length, `${d.users.filter((u) => u.role === 'admin').length} admin`],
     [icon('hdd'), 'Free disk', disk ? formatBytes(disk.free) : '—', disk ? `of ${formatBytes(disk.total)}` : d.storage_dir],
-    ...['box', 'documents', 'manga'].map((id) => {
+    ...['box', 'documents', 'ironveil'].filter((id) => by[id]).map((id) => {
       const a = by[id];
       const t = a.totals;
       return [`<span class="dot" style="width:8px;height:8px;border-radius:50%;background:${a.color}"></span>`, a.name,
@@ -163,7 +163,7 @@ async function onAction(e) {
   }
   if (kind === 'role') {
     const make = u.role !== 'admin';
-    const okd = await dialog({ title: make ? `Make ${u.username} an admin?` : `Remove ${u.username}’s admin rights?`, message: make ? 'Admins manage every account, read the activity log, restore backups and moderate Koma Shelf.' : 'They keep their data and their apps.', confirm: make ? 'Make admin' : 'Remove rights' });
+    const okd = await dialog({ title: make ? `Make ${u.username} an admin?` : `Remove ${u.username}’s admin rights?`, message: make ? 'Admins manage every account, read the activity log, and restore backups.' : 'They keep their data and their apps.', confirm: make ? 'Make admin' : 'Remove rights' });
     if (okd) act(() => api(`/api/admin/users/${encodeURIComponent(u.id)}/role`, { method: 'PATCH', body: { role: make ? 'admin' : 'user' } }), make ? `${u.username} is now an admin` : `${u.username} is no longer an admin`);
     return;
   }

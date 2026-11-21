@@ -16,7 +16,7 @@ const rel = (p) => path.relative(root, p).split(path.sep).join('/');
 const problems = [];
 
 // the apps' browser code is checked separately, as modules or classic scripts
-const NOT_BACKEND = /[\\/]apps[\\/](trove|budget|documents|manga|tasks|ironveil)[\\/]public([\\/]|$)/;
+const NOT_BACKEND = /[\\/]apps[\\/](trove|budget|documents|tasks|ironveil)[\\/]public([\\/]|$)/;
 function walk(dir, out = [], skip = null) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
@@ -39,10 +39,10 @@ const check = (file, asModule) => {
 const backend = [...walk(path.join(root, 'src')), ...walk(path.join(root, 'scripts')), ...walk(path.join(root, 'test')), ...walk(path.join(root, 'apps'), [], NOT_BACKEND)];
 const trovePage = path.join(root, 'apps', 'trove', 'public');
 const frontend = walk(trovePage);
-// browser modules of the launcher, the Admin console, e-Management and Florin; Koma Shelf's scripts are classic ones
+// browser modules of the launcher, the Admin console, e-Management, Florin and Tick
 const pages = [...walk(path.join(root, 'hub')), ...walk(path.join(root, 'apps', 'documents', 'public')), ...walk(path.join(root, 'apps', 'budget', 'public')), ...walk(path.join(root, 'apps', 'tasks', 'public'))];
-// classic scripts: Koma Shelf's, and Ironveil's page with the game's own web build (apps/ironveil/public/game)
-const classic = [...walk(path.join(root, 'apps', 'manga', 'public')), ...walk(path.join(root, 'apps', 'ironveil', 'public'))];
+// classic scripts: Ironveil's page with the game's own web build (apps/ironveil/public/game)
+const classic = walk(path.join(root, 'apps', 'ironveil', 'public'));
 for (const f of backend) check(f, false);
 for (const f of [...frontend, ...pages]) check(f, true);
 for (const f of classic) check(f, false);

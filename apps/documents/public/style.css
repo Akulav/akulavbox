@@ -128,7 +128,8 @@ label.field > span { display: block; font-size: 13px; font-weight: 600; margin-b
   background: var(--header-bg); border-bottom: 1px solid var(--border);
   backdrop-filter: saturate(1.4) blur(14px); -webkit-backdrop-filter: saturate(1.4) blur(14px);
 }
-.topbar-in { max-width: 1240px; margin: 0 auto; padding: 0 20px; display: flex; align-items: center; gap: 18px; height: 60px; }
+/* lățime completă, cu aceeași margine ca toate aplicațiile: contul stă în același colț peste tot */
+.topbar-in { padding: 0 24px; display: flex; align-items: center; gap: 18px; height: 60px; }
 .brand { display: flex; align-items: center; gap: 10px; font-family: 'Bricolage Grotesque', Geist, sans-serif; font-weight: 700; font-size: 17px; color: var(--text); text-decoration: none; flex-shrink: 0; }
 .brand-logo { width: 30px; height: 30px; border-radius: 9px; display: block; }
 .nav { display: flex; gap: 2px; flex: 1; min-width: 0; }
@@ -300,11 +301,11 @@ tbody tr:hover td { background: color-mix(in srgb, var(--surface-2) 50%, transpa
 }
 /* telefon: un rând cu marca și contul, apoi spațiul și meniul, care se derulează lateral */
 @media (max-width: 860px) {
-  .topbar-in { height: auto; flex-wrap: wrap; padding: 8px 14px; gap: 8px 10px; }
+  .topbar-in { height: auto; flex-wrap: wrap; padding: 8px 16px; gap: 8px 10px; }
   .brand { order: 1; }
   .userbox { order: 2; }
   .space-switch { order: 3; }
-  .nav { order: 4; flex: 1 1 100%; overflow-x: auto; scrollbar-width: none; margin: 0 -14px; padding: 0 14px 4px; }
+  .nav { order: 4; flex: 1 1 100%; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px 4px; }
   .nav::-webkit-scrollbar { display: none; }
   .page { padding: 20px 14px 56px; }
   .docs, .form-cols { grid-template-columns: 1fr; }

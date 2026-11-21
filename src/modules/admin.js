@@ -58,7 +58,7 @@ module.exports = async function (fastify) {
     });
 
     // every app forgets the account too: Trove its files, folders, albums and counter
-    // (apps/trove/index.js), e-Management, Koma Shelf, Florin and Tick theirs
+    // (apps/trove/index.js), e-Management, Florin, Tick and Ironveil theirs
     apps.deleteUser(id);
     activity.log(request, 'admin.user_deleted', { target: target.username });
     return { success: true };

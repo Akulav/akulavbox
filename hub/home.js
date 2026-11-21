@@ -14,7 +14,7 @@ function spaceHtml(s) {
     </div>
     <div class="space-bar" role="img" aria-label="${total}% of your storage is used">${s.apps.filter((a) => a.bytes > 0).map((a) => `<span style="width:${pct(a.bytes)}%;--c:${esc(a.color)}" title="${esc(a.name)}: ${formatBytes(a.bytes)}"></span>`).join('')}</div>
     <ul class="space-legend">${s.apps.map((a) => `<li><span class="dot" style="--c:${esc(a.color)}"></span>${esc(a.name)} <span class="muted num">${formatBytes(a.bytes)}</span></li>`).join('')}</ul>
-    <p class="faint" style="font-size:12px;margin-top:10px">One space for every app on your account. Florin and Tick keep no files.</p>`;
+    <p class="faint space-note" style="font-size:12px;margin-top:10px">One space for every app on your account. Florin and Tick keep no files.</p>`;
 }
 
 async function main() {
@@ -43,7 +43,7 @@ async function main() {
   try { weak = localStorage.getItem('akulavWeak') === '1'; } catch (e) { /* private mode */ }
   if (weak) {
     $('weak').hidden = false;
-    $('weak').innerHTML = `${icon('key')}<span style="flex:1">Your password is easy to guess, and it opens every app. Change it to keep your data safe.</span><a class="btn btn-sm" href="/box/#/profile">Change password</a>`;
+    $('weak').innerHTML = `${icon('key')}<span style="flex:1">Your password is easy to guess, and it opens every app.</span><a class="btn btn-sm" href="/box/#/profile">Change it</a>`;
   }
 
   $('space').innerHTML = spaceHtml(data.space);
@@ -55,7 +55,7 @@ async function main() {
       : '';
     const off = !a.available;
     return `<a class="panel app-card ${off ? 'off' : ''}" href="${off ? '#' : esc(a.path)}" style="--c:${esc(a.color)}" ${off ? 'aria-disabled="true"' : ''} data-app="${esc(a.id)}">
-      <div style="display:flex;align-items:center;gap:14px">${appTile(a, true)}<div style="min-width:0"><h2>${esc(a.name)}</h2>${a.summary ? `<p class="muted" style="font-size:12.5px">${esc(a.summary)}</p>` : ''}</div></div>
+      <div style="display:flex;align-items:center;gap:12px">${appTile(a, true)}<div style="min-width:0"><h2>${esc(a.name)}</h2>${a.summary ? `<p class="muted" style="font-size:12.5px">${esc(a.summary)}</p>` : ''}</div></div>
       <p class="muted" style="font-size:13.5px">${esc(a.tagline)}</p>
       <div class="foot">${off ? `<p class="alert" style="font-size:12px">${icon('alert')}<span>${esc(a.problem || 'Not running on this server.')}</span></p>` : `${usage}<span class="go">Open ${icon('arrow')}</span>`}</div>
     </a>`;

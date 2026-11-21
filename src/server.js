@@ -110,7 +110,7 @@ fastify.register(require('./modules/console'));
 fastify.register(require('./modules/connector'));
 fastify.register(require('./modules/user'));
 
-// The apps: Trove (/box/ and /api/…), e-Management (/docs), Koma Shelf (/manga), Florin (/budget), Tick (/tasks)
+// The apps: Trove (/box/ and /api/…), e-Management (/docs), Florin (/budget), Tick (/tasks), Ironveil (/ironveil)
 require('../apps').load(fastify);
 
 // Errors nobody caught: client mistakes (bad JSON, too large, wrong type) keep their

@@ -86,7 +86,7 @@ const Root = {
       <div class="flex min-w-0 flex-1">
         <main class="min-w-0 flex-1">
           <!-- the account top right, like every app; phones also get the brand and the add button (the sidebar has the brand on wide screens) -->
-          <header class="sticky top-0 z-20 flex h-14 items-center gap-1 border-b border-line bg-surface/85 px-4 backdrop-blur">
+          <header class="sticky top-0 z-20 flex h-14 items-center gap-1 border-b border-line bg-surface/85 px-4 backdrop-blur md:px-6 lg:h-[60px]">
             <Logo :size="26" class="lg:hidden" />
             <button type="button" @click="addOnPhone" class="ml-auto rounded-lg p-2 text-brand lg:hidden" aria-label="Add a task"><Icon name="plus" :size="22" /></button>
             <span class="hidden flex-1 lg:block"></span>

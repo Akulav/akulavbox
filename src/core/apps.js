@@ -10,7 +10,7 @@ const bus = require('./bus');
 //
 // Storage is ONE space per account, shared by every app that keeps files, like a
 // Google account's: users.quota_bytes is the limit, and what Trove, e-Management
-// and Koma Shelf hold all counts towards it (space(), room()). An app may also get
+// and Ironveil hold all counts towards it (space(), room()). An app may also get
 // a limit of its own inside that space (user_apps.quota_bytes, or the default):
 // none unless the admin sets one.
 //
@@ -28,11 +28,11 @@ const byId = new Map(APPS.map((a) => [a.id, a]));
 const hooks = new Map(); // id -> { usage, summary, deleteUser, totals, close }
 const failures = new Map(); // id -> message, for apps that couldn't start
 
-// Per-app limits inside the shared space are off by default; DOCUMENTS_QUOTA_MB / MANGA_QUOTA_MB
-// still set one when they are in .env.
+// Per-app limits inside the shared space are off by default; DOCUMENTS_QUOTA_MB still sets one
+// when it is in .env.
 const builtinDefaults = () => Object.fromEntries(APPS.filter((a) => !a.core).map((a) => [a.id, {
   enabled: true,
-  quota_bytes: a.id === 'documents' ? config.documentsQuotaBytes : a.id === 'manga' ? config.mangaQuotaBytes : null,
+  quota_bytes: a.id === 'documents' ? config.documentsQuotaBytes : null,
 }]));
 
 let defaultsCache = null; // read on every access() check: kept until setDefaults
@@ -71,7 +71,7 @@ function setDefaults(next) {
 }
 
 const userRow = db.prepare('SELECT id, username, role, token_version FROM users WHERE id = ?');
-/** An account by id (for apps that hold their own tokens, like Koma Shelf's API tokens) */
+/** An account by id (for apps that hold their own tokens) */
 const boxUser = (id) => userRow.get(id) || null;
 
 const rowOf = db.prepare('SELECT enabled, quota_bytes FROM user_apps WHERE user_id = ? AND app = ?');
@@ -159,7 +159,7 @@ function changed(userId, appId) {
 
 /**
  * The account's storage space, shared by every app:
- * { quota_bytes, used_bytes, free_bytes, by_app: { box, documents, manga } }.
+ * { quota_bytes, used_bytes, free_bytes, by_app: { box, documents, ironveil } }.
  * `fresh`: an app id whose usage is read now rather than from the cache (the one asking).
  */
 function space(userId, { fresh } = {}) {

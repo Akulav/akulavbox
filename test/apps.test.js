@@ -28,18 +28,18 @@ test('without a row an account gets the defaults; a row overrides them', () => {
 
 test('quotas must be positive, and apps without files have none', () => {
   user('a3');
-  for (const bad of [0, -5, 'lots', NaN]) assert.throws(() => apps.setAccess('a3', 'manga', { quota_bytes: bad }), /larger than 0/);
+  for (const bad of [0, -5, 'lots', NaN]) assert.throws(() => apps.setAccess('a3', 'documents', { quota_bytes: bad }), /larger than 0/);
   apps.setAccess('a3', 'budget', { quota_bytes: 123 });
   assert.equal(apps.access('a3', 'budget').quota_bytes, null);
 });
 
 test('defaults can change, per app', () => {
   user('a4');
-  apps.setDefaults({ budget: { enabled: false }, manga: { quota_bytes: 2048 } });
+  apps.setDefaults({ budget: { enabled: false }, ironveil: { quota_bytes: 2048 } });
   assert.equal(apps.access('a4', 'budget').enabled, false);
-  assert.equal(apps.access('a4', 'manga').quota_bytes, 2048);
-  assert.throws(() => apps.setDefaults({ manga: { quota_bytes: 0 } }));
-  apps.setDefaults({ budget: { enabled: true } });
+  assert.equal(apps.access('a4', 'ironveil').quota_bytes, 2048);
+  assert.throws(() => apps.setDefaults({ ironveil: { quota_bytes: 0 } }));
+  apps.setDefaults({ budget: { enabled: true }, ironveil: { quota_bytes: null } });
 });
 
 test('hooks: usage, room left, the launcher list, delete-user', () => {
@@ -60,10 +60,17 @@ test('hooks: usage, room left, the launcher list, delete-user', () => {
 
 test('an app that failed keeps its data hooks but is not offered', () => {
   user('a6');
-  apps.failed('manga', 'no sharp', { usage: () => 7, deleteUser: () => {} });
-  assert.equal(apps.status('manga'), 'failed');
-  assert.equal(apps.usage('a6', 'manga'), 7);
-  const manga = apps.forUser({ id: 'a6' }).find((a) => a.id === 'manga');
-  assert.equal(manga.available, false);
-  assert.equal(manga.problem, 'no sharp');
+  apps.failed('ironveil', 'no game build', { usage: () => 7, deleteUser: () => {} });
+  assert.equal(apps.status('ironveil'), 'failed');
+  assert.equal(apps.usage('a6', 'ironveil'), 7);
+  const game = apps.forUser({ id: 'a6' }).find((a) => a.id === 'ironveil');
+  assert.equal(game.available, false);
+  assert.equal(game.problem, 'no game build');
+});
+
+test('a removed app (Koma Shelf) is unknown: no access, no defaults', () => {
+  user('a7');
+  assert.equal(apps.access('a7', 'manga').enabled, false);
+  assert.equal('manga' in apps.defaults(), false);
+  assert.throws(() => apps.setAccess('a7', 'manga', { enabled: true }), /Unknown app/);
 });

@@ -1,7 +1,7 @@
 // AI connector tokens: what an AI app (Claude, …) may do in each app of an AkulavBox account.
 //
 // A token is `akb_` + 32 random bytes (base64url). Only its SHA-256 is stored (connector_tokens), with
-// its scopes: { box: 'read' | 'write', documents: …, manga: …, budget: …, tasks: … } (a missing app
+// its scopes: { box: 'read' | 'write', documents: …, budget: …, tasks: … } (a missing app
 // means no access). Tokens made by hand (/connect) live until they expire or are revoked; tokens of
 // an app that signed in through OAuth (/oauth) expire after a day and come back with their refresh
 // token (90 days, a new pair each time).

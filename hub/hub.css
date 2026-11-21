@@ -129,7 +129,9 @@ svg.i { width: 18px; height: 18px; flex-shrink: 0; fill: none; stroke: currentCo
 
 /* ---------- top bar ---------- */
 .topbar { position: sticky; top: 0; z-index: 20; border-bottom: 1px solid rgb(var(--line)); background: rgb(var(--bg) / .78); backdrop-filter: blur(14px); }
-.topbar .wrap { height: 60px; display: flex; align-items: center; gap: 10px; }
+/* full width, with the gutter every app uses: the account sits in the same corner everywhere */
+.topbar .wrap { max-width: none; height: 60px; display: flex; align-items: center; gap: 10px; padding: 0 16px; }
+@media (min-width: 768px) { .topbar .wrap { padding: 0 24px; } }
 .brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; min-width: 0; }
 .brand b { font-family: 'Bricolage Grotesque', Geist, sans-serif; font-size: 19px; font-weight: 750; letter-spacing: -0.01em; }
 /* the AkulavBox word: the apps' colours, like its mark */
@@ -190,13 +192,30 @@ svg.i { width: 18px; height: 18px; flex-shrink: 0; fill: none; stroke: currentCo
 .tile.lg { width: 52px; height: 52px; border-radius: 15px; }
 .tile.lg svg.i { width: 26px; height: 26px; }
 
-/* ---------- launcher ---------- */
-.hello { padding: 40px 0 26px; }
-.hello h1 { font-size: clamp(28px, 5vw, 40px); line-height: 1.1; }
-.apps-grid { display: grid; gap: 16px; grid-template-columns: 1fr; padding-bottom: 32px; }
+/* ---------- launcher: everything on one screen, no scrolling ---------- */
+.home { min-height: calc(100vh - 61px); min-height: calc(100dvh - 61px); display: flex; flex-direction: column; }
+.home-page { display: flex; flex-direction: column; gap: 14px; }
+.home .footer { margin-top: auto; padding: 16px 0 18px; }
+.hello { padding: 20px 0 2px; }
+.hello h1 { font-size: clamp(26px, 4vw, 36px); line-height: 1.1; margin-top: 2px; }
+.alert.weak { align-items: center; color: rgb(var(--accent)); background: rgb(var(--accent) / .1); }
+.apps-grid { display: grid; gap: 14px; grid-template-columns: 1fr; }
 @media (min-width: 640px) { .apps-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (min-width: 1040px) { .apps-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-.app-card { position: relative; display: flex; flex-direction: column; gap: 16px; padding: 20px; text-decoration: none; min-height: 190px; overflow: hidden; transition: transform .18s ease, border-color .18s ease; }
+@media (min-width: 900px) { .apps-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+/* five apps (or however many the account has) in one row */
+@media (min-width: 1100px) {
+  .apps-grid { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+  .apps-grid .tile.lg { width: 42px; height: 42px; border-radius: 13px; }
+  .apps-grid .tile.lg svg.i { width: 22px; height: 22px; }
+  .apps-grid .app-card { padding: 16px; }
+  .apps-grid .app-card h2 { font-size: 17px; letter-spacing: -0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}
+.app-card { position: relative; display: flex; flex-direction: column; gap: 12px; padding: 18px; text-decoration: none; min-height: 164px; overflow: hidden; transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease; }
+.app-card > .muted { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.app-card:hover { box-shadow: var(--shadow), 0 18px 40px -24px var(--c); }
+/* storage beside the account links */
+.lower { display: grid; gap: 14px; grid-template-columns: 1fr; }
+@media (min-width: 900px) { .lower { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); align-items: stretch; } }
 .app-card::after { content: ''; position: absolute; inset: auto -40px -60px auto; width: 180px; height: 180px; border-radius: 50%; background: var(--c); opacity: .07; transition: opacity .2s, transform .3s; pointer-events: none; }
 .app-card:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--c) 55%, rgb(var(--line))); }
 .app-card:hover::after { opacity: .13; transform: scale(1.1); }
@@ -206,29 +225,59 @@ svg.i { width: 18px; height: 18px; flex-shrink: 0; fill: none; stroke: currentCo
 .app-card .foot { margin-top: auto; display: grid; gap: 8px; }
 .app-card .row { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; }
 .app-card.off { opacity: .6; }
-/* phones: every app on one screen, a compact row each (the tagline is on the sign-in page and in the menu) */
+/* phones: every app on one screen, one slim row each (the tagline is on the sign-in page and in the menu) */
 @media (max-width: 639px) {
-  .apps-grid { gap: 10px; }
-  .app-card { min-height: 0; padding: 14px 16px; gap: 6px; }
-  .app-card > .muted { display: none; }
-  .app-card h2 { font-size: 17px; }
-  .app-card .foot { margin-top: 0; padding-left: 62px; display: flex; justify-content: space-between; align-items: center; }
-  .app-card .foot .row { font-size: 12px; }
-  .app-card::after { width: 120px; height: 120px; inset: auto -40px -70px auto; }
+  .home-page { gap: 10px; }
+  .hello { padding: 16px 0 2px; }
+  .apps-grid { gap: 8px; }
+  .app-card { min-height: 0; padding: 10px 14px; gap: 0; flex-direction: row; align-items: center; }
+  .app-card > div:first-child { flex: 1; min-width: 0; }
+  .app-card .tile.lg { width: 40px; height: 40px; border-radius: 12px; }
+  .app-card .tile.lg svg.i { width: 20px; height: 20px; }
+  .app-card > .muted, .app-card .foot .row { display: none; }
+  .app-card h2 { font-size: 16px; }
+  .app-card .foot { margin-top: 0; display: flex; }
+  .app-card .go { font-size: 0; gap: 0; }
+  .app-card::after { width: 110px; height: 110px; inset: auto -50px -60px auto; }
 }
-.links-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); margin-bottom: 8px; }
-.link-card { min-height: 0; flex-direction: row; align-items: center; gap: 14px; padding: 16px 18px; }
-.link-card h2 { font-size: 16px; }
+.links-grid { display: grid; gap: 10px; grid-template-columns: 1fr; align-content: stretch; }
+.link-card { position: relative; display: flex; align-items: center; gap: 12px; padding: 12px 14px; text-decoration: none; overflow: hidden; transition: transform .18s ease, border-color .18s ease; }
+.link-card:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--c) 55%, rgb(var(--line))); }
+.link-card:focus-visible { outline: 2px solid var(--c); outline-offset: 3px; }
+.link-card .tile { width: 34px; height: 34px; border-radius: 10px; }
+.link-card .tile svg.i { width: 17px; height: 17px; }
+.link-card .txt { flex: 1; min-width: 0; }
+.link-card h2 { font-size: 14.5px; }
+.link-card .txt .muted { display: block; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.link-card .go { color: var(--c); display: inline-flex; }
 .link-card[hidden] { display: none; }
+/* phones: the account links as three small tiles in a row */
+@media (max-width: 639px) {
+  .links-grid { grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 8px; }
+  .link-card { flex-direction: column; gap: 6px; padding: 10px 6px; text-align: center; }
+  .link-card h2 { font-size: 12px; font-family: Geist, sans-serif; font-weight: 600; line-height: 1.25; }
+  .link-card .txt .muted, .link-card .go { display: none; }
+}
 
 /* the account's one storage space, split by app */
-.space-card { padding: 18px 20px; margin: 16px 0 24px; }
+.space-card { padding: 16px 18px; display: flex; flex-direction: column; justify-content: center; }
 .space-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .space-bar { display: flex; height: 10px; border-radius: 99px; background: rgb(var(--elevated)); overflow: hidden; gap: 2px; }
 .space-bar > span { display: block; height: 100%; background: var(--c); min-width: 3px; transition: width .4s ease; }
 .space-legend { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; }
 .space-legend li { display: inline-flex; align-items: center; gap: 7px; }
 .space-legend .dot { width: 9px; height: 9px; border-radius: 3px; background: var(--c); }
+/* phones: the storage card is the total and the bar (the split is in Trove's profile) */
+@media (max-width: 639px) {
+  .space-card { padding: 12px 14px; }
+  .space-card .space-note, .space-card .space-legend { display: none; }
+  .space-card .space-head { margin-bottom: 8px; }
+  .space-card .space-head .section-title { display: none; }
+  .home .footer { padding: 10px 0 12px; }
+  .alert.weak { font-size: 12px; padding: 8px 10px; }
+  .alert.weak .btn { height: 30px; padding: 0 9px; font-size: 12px; }
+  .app-card { padding: 8px 14px; }
+}
 .section-title { font-size: 13px; font-weight: 600; color: rgb(var(--muted)); text-transform: uppercase; letter-spacing: .06em; margin: 8px 0 12px; }
 .footer { padding: 24px 0 32px; display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: space-between; color: rgb(var(--faint)); font-size: 12px; }
 .heart { color: rgb(var(--danger)); }

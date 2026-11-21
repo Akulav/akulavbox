@@ -1,37 +1,9 @@
 require('./helpers');
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { html, raw, withBase, timeAgo, compact } = require('../apps/manga/src/html');
 const v = require('../apps/documents/src/validate');
 const util = require('../apps/budget/server/util');
 const fmt = require('../src/core/backup-format');
-
-test('Koma Shelf: html`` escapes values unless they are html`` or raw()', () => {
-  assert.equal(String(html`<p>${'<b>"x"</b>'}</p>`), '<p>&lt;b&gt;&quot;x&quot;&lt;/b&gt;</p>');
-  assert.equal(String(html`<p>${raw('<b>')}${html`<i>${'&'}</i>`}</p>`), '<p><b><i>&amp;</i></p>');
-  assert.equal(String(html`${[1, null, false, 'a']}`), '1a');
-});
-
-test('Koma Shelf: root paths get the prefix, other sites and escaped text don’t', () => {
-  const page = '<a href="/w/1">x</a><img src="/media/a/cover.webp" srcset="/media/a/s.webp 300w, /media/a/l.webp 600w">'
-    + '<form action="/logout"></form><a href="//cdn.example/x"></a><a href="https://x.example/">y</a>'
-    + '<div style="background-image:url(\'/media/a/c.webp\')"></div><a href="~/box/#/profile">p</a><p>href=&quot;/w/2&quot;</p>';
-  const out = withBase('/manga', page);
-  assert.match(out, /href="\/manga\/w\/1"/);
-  assert.match(out, /src="\/manga\/media\/a\/cover\.webp"/);
-  assert.match(out, /srcset="\/manga\/media\/a\/s\.webp 300w, \/manga\/media\/a\/l\.webp 600w"/);
-  assert.match(out, /action="\/manga\/logout"/);
-  assert.match(out, /href="\/\/cdn\.example\/x"/);
-  assert.match(out, /url\('\/manga\/media\/a\/c\.webp'\)/);
-  assert.match(out, /href="\/box\/#\/profile"/);
-  assert.match(out, /href=&quot;\/w\/2&quot;/);
-});
-
-test('Koma Shelf: small formatters', () => {
-  assert.equal(compact(999), '999');
-  assert.equal(compact(1500), '1.5k');
-  assert.equal(timeAgo(Date.now() - 3 * 3600 * 1000), '3 hours ago');
-});
 
 test('e-Management: dates, ids, names', () => {
   assert.equal(v.validDate('2024-02-29'), true);
@@ -58,9 +30,14 @@ test('Florin: input checks', () => {
 
 test('backups: app entries stay inside their folder', () => {
   const ok = (n) => { const m = fmt.APP_ENTRY.exec(n); return !!m && !m[2].split('/').some((s) => s === '.' || s === '..'); };
-  assert.equal(ok('apps/manga/works/abc/cover.webp'), true);
   assert.equal(ok('apps/documents/u1/personal/ansc.db'), true);
-  for (const bad of ['apps/manga/../akulavbox.db', 'apps/manga/./x', 'apps/other/x', 'apps/manga/', 'apps/manga/a\\b', 'users/x/y.enc']) assert.equal(ok(bad), false, bad);
+  for (const bad of ['apps/documents/../akulavbox.db', 'apps/documents/./x', 'apps/other/x', 'apps/documents/', 'apps/documents/a\\b', 'users/x/y.enc']) assert.equal(ok(bad), false, bad);
   assert.equal(ok('apps/ironveil/u1/run.json'), true);
-  assert.deepEqual(fmt.APP_IDS, ['documents', 'manga', 'budget', 'tasks', 'ironveil']);
+  assert.deepEqual(fmt.APP_IDS, ['documents', 'budget', 'tasks', 'ironveil']);
+});
+
+test('backups: a removed app (Koma Shelf) is read past, never restored', () => {
+  assert.equal(fmt.APP_ENTRY.test('apps/manga/works/abc/cover.webp'), false);
+  assert.equal(fmt.RETIRED_ENTRY.test('apps/manga/works/abc/cover.webp'), true);
+  assert.equal(fmt.RETIRED_ENTRY.test('apps/documents/u1/a.db'), false);
 });

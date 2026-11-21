@@ -6,7 +6,7 @@ const { pipeline } = require('stream/promises');
 const { DatabaseSync } = require('node:sqlite');
 const config = require('./config');
 const instance = require('./instance');
-const { MAGIC, SCRYPT, ENTRY, END, deriveKeys, checkValue, APP_IDS, APP_ENTRY } = require('./backup-format');
+const { MAGIC, SCRYPT, ENTRY, END, deriveKeys, checkValue, APP_IDS, APP_ENTRY, RETIRED_ENTRY } = require('./backup-format');
 
 // Restoring a full backup: unpack and verify it into data/import-staging/ (stageImport), then swap it
 // in on the next start, before the database opens (applyPending, called from db.js). See backup.js.
@@ -108,6 +108,8 @@ async function stageImport(file, passphrase, { currentSchema }) {
       const name = (await r.read((await r.read(2)).readUInt16BE(0))).toString('utf-8');
       const gz = (await r.read(1))[0] === 1;
       const len = Number((await r.read(8)).readBigUInt64BE(0));
+      // a removed app's files (Koma Shelf): read past them, so the HMAC still covers the whole file
+      if (RETIRED_ENTRY.test(name)) { await r.pipe(len, async () => {}); continue; }
       const appEntry = APP_ENTRY.exec(name);
       if (appEntry && appEntry[2].split('/').some((s) => s === '.' || s === '..')) throw new Error(`Unexpected entry in the backup: ${name}`);
       if (!appEntry && !/^(manifest\.json|akulavbox\.db|users\/[\w-]+\/[\w-]+\.(enc|plain)|private\/cookies\/[\w-]+\.enc)$/.test(name)) throw new Error(`Unexpected entry in the backup: ${name}`);

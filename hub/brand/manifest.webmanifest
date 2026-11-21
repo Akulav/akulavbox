@@ -1,7 +1,7 @@
 {
   "name": "AkulavBox",
   "short_name": "AkulavBox",
-  "description": "One account for your own apps: Trove, e-Management, Koma Shelf, Florin and Tick, on your server. Made by Akulav.",
+  "description": "One account for your own apps: Trove, e-Management, Florin, Tick and Ironveil, on your server. Made by Akulav.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0D1518",

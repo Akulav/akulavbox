@@ -2,7 +2,7 @@
 
 All endpoints are JSON unless noted. AkulavBox's own API (`/api/…`: the account, the launcher, the Admin console, and Trove, the files app) authenticates with `Authorization: Bearer <token>`, or `?token=<token>` for media URLs; it never reads the sign-in cookie. Errors look like `{ "error": "message" }` with a 4xx or 5xx status. `401` means sign in again, and `403` means admins only. Responses may include `X-Refresh-Token`. Store it to keep the session alive.
 
-The other apps (`/docs`, `/manga`, `/budget`, `/tasks`) use the same sign-in through the HttpOnly cookie `akb_session` (the same JWT), set by `/api/login` and `/api/session`. Their routes are listed at the end, followed by the AI connector (`/mcp`), which takes connector tokens instead.
+The other apps (`/docs`, `/budget`, `/tasks`, `/ironveil`) use the same sign-in through the HttpOnly cookie `akb_session` (the same JWT), set by `/api/login` and `/api/session`. Their routes are listed at the end, followed by the AI connector (`/mcp`), which takes connector tokens instead.
 
 ## Public
 | Method | Path | |
@@ -132,18 +132,6 @@ Cookie sign-in. Changes (anything but GET) must come from the same origin. `:sto
 | GET · POST | `/docs/api/s/:store/export` · `/import` | A `.anscbackup` of the space · the archive as the request body (`application/octet-stream`), replacing the space |
 | GET · POST | `/docs/api/audit` · `/docs/api/audit/prune` | The account's activity log (90 days) · `{ until: 'YYYY-MM-DD' }` |
 
-## Koma Shelf (`/manga`)
-
-Server-rendered pages under `/manga/` (`/`, `/w/:id`, `/w/:id/:chapter`, `/u/:username`, `/me`, `/upload`, `/account`, `/admin`). Cookie sign-in; form posts need the `_csrf` field from the page (or `X-CSRF-Token`) and the same origin. `/manga/login` sends you to `/login`.
-
-For Koma and scripts, with `Authorization: Bearer ks_…` (create a token under Account → Connect Koma):
-
-| Method | Path | |
-| --- | --- | --- |
-| GET | `/manga/api/v1/me` | Who the token belongs to |
-| POST | `/manga/api/v1/works` | multipart: `files` (zip/cbz or images), optional `title`, `description`, `visibility`, `cover`. 413 when the account's storage is full |
-| GET | `/manga/api/v1/works/:id` | `{ status: processing \| ready \| failed, progress, url, … }` |
-
 ## Florin (`/budget`)
 
 Cookie sign-in. Changes need the header `X-Requested-With: florin`.
@@ -194,7 +182,7 @@ Cookie sign-in. Changes need the header `X-Requested-With: tasks`. Every path is
 
 ## AI connector
 
-Lets an AI app read, and when allowed change, every app of an account. Calls carry `Authorization: Bearer akb_…`: a token made at `/connect`, or one an AI app got through OAuth. A token's scopes say per app (`box`, `documents`, `manga`, `budget`, `tasks`) `read` or `write`; it sees only the tools of the apps it may use (and that are on for the account), and the tools that change something only with `write`. 240 calls a minute per token. These endpoints answer any origin (CORS), since they take bearer tokens only.
+Lets an AI app read, and when allowed change, every app of an account. Calls carry `Authorization: Bearer akb_…`: a token made at `/connect`, or one an AI app got through OAuth. A token's scopes say per app (`box`, `documents`, `budget`, `tasks`, `ironveil`) `read` or `write`; it sees only the tools of the apps it may use (and that are on for the account), and the tools that change something only with `write`. 240 calls a minute per token. These endpoints answer any origin (CORS), since they take bearer tokens only.
 
 | Method | Path | |
 | --- | --- | --- |
@@ -202,7 +190,7 @@ Lets an AI app read, and when allowed change, every app of an account. Calls car
 | GET | `/api/connector/tools` | The same tools for plain HTTP: `{ account, connector, tools: [{ name, title, description, inputSchema, annotations }] }` |
 | POST | `/api/connector/tools/:name` | The tool's arguments as the body → `{ result }`, or 400 `{ error }` |
 
-The tools (`akulavbox_account` always; the others by app): `trove_list_folder`, `trove_search`, `trove_library`, `trove_read_file` (text and images), `trove_create_folder`, `trove_write_text_file`, `trove_update_text_file`, `trove_rename`, `trove_move`, `trove_trash`; `docs_categories`, `docs_list`, `docs_get`, `docs_read_file`, `docs_create`, `docs_update`, `docs_delete`; `koma_webtoons`, `koma_webtoon`, `koma_update_webtoon`; `florin_categories`, `florin_transactions`, `florin_month`, `florin_trend`, `florin_add_transaction`, `florin_update_transaction`, `florin_delete_transaction`; `tick_lists`, `tick_list_tasks`, `tick_add_task`, `tick_update_task`, `tick_complete_task`, `tick_delete_task`, `tick_create_list`. Each calls the app's own route in the process, as the account.
+The tools (`akulavbox_account` always; the others by app): `trove_list_folder`, `trove_search`, `trove_library`, `trove_read_file` (text and images), `trove_create_folder`, `trove_write_text_file`, `trove_update_text_file`, `trove_rename`, `trove_move`, `trove_trash`; `docs_categories`, `docs_list`, `docs_get`, `docs_read_file`, `docs_create`, `docs_update`, `docs_delete`; `florin_categories`, `florin_transactions`, `florin_month`, `florin_trend`, `florin_add_transaction`, `florin_update_transaction`, `florin_delete_transaction`; `tick_lists`, `tick_list_tasks`, `tick_add_task`, `tick_update_task`, `tick_complete_task`, `tick_delete_task`, `tick_create_list`; `ironveil_progress`. Each calls the app's own route in the process, as the account.
 
 The account's connectors (signed in, `Authorization` with the session token as for the rest of `/api`):
 

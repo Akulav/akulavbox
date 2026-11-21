@@ -25,7 +25,7 @@ function resolveStorage() {
 }
 const { dir: STORAGE_DIR, legacy: LEGACY_STORAGE } = resolveStorage();
 
-// box/, documents/, manga/, budget/: moves a data folder from before 4.0 into place (core/layout.js).
+// box/, documents/, budget/: moves a data folder from before 4.0 into place (core/layout.js).
 // Command-line tools next to a live server (scripts/backup.js, AKB_NO_RESTORE=1) never move anything.
 const layout = require('./layout').prepare(STORAGE_DIR, { move: process.env.AKB_NO_RESTORE !== '1' });
 
@@ -51,7 +51,7 @@ const config = {
   layoutNotes: layout.notes,
   tempDir: path.join(STORAGE_DIR, 'temp'),
   backupsDir: path.join(STORAGE_DIR, 'backups'),
-  /** The data folder of one of the other apps (documents, manga, budget) */
+  /** The data folder of one of the other apps (documents, budget, tasks, ironveil) */
   appDataDir: (id) => path.join(STORAGE_DIR, id),
   // a restore waiting to be applied on the next start (see core/backup.js)
   importDir: path.join(STORAGE_DIR, 'import-staging'),
@@ -61,13 +61,11 @@ const config = {
   diskReserveBytes: Math.max(0, Number(process.env.DISK_RESERVE_MB ?? 512)) * 1024 * 1024,
   tokenTtl: process.env.TOKEN_TTL || '7d',
   trustProxy: process.env.TRUST_PROXY === '1',
-  // Storage is one space per account (users.quota_bytes) shared by every app. These optionally give
-  // e-Management and Koma Shelf a default limit of their own inside it (null: none; the Admin console
-  // changes them, per account too).
+  // Storage is one space per account (users.quota_bytes) shared by every app. This optionally gives
+  // e-Management a default limit of its own inside it (null: none; the Admin console changes it,
+  // per account too).
   documentsQuotaBytes: Number(process.env.DOCUMENTS_QUOTA_MB) > 0 ? Math.floor(Number(process.env.DOCUMENTS_QUOTA_MB) * 1024 * 1024) : null,
-  mangaQuotaBytes: Number(process.env.MANGA_QUOTA_MB) > 0 ? Math.floor(Number(process.env.MANGA_QUOTA_MB) * 1024 * 1024) : null,
-  mangaMaxUploadMb: Math.max(1, Number(process.env.MANGA_MAX_UPLOAD_MB) || 1024),
-  // public address of the server, e.g. https://cloud.example.com (share links, social previews)
+  // public address of the server, e.g. https://cloud.example.com (share links)
   publicUrl: String(process.env.PUBLIC_URL || '').replace(/\/+$/, ''),
   // other origins allowed to call the API from a browser (none by default)
   corsOrigins: String(process.env.CORS_ORIGIN || '').split(',').map(s => s.trim().replace(/\/$/, '')).filter(Boolean),

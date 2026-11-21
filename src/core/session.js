@@ -4,8 +4,8 @@ const auth = require('./auth');
 
 // ---------------------------------------------------------------------------
 // One sign-in for every app. AkulavBox's own API keeps using the JWT in the
-// Authorization header (stored by the page). The other apps (documents, manga,
-// budget) are plain page navigations and forms, so the same JWT also travels in
+// Authorization header (stored by the page). The other apps (documents, budget,
+// tasks, ironveil) are plain page navigations and forms, so the same JWT also travels in
 // an HttpOnly cookie. It is checked exactly like the header (signature, account
 // still exists, token_version), so "sign out everywhere", a password change or
 // deleting the account ends it in every app at once.
@@ -93,7 +93,7 @@ function sameOrigin(req) {
   try { return new URL(from).host === h.host; } catch (e) { return false; }
 }
 
-/** A path on this server to go back to after signing in ("/manga/me"), never another site */
+/** A path on this server to go back to after signing in ("/docs/#/documents"), never another site */
 const safeNext = (n) => (typeof n === 'string' && /^\/(?![/\\])[^\s]*$/.test(n) && n.length < 2000 ? n : '/');
 function loginUrl(next) {
   const to = safeNext(next);

@@ -654,7 +654,6 @@ async function main() {
         ok(JSON.stringify(tx2 || {}).includes('Check'), 'Florin transactions came along');
         const tasks2 = await (await fetch(`${base}/tasks/api/tasks`, { headers: { Cookie: jar2 } })).json().catch(() => null);
         ok(tasks2?.tasks?.some(t => t.title === appsState.taskTitle), 'Tasks came along');
-        if (appsState.workId) ok((await fetch(`${base}/manga/w/${appsState.workId}`)).status === 200 && fs.existsSync(path.join(tmp2, 'manga', 'works', appsState.workId, 'cover.webp')), 'Koma Shelf webtoons came along');
         ok(fs.readdirSync(path.join(tmp2, 'backups')).some(n => n.startsWith('pre-import-')), 'the replaced data is kept in backups/');
         // the backup carries Trove's tables inside akulavbox.db (one format for every version); on start
         // they move into box/trove.db again

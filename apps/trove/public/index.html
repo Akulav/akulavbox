@@ -26,6 +26,8 @@
       document.documentElement.dataset.motion = m === 'off' ? 'off' : 'on';
     })();
   </script>
+  <!-- the backdrop every app shares (the dot grid and the pointer glow; Trove keeps its own aurora) -->
+  <script src="/hub/theme.js"></script>
 
   <!-- One shared copy of Vue for every module (an import map must come before any module or preload).
        Served by this server from node_modules, the same file every app uses: no CDN, works offline. -->

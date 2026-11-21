@@ -1,10 +1,10 @@
-// <akb-account>: the AkulavBox account menu every app shares (e-Management, Koma Shelf, Florin, Tick),
+// <akb-account>: the AkulavBox account menu every app shares (e-Management, Florin, Tick, Ironveil),
 // with the profile picture, the app's own links (children of the element), then All apps,
 // Profile & password, AI connectors, Admin console and Sign out. It also switches the shared theme.
 //
 //   <script src="/hub/theme.js"></script>             (in <head>, before paint)
 //   <script src="/hub/account.js" defer></script>
-//   <akb-account accent="#1baf7a" username="ana" role="user"><a href="/manga/library">My library</a></akb-account>
+//   <akb-account accent="#1baf7a" username="ana" role="user"><a href="/budget/#/settings">Florin settings</a></akb-account>
 //
 // Attributes: accent (the app's colour), username / role (known already: no flash before the
 // account loads), expanded (name beside the picture, for a sidebar), up (menu opens upwards),
@@ -23,7 +23,6 @@
     // the apps (the switcher)
     box: '<path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/>',
     documents: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/>',
-    manga: '<path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/>',
     budget: '<path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/>',
     tasks: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/>',
     ironveil: '<polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" x2="19" y1="19" y2="13"/><line x1="16" x2="20" y1="16" y2="20"/><line x1="19" x2="21" y1="21" y2="19"/><polyline points="14.5 6.5 18 3 21 3 21 6 17.5 9.5"/><line x1="5" x2="9" y1="14" y2="18"/><line x1="7" x2="4" y1="17" y2="20"/><line x1="3" x2="5" y1="19" y2="21"/>',

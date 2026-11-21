@@ -90,7 +90,7 @@ export const Layout = {
       </aside>
 
       <!-- the account top right, like every app; phones also get the brand and the menu here (the sidebar has them on wide screens) -->
-      <header class="sticky top-0 z-20 flex h-14 items-center gap-1 border-b border-line bg-surface/85 px-3 backdrop-blur lg:px-10">
+      <header class="sticky top-0 z-20 flex h-14 items-center gap-1 border-b border-line bg-surface/85 px-4 backdrop-blur md:px-6 lg:h-[60px]">
         <button type="button" @click="mobileOpen = true" class="rounded-lg p-2 text-ink-2 lg:hidden" aria-label="Open menu"><Icon name="menu" :size="20" /></button>
         <Logo :size="28" class="lg:hidden" />
         <button type="button" @click="openTransaction" class="ml-auto rounded-lg p-2 text-brand lg:hidden" aria-label="Add transaction"><Icon name="plus" :size="22" /></button>

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>AkulavBox</title>
-  <meta name="description" content="Your AkulavBox apps: Trove, e-Management, Koma Shelf, Florin and Tick. Made by Akulav.">
+  <meta name="description" content="Your AkulavBox apps: Trove, e-Management, Florin, Tick and Ironveil. Made by Akulav.">
   <meta name="application-name" content="AkulavBox">
   <meta name="referrer" content="same-origin">
   <link rel="icon" href="/favicon.ico" sizes="48x48">
@@ -47,35 +47,36 @@
       <div id="account" style="display:flex;align-items:center;gap:4px"></div>
     </div>
   </header>
-  <main class="wrap">
+  <!-- everything on one screen, no scrolling: the apps in a row, then storage beside the account links -->
+  <main class="wrap home">
     <div id="boot" class="boot">Loading your apps…</div>
-    <div id="page" hidden>
+    <div id="page" class="home-page" hidden>
       <section class="hello rise">
         <p class="muted" id="when"></p>
         <h1 id="greet"></h1>
-        <p class="muted" style="margin-top:8px">One account opens every app below. Pick up where you left off.</p>
       </section>
-      <p class="alert" id="weak" role="status" hidden style="margin-bottom:16px;align-items:center;color:rgb(var(--accent));background:rgb(var(--accent) / .1)"></p>
+      <p class="alert weak" id="weak" role="status" hidden></p>
       <section class="apps-grid stagger" id="apps" aria-label="Your apps"></section>
-      <section class="panel space-card rise" id="space" aria-label="Storage" hidden></section>
-      <p class="section-title">Your account</p>
-      <section class="links-grid">
-        <a class="panel app-card link-card" href="/box/#/profile" style="--c:rgb(var(--accent))">
-          <span class="tile" style="--c:rgb(var(--accent))" id="profile-icon"></span>
-          <span style="flex:1;min-width:0"><h2>Profile &amp; password</h2><span class="muted" style="font-size:13px">Your picture, password and the devices you’re signed in on.</span></span>
-          <span class="go" data-go></span>
-        </a>
-        <a class="panel app-card link-card" href="/connect" style="--c:#8b5cf6">
-          <span class="tile" style="--c:#8b5cf6" id="connect-icon"></span>
-          <span style="flex:1;min-width:0"><h2>AI connectors</h2><span class="muted" style="font-size:13px">Let Claude or another AI read, and if you allow it change, your apps.</span></span>
-          <span class="go" data-go></span>
-        </a>
-        <a class="panel app-card link-card" href="/admin" id="admin" hidden style="--c:rgb(var(--info))">
-          <span class="tile" style="--c:rgb(var(--info))" id="admin-icon"></span>
-          <span style="flex:1;min-width:0"><h2>Admin console</h2><span class="muted" style="font-size:13px">Accounts, which apps each one can use, and storage.</span></span>
-          <span class="go" data-go></span>
-        </a>
-      </section>
+      <div class="lower">
+        <section class="panel space-card rise" id="space" aria-label="Storage" hidden></section>
+        <nav class="links-grid rise" aria-label="Your account">
+          <a class="panel link-card" href="/box/#/profile" style="--c:rgb(var(--accent))">
+            <span class="tile" id="profile-icon"></span>
+            <span class="txt"><h2>Profile &amp; password</h2><span class="muted">Your picture, password and devices</span></span>
+            <span class="go" data-go></span>
+          </a>
+          <a class="panel link-card" href="/connect" style="--c:#8b5cf6">
+            <span class="tile" id="connect-icon"></span>
+            <span class="txt"><h2>AI connectors</h2><span class="muted">Let Claude or another AI use your apps</span></span>
+            <span class="go" data-go></span>
+          </a>
+          <a class="panel link-card" href="/admin" id="admin" hidden style="--c:rgb(var(--info))">
+            <span class="tile" id="admin-icon"></span>
+            <span class="txt"><h2>Admin console</h2><span class="muted">Accounts, apps and storage</span></span>
+            <span class="go" data-go></span>
+          </a>
+        </nav>
+      </div>
     </div>
     <footer class="footer" id="footer"></footer>
   </main>

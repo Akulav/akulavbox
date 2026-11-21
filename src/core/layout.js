@@ -6,7 +6,7 @@ const fs = require('fs');
  * before anything opens a file.
  *
  * Since 4.0 every app keeps its files in its own folder: AkulavBox in box/, the others in
- * documents/, manga/ and budget/ (appDataDir). Shared state (the accounts database, backups,
+ * documents/, budget/ and the other apps' folders (appDataDir). Shared state (the accounts database, backups,
  * temp, tools, updates) stays at the top. Before 4.0, users/, thumbs/ and private/ were at the
  * top: they are renamed into box/, which is instant on the same drive. A folder that can't be
  * moved (a mount, a file held open on Windows, a second server on the same folder) keeps being

@@ -2,6 +2,21 @@
 
 All notable changes to AkulavBox. Versions follow [semantic versioning](https://semver.org/). The version lives in `package.json` and is shown in the account menu and page footer, on the sign-in page, in Admin, and at `GET /api/health`.
 
+## 6.0.0 (2026-11-21)
+
+### Removed
+- **Koma Shelf is gone** (`/manga/`), with all its code, its AI connector tools and its settings (`MANGA_QUOTA_MB`, `MANGA_MAX_UPLOAD_MB`, `MANGA_SITE_NAME`). Nothing is deleted from disk: `data/manga/` stays as it was, but it no longer counts in anyone's storage and full backups leave it out. Delete it yourself when you no longer need it. Backups made before 6.0 still restore, skipping Koma Shelf's part. Connector tokens lose their Koma Shelf access.
+
+### Changed
+- **The launcher fits on one screen, no scrolling:** your apps side by side in one row, then storage next to your account links. On a phone each app is one slim row, and the account links are three small tiles.
+- **Your profile picture is in the same corner in every app.** Trove, e-Management, Florin, Tick, the launcher and the Admin pages all run their top bar the full width, so the picture sits the same distance from the edge everywhere (Ironveil still keeps it on the left).
+- **A light, living backdrop on every page:**
+  - a slow aurora in the app's own colour
+  - a faint dot grid
+  - a soft glow that follows your mouse
+
+  It's cheap to draw, and it stands still when motion is off (Trove → Profile) or your device asks for reduced motion.
+
 ## 5.6.0 (2026-11-21)
 
 ### Added

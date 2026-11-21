@@ -75,7 +75,7 @@ module.exports = async function (fastify) {
     // older accounts may still have a password shorter than today's minimum: nudge them to change it
     const weak = WEAK.has(password.toLowerCase()) || password.toLowerCase() === user.username.toLowerCase() || password.length < PASSWORD_MIN;
     const token = signToken(user);
-    // the same sign-in for the other apps (documents, manga, budget), which read a cookie
+    // the same sign-in for the other apps (documents, budget, tasks, ironveil), which read a cookie
     session.addCookie(reply, session.cookieFor(request, token));
     return { token, role: user.role, id: user.id, username: user.username, weak_password: weak };
   });

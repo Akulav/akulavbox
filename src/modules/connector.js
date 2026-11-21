@@ -23,7 +23,7 @@ const tools = require('../core/connector/tools');
 // ---------------------------------------------------------------------------
 
 const PROTOCOLS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
-const INSTRUCTIONS = 'AkulavBox is a self-hosted personal cloud. Its apps: Trove (files, photos, music, videos, books), e-Management (personal and work documents), Koma Shelf (webtoons), Florin (expenses, income, budgets) and Tick (to-dos). Call akulavbox_account first to see which apps this connector may use and whether it may change things. Tools are named after their app (trove_, docs_, koma_, florin_, tick_). Dates are YYYY-MM-DD. Ask before deleting anything.';
+const INSTRUCTIONS = 'AkulavBox is a self-hosted personal cloud. Its apps: Trove (files, photos, music, videos, books), e-Management (personal and work documents), Florin (expenses, income, budgets), Tick (to-dos) and the game Ironveil. Call akulavbox_account first to see which apps this connector may use and whether it may change things. Tools are named after their app (trove_, docs_, florin_, tick_, ironveil_). Dates are YYYY-MM-DD. Ask before deleting anything.';
 
 const baseOf = (request) => config.publicUrl || `${request.protocol}://${request.host}`;
 

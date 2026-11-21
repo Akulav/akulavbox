@@ -14,7 +14,7 @@ test('parseCookies reads every cookie and skips malformed ones', () => {
 });
 
 test('safeNext only keeps paths on this server', () => {
-  assert.equal(session.safeNext('/manga/me'), '/manga/me');
+  assert.equal(session.safeNext('/tasks/today'), '/tasks/today');
   assert.equal(session.safeNext('/box/#/files'), '/box/#/files');
   for (const bad of ['//evil.example', '/\\evil.example', 'https://evil.example', 'javascript:alert(1)', '/a b', '', null, 42]) assert.equal(session.safeNext(bad), '/', String(bad));
 });
@@ -45,7 +45,7 @@ test('CSRF tokens are per account and change when sessions are revoked', () => {
 
 test('sameOrigin compares Origin (or Referer) with Host', () => {
   assert.equal(session.sameOrigin(req({ host: 'box.example', origin: 'https://box.example' })), true);
-  assert.equal(session.sameOrigin(req({ host: 'box.example', referer: 'https://box.example/manga/' })), true);
+  assert.equal(session.sameOrigin(req({ host: 'box.example', referer: 'https://box.example/budget/'})), true);
   assert.equal(session.sameOrigin(req({ host: 'box.example', origin: 'https://evil.example' })), false);
   assert.equal(session.sameOrigin(req({ host: 'box.example', origin: 'null' })), false);
   assert.equal(session.sameOrigin(req({ host: 'box.example' })), true, 'no Origin: not a browser form from another site');

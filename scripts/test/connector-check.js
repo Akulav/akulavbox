@@ -8,15 +8,13 @@ module.exports = async function connectorCheck({ api, ok, base, adminToken }) {
   const B = base();
   const json = async (r) => { try { return await r.json(); } catch (e) { return null; } };
   console.log('\nAI connector');
-  // Koma Shelf runs only with sharp, an optional dependency (CI also runs without it): no sharp, no tools
-  let sharp = null;
-  try { sharp = require('sharp'); } catch (e) { /* optional */ }
 
   ok((await api('/api/connector/tokens', { method: 'POST', body: { name: 'x', scopes: {} } })).status === 400, 'a connector needs access to at least one app');
-  const all = { box: 'write', documents: 'write', budget: 'write', tasks: 'write', manga: 'read' };
+  // manga: Koma Shelf, removed in 6.0; a scope for it is dropped
+  const all = { box: 'write', documents: 'write', budget: 'write', tasks: 'write', ironveil: 'read', manga: 'write' };
   const made = await api('/api/connector/tokens', { method: 'POST', body: { name: 'Check AI', scopes: all, days: 7 } });
   const token = made.data?.token;
-  ok(made.status === 200 && /^akb_[\w-]{40,}$/.test(token || '') && made.data.connector.scopes.tasks === 'write', 'make a token with per-app access', JSON.stringify(made.data?.connector));
+  ok(made.status === 200 && /^akb_[\w-]{40,}$/.test(token || '') && made.data.connector.scopes.tasks === 'write' && !('manga' in made.data.connector.scopes), 'make a token with per-app access (a removed app’s scope is dropped)', JSON.stringify(made.data?.connector));
   const listed = await api('/api/connector/tokens');
   ok(listed.data?.tokens?.some((t) => t.id === made.data.connector.id && !('token_hash' in t)) && listed.data.mcp_url.endsWith('/mcp'), 'the list never shows the token itself');
 
@@ -34,7 +32,7 @@ module.exports = async function connectorCheck({ api, ok, base, adminToken }) {
   ok(note.status === 202, 'MCP: notifications get 202');
   const tl = (await json(await mcp('tools/list', {})))?.result?.tools || [];
   const names = tl.map((t) => t.name);
-  ok(['akulavbox_account', 'trove_write_text_file', 'docs_create', 'florin_add_transaction', 'tick_add_task', ...(sharp ? ['koma_webtoons'] : [])].every((n) => names.includes(n)) && !names.includes('koma_update_webtoon') && (sharp || !names.some((n) => n.startsWith('koma_'))), `MCP: ${names.length} tools, for every app (read-only where it is read-only)`);
+  ok(['akulavbox_account', 'trove_write_text_file', 'docs_create', 'florin_add_transaction', 'tick_add_task', 'ironveil_progress'].every((n) => names.includes(n)) && !names.some((n) => n.startsWith('koma_')),`MCP: ${names.length} tools, for every app (read-only where it is read-only)`);
   ok(tl.every((t) => t.inputSchema?.type === 'object' && typeof t.annotations?.readOnlyHint === 'boolean'), 'every tool has an input schema and read-only/destructive hints');
   ok((await json(await mcp('nope/nope', {})))?.error?.code === -32601, 'MCP: unknown methods are a JSON-RPC error');
 
@@ -55,8 +53,6 @@ module.exports = async function connectorCheck({ api, ok, base, adminToken }) {
   const doc = data(await call('docs_create', { space: 'work', title: 'Contract from the AI', date: '2026-03-04', number: 'C-7' }));
   ok(doc?.id && data(await call('docs_list', { space: 'work', query: 'contract from' }))?.documents?.[0]?.number === 'C-7', 'e-Management: add a document and find it');
   ok(data(await call('docs_delete', { space: 'work', id: doc?.id }))?.ok === true, 'e-Management: delete it');
-  if (sharp) ok(Array.isArray(data(await call('koma_webtoons'))?.webtoons), 'Koma Shelf: list the webtoons');
-  else ok((await call('koma_webtoons'))?.isError, 'Koma Shelf isn’t running (no sharp): its tools are refused');
 
   // read-only
   const ro = (await api('/api/connector/tokens', { method: 'POST', body: { name: 'Read only', scopes: { tasks: 'read' } } })).data;
